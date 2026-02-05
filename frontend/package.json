@@ -1,5 +1,5 @@
 {
-  "name": "frontend",
+  "name": "bing-vintage-frontend",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,24 +9,25 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "autoprefixer": "^10.4.24",
-    "axios": "^1.6.0",              // ← ADD
-    "clsx": "^2.1.0",               // ← ADD (for Button.tsx cn utility)
-    "lucide-react": "^0.563.0",
-    "next": "14.2.35",              // ← PIN exact version
-    "postcss": "^8.4.31",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-hot-toast": "^2.4.1",    // ← ADD
-    "tailwind-merge": "^2.2.0",     // ← ADD (for Button.tsx cn utility)
-    "tailwindcss": "^3.4.0",        // ← DOWNGRADE from 4.1.18
-    "typescript": "^5.0.0"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "next": "14.0.4",
+    "lucide-react": "^0.309.0",
+    "axios": "^1.6.2",
+    "react-hook-form": "^7.48.2",
+    "@hookform/resolvers": "^3.3.2",
+    "zod": "^3.22.4",
+    "react-hot-toast": "^2.4.1"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/react": "^18.3.0",
-    "@types/react-dom": "^18.3.0",
-    "eslint": "^8.57.0",
-    "eslint-config-next": "14.2.35"
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.18",
+    "autoprefixer": "^10.4.16",
+    "eslint": "^8.55.0",
+    "eslint-config-next": "14.0.4",
+    "postcss": "^8.4.31",
+    "tailwindcss": "^3.3.6",
+    "typescript": "^5.3.2"
   }
 }
