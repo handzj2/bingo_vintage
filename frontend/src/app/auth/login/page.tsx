@@ -377,7 +377,7 @@ export default function LoginPage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <code className="text-blue-600 bg-white px-3 py-1 rounded text-xs font-mono border border-blue-200">*******</code>
+                    <code className="text-blue-600 bg-white px-3 py-1 rounded text-xs font-mono border border-blue-200">admin123</code>
                   </div>
                 </div>
                 
