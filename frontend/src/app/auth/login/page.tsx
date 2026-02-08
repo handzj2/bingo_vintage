@@ -20,7 +20,9 @@ export default function LoginPage() {
     try {
       await login(credentials);
       toast.success('Login successful!');
-      router.push('/dashboard');
+      // The redirect to /dashboard is now handled inside the login function in AuthContext
+      // No need to call router.push('/dashboard') here
+      
     } catch (error: any) {
       toast.error(error.message || 'Login failed');
     } finally {

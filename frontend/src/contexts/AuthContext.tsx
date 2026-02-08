@@ -103,6 +103,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(userData);
           localStorage.setItem('user', JSON.stringify(userData));
           localStorage.setItem('access_token', token);
+          
+          // Redirect to dashboard after successful mock login
+          router.push('/dashboard');
         } else {
           throw new Error('Invalid credentials');
         }
@@ -128,6 +131,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.setItem('access_token', access_token);
           localStorage.setItem('user', JSON.stringify(mappedUser));
           setUser(mappedUser);
+          
+          // Redirect to dashboard after successful real login
+          router.push('/dashboard');
         } else {
           throw new Error(response.message || 'Login failed');
         }
