@@ -9,7 +9,15 @@
     "lint": "next lint"
   },
   "dependencies": {
+<<<<<<< HEAD
     "@radix-ui/react-select": "^2.2.6",
+=======
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@radix-ui/react-popover": "^1.1.15",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-slot": "^1.2.4",
+>>>>>>> e7de016c4f56b3d98b51d058139d2f615391ecda
     "autoprefixer": "^10.4.24",
     "axios": "^1.6.0",
     "class-variance-authority": "^0.7.1",
