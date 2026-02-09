@@ -16,6 +16,7 @@ import {
   Settings,
   Menu,
   RotateCcw,
+  Package, // ADDED: Import for Inventory icon
 } from 'lucide-react';
 
 const navigation = [
@@ -24,6 +25,7 @@ const navigation = [
   { name: 'Loans', href: '/dashboard/loans', icon: DollarSign, roles: ['admin', 'agent'] },
   { name: 'Payments', href: '/dashboard/payments', icon: CreditCard, roles: ['admin', 'cashier'] },
   { name: 'Bikes', href: '/dashboard/bikes', icon: Bike, roles: ['admin', 'cashier', 'agent'] },
+  { name: 'Inventory', href: '/dashboard/inventory', icon: Package, roles: ['admin', 'cashier'] }, // NEW: Inventory tab
   { name: 'Schedules', href: '/dashboard/schedules', icon: Calendar, roles: ['admin', 'cashier'] },
   { name: 'Reports', href: '/dashboard/reports', icon: BarChart3, roles: ['admin'] },
   { name: 'Audit Logs', href: '/dashboard/audit', icon: Shield, roles: ['admin'] },
