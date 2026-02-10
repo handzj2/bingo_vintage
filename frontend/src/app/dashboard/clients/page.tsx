@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api/client';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/input';
+import { input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
@@ -469,7 +469,7 @@ export default function ClientsPage() {
             <div className="flex-1">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <Input
+                <input
                   type="text"
                   placeholder="Search clients by name, email, phone, or ID..."
                   value={search}
