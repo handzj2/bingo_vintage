@@ -16,7 +16,7 @@ class ApiClient {
     
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...options.headers as Record<string, string>,
+      ...(options.headers as Record<string, string>),
     };
 
     if (this.token) {
@@ -51,6 +51,19 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(body),
     });
+  }
+
+  // ✅ NEW: PATCH method – required for updateBike
+  patch(endpoint: string, body: any) {
+    return this.request(endpoint, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  }
+
+  // ✅ NEW: DELETE method – optional but good to have
+  delete(endpoint: string) {
+    return this.request(endpoint, { method: 'DELETE' });
   }
 }
 
