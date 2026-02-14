@@ -1,269 +1,196 @@
 'use client';
-import { CreateLoanModal } from './CreateLoanModal';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { loanApi } from './loan.api';
-import { LoanType } from './loan.types';
-import { calculateCashLoan, calculateBikeLoan } from './loan.utils';
-import { 
-  Banknote, Bike, Plus, Search, Filter, 
-  MoreHorizontal, AlertCircle, CheckCircle 
-} from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/Button';
-import { input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 
-// Types for UI
-interface Loan {
-  id: string;
-  client_name: string;
-  loan_type: LoanType;
-  principal_amount: number;
-  total_payable: number;
-  outstanding_balance: number;
-  status: string;
-  start_date: string;
-}
+import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import { 
+  Plus, Search, Banknote, Bike, ShieldCheck, 
+  Filter, AlertCircle, Eye, Loader2 
+} from 'lucide-react';
+
+// API & Types
+import { loanApi } from './loan.api';
+
+// Shared Components
+import { Button } from '@/components/ui/Button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
+import StatusBadge from '@/components/ui/StatusBadge';
+
+// Operational Modals
+import { CreateLoanModal } from './CreateLoanModal';
+import RepaymentModal from '@/features/payments/components/RepaymentModal';
+import ReversalModal from '@/features/admin/components/ReversalModal';
 
 export function LoanTab() {
   const router = useRouter();
-  const [loans, setLoans] = useState<Loan[]>([]);
+  
+  // -- State Management --
+  const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'cash' | 'bike'>('all');
-  const [search, setSearch] = useState('');
-  const [showCreateModal, setShowCreateModal] = useState(false);
-
-  useEffect(() => {
-    fetchLoans();
-  }, []);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'all' | 'CASH' | 'BIKE'>('all');
+  
+  // -- Modal State --
+  const [showCreate, setShowCreate] = useState(false);
+  const [selectedLoan, setSelectedLoan] = useState<any>(null);
+  const [modalType, setModalType] = useState<'payment' | 'reversal' | null>(null);
 
   const fetchLoans = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      // Using existing API - assumes you have a list endpoint
-      // If not, we'll adapt to what you have
-      const response = await loanApi.getOverdueReport(); // Placeholder - replace with actual list endpoint
-      setLoans(response.data || []);
-    } catch (error) {
-      console.error('Failed to fetch loans:', error);
-      // Mock data for development
-      setLoans([
-        {
-          id: '1',
-          client_name: 'John Doe',
-          loan_type: 'CASH',
-          principal_amount: 1000000,
-          total_payable: 1150000,
-          outstanding_balance: 800000,
-          status: 'active',
-          start_date: '2024-01-15'
-        },
-        {
-          id: '2',
-          client_name: 'Jane Smith',
-          loan_type: 'BIKE',
-          principal_amount: 4000000,
-          total_payable: 4800000,
-          outstanding_balance: 3200000,
-          status: 'active',
-          start_date: '2024-02-01'
-        }
-      ]);
+      const { data } = await loanApi.getLoans();
+      setLoans(data);
+    } catch (err) {
+      console.error("Fetch failed", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredLoans = loans.filter(loan => {
-    const matchesFilter = filter === 'all' || loan.loan_type.toLowerCase() === filter;
-    const matchesSearch = loan.client_name.toLowerCase().includes(search.toLowerCase()) ||
-                         loan.id.toLowerCase().includes(search.toLowerCase());
-    return matchesFilter && matchesSearch;
-  });
+  useEffect(() => { fetchLoans(); }, []);
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'active': return 'bg-green-100 text-green-800';
-      case 'completed': return 'bg-blue-100 text-blue-800';
-      case 'overdue': return 'bg-red-100 text-red-800';
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const stats = {
-    total: loans.length,
-    cash: loans.filter(l => l.loan_type === 'CASH').length,
-    bike: loans.filter(l => l.loan_type === 'BIKE').length,
-    outstanding: loans.reduce((sum, l) => sum + l.outstanding_balance, 0)
-  };
+  // -- 1:1 Logic Parity: Search & Filter --
+  const filteredLoans = useMemo(() => {
+    return loans.filter((loan: any) => {
+      const matchesSearch = loan.client_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            loan.id.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesType = activeTab === 'all' || loan.loan_type === activeTab;
+      return matchesSearch && matchesType;
+    });
+  }, [loans, searchQuery, activeTab]);
 
   return (
     <div className="space-y-6">
-      {/* Header Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Total Loans</p>
-                <p className="text-2xl font-bold">{stats.total}</p>
-              </div>
-              <div className="p-3 bg-blue-100 rounded-full">
-                <Banknote className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Cash Loans</p>
-                <p className="text-2xl font-bold text-blue-600">{stats.cash}</p>
-              </div>
-              <div className="p-3 bg-blue-100 rounded-full">
-                <Banknote className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Bike Loans</p>
-                <p className="text-2xl font-bold text-orange-600">{stats.bike}</p>
-              </div>
-              <div className="p-3 bg-orange-100 rounded-full">
-                <Bike className="w-6 h-6 text-orange-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Outstanding</p>
-                <p className="text-2xl font-bold text-red-600">
-                  UGX {(stats.outstanding / 1000000).toFixed(1)}M
-                </p>
-              </div>
-              <div className="p-3 bg-red-100 rounded-full">
-                <AlertCircle className="w-6 h-6 text-red-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* 1. Header Section */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2 italic">
+            <Banknote className="w-6 h-6 text-blue-600" /> LOAN PORTFOLIO
+          </h1>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+            Managing {loans.length} active disbursements
+          </p>
+        </div>
+        <Button 
+          onClick={() => setShowCreate(true)}
+          className="bg-slate-900 hover:bg-blue-600 text-white px-6 py-6 rounded-2xl font-black transition-all flex items-center gap-2"
+        >
+          <Plus className="w-5 h-5" /> DISBURSE FUNDS
+        </Button>
       </div>
 
-      {/* Controls */}
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-4 rounded-lg shadow-sm">
-        <div className="flex gap-2">
-          <Button 
-            variant={filter === 'all' ? 'default' : 'outline'}
-            onClick={() => setFilter('all')}
-          >
-            All
-          </Button>
-          <Button 
-            variant={filter === 'cash' ? 'default' : 'outline'}
-            onClick={() => setFilter('cash')}
-            className="gap-2"
-          >
-            <Banknote className="w-4 h-4" /> Cash
-          </Button>
-          <Button 
-            variant={filter === 'bike' ? 'default' : 'outline'}
-            onClick={() => setFilter('bike')}
-            className="gap-2"
-          >
-            <Bike className="w-4 h-4" /> Bike
-          </Button>
+      {/* 2. Controls Section (Search & Tabs) [Restored from 245-line version] */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+        <div className="lg:col-span-4 relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input 
+            placeholder="Search by name or ID..." 
+            className="pl-11 py-6 rounded-2xl border-slate-100 bg-white shadow-sm"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
         </div>
-        
-        <div className="flex gap-2 w-full md:w-auto">
-          <div className="relative flex-1 md:w-64">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              placeholder="Search loans..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10"
-            />
+        <div className="lg:col-span-8 flex justify-end">
+          <div className="bg-white p-1 rounded-2xl border border-slate-100 shadow-sm flex gap-1">
+            <button 
+              onClick={() => setActiveTab('all')}
+              className={`px-6 py-2 rounded-xl text-xs font-black transition-all ${activeTab === 'all' ? 'bg-slate-900 text-white' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              ALL LOANS
+            </button>
+            <button 
+              onClick={() => setActiveTab('CASH')}
+              className={`px-6 py-2 rounded-xl text-xs font-black transition-all ${activeTab === 'CASH' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              CASH ONLY
+            </button>
+            <button 
+              onClick={() => setActiveTab('BIKE')}
+              className={`px-6 py-2 rounded-xl text-xs font-black transition-all ${activeTab === 'BIKE' ? 'bg-orange-600 text-white' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              BIKE ASSETS
+            </button>
           </div>
-          <Button onClick={() => setShowCreateModal(true)} className="gap-2">
-            <Plus className="w-4 h-4" /> New Loan
-          </Button>
         </div>
       </div>
 
-      {/* Loans Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Loan Portfolio</CardTitle>
-        </CardHeader>
-        <CardContent>
+      {/* 3. Data Table */}
+      <Card className="rounded-[2.5rem] border-slate-100 shadow-sm overflow-hidden bg-white">
+        <CardContent className="p-0">
           {loading ? (
-            <div className="text-center py-12">Loading...</div>
+            <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3">
+              <Loader2 className="w-8 h-8 animate-spin" />
+              <p className="text-xs font-bold uppercase">Syncing with Railway...</p>
+            </div>
           ) : filteredLoans.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              <AlertCircle className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-              <p>No loans found</p>
+            <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3">
+              <AlertCircle className="w-8 h-8 opacity-20" />
+              <p className="text-xs font-bold uppercase">No records found matching filters</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="text-left py-3 px-4 font-medium text-gray-500">Client</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-500">Type</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-500">Principal</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-500">Outstanding</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-500">Status</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-500">Actions</th>
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-slate-50/50 border-b border-slate-100">
+                    <th className="p-6 text-[10px] font-black text-slate-400 uppercase">Borrower</th>
+                    <th className="p-6 text-[10px] font-black text-slate-400 uppercase text-center">Type</th>
+                    <th className="p-6 text-[10px] font-black text-slate-400 uppercase">Principal</th>
+                    <th className="p-6 text-[10px] font-black text-slate-400 uppercase">Outstanding</th>
+                    <th className="p-6 text-[10px] font-black text-slate-400 uppercase">Status</th>
+                    <th className="p-6 text-[10px] font-black text-slate-400 uppercase text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {filteredLoans.map((loan) => (
-                    <tr key={loan.id} className="border-b hover:bg-gray-50">
-                      <td className="py-3 px-4">
-                        <div className="font-medium">{loan.client_name}</div>
-                        <div className="text-sm text-gray-500">#{loan.id.slice(0, 8)}</div>
+                <tbody className="divide-y divide-slate-50">
+                  {filteredLoans.map((loan: any) => (
+                    <tr key={loan.id} className="hover:bg-slate-50/80 transition-all group">
+                      <td className="p-6">
+                        <p className="font-black text-slate-900 group-hover:text-blue-600 transition-colors">{loan.client_name}</p>
+                        <p className="text-[10px] font-mono text-slate-400 uppercase">Ref: {loan.id.split('-')[0]}</p>
                       </td>
-                      <td className="py-3 px-4">
-                        <Badge className={loan.loan_type === 'CASH' ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'}>
-                          {loan.loan_type === 'CASH' ? <Banknote className="w-3 h-3 mr-1" /> : <Bike className="w-3 h-3 mr-1" />}
-                          {loan.loan_type}
-                        </Badge>
+                      <td className="p-6">
+                        <div className="flex justify-center">
+                          {loan.loan_type === 'CASH' ? 
+                            <Banknote className="w-5 h-5 text-blue-500 opacity-40" /> : 
+                            <Bike className="w-5 h-5 text-orange-500 opacity-40" />
+                          }
+                        </div>
                       </td>
-                      <td className="py-3 px-4 font-medium">
-                        UGX {loan.principal_amount.toLocaleString()}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className={loan.outstanding_balance > 0 ? 'text-red-600 font-medium' : 'text-green-600'}>
-                          UGX {loan.outstanding_balance.toLocaleString()}
+                      <td className="p-6">
+                        <span className="text-xs font-bold text-slate-600">
+                          {loan.principal_amount.toLocaleString()} <span className="text-[10px] opacity-50">UGX</span>
                         </span>
                       </td>
-                      <td className="py-3 px-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(loan.status)}`}>
-                          {loan.status.toUpperCase()}
+                      <td className="p-6">
+                        {/* 1:1 Color Logic */}
+                        <span className={`text-sm font-black ${loan.outstanding_balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {loan.outstanding_balance.toLocaleString()}
                         </span>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="p-6">
+                        <StatusBadge status={loan.status} />
+                      </td>
+                      <td className="p-6 text-right space-x-2">
                         <Button 
                           variant="ghost" 
                           size="sm"
                           onClick={() => router.push(`/dashboard/loans/${loan.id}`)}
+                          className="rounded-xl hover:bg-slate-100"
                         >
-                          View
+                          <Eye className="w-4 h-4 text-slate-400" />
                         </Button>
+                        <button 
+                          onClick={() => { setSelectedLoan(loan); setModalType('payment'); }}
+                          className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => { setSelectedLoan(loan); setModalType('reversal'); }}
+                          className="p-3 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm"
+                        >
+                          <ShieldCheck className="w-4 h-4" />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -274,14 +201,33 @@ export function LoanTab() {
         </CardContent>
       </Card>
 
-      {/* Create Loan Modal */}
-      {showCreateModal && (
+      {/* --- Modals --- */}
+      {showCreate && (
         <CreateLoanModal 
-          onClose={() => setShowCreateModal(false)}
-          onSuccess={() => {
-            setShowCreateModal(false);
-            fetchLoans();
-          }}
+          onClose={() => setShowCreate(false)} 
+          onSuccess={() => { setShowCreate(false); fetchLoans(); }} 
+        />
+      )}
+
+      {modalType === 'payment' && (
+  <RepaymentModal 
+    loan={selectedLoan} 
+    onClose={() => setModalType(null)} 
+    // 1. Rename onSuccess to onSave
+    onSave={() => { 
+      setModalType(null); 
+      fetchLoans(); 
+    }} 
+    // 2. Add the mandatory user object required for the audit log
+    user={{ id: 'system_admin' }} 
+  />
+)}
+
+      {modalType === 'reversal' && (
+        <ReversalModal 
+          loan={selectedLoan} 
+          onClose={() => setModalType(null)} 
+          onSuccess={() => { setModalType(null); fetchLoans(); }} 
         />
       )}
     </div>

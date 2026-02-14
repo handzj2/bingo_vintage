@@ -1,253 +1,168 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { calculateCashLoan, calculateBikeLoan } from '../loan.utils';
-import { Banknote, Bike, Calculator, ShieldCheck, Save } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/Button';
-import { input } from '@/components/ui/input';
-import { Label } from '@/components/ui/Label';
+import { useState, useMemo } from 'react';
+import { calculateCashLoan, calculateBikeLoan } from '../utils/calculations';
+import { loanApi } from '../loan.api';
+import { ShieldCheck, Save, Calculator, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import ClientSearch from './ClientSearch';
+import BikeSearch from '../../inventory/components/BikeSearch';
+import LoanTypeSelector from './LoanTypeSelector';
 
-type LoanType = 'cash' | 'bike';
-
-interface LoanFormProps {
-  clientId?: string;
-  onSubmit: (data: any) => void;
-  isSubmitting?: boolean;
-}
-
-export function LoanForm({ clientId, onSubmit, isSubmitting = false }: LoanFormProps) {
-  const [loanType, setLoanType] = useState<LoanType>('cash');
+export function LoanForm({ clientId, onSuccess }: { clientId: string, onSuccess: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [loanType, setLoanType] = useState<'CASH' | 'BIKE'>('CASH');
+  
+  // Core State
+  const [amount, setAmount] = useState(1000000);
+  const [deposit, setDeposit] = useState(1500000);
+  const [rate, setRate] = useState(15);
+  const [term, setTerm] = useState(12);
   const [notes, setNotes] = useState('');
   
-  // Cash loan inputs
-  const [principal, setPrincipal] = useState(1000000);
-  const [monthlyRate, setMonthlyRate] = useState(15);
-  const [termMonths, setTermMonths] = useState(12);
-  
-  // Bike loan inputs
-  const [bikePrice, setBikePrice] = useState(5500000);
-  const [deposit, setDeposit] = useState(1500000);
-  const [weeklyRate, setWeeklyRate] = useState(10);
-  const [termWeeks, setTermWeeks] = useState(52);
-  
-  const [calculation, setCalculation] = useState<any>({});
+  // New stateful tracking for selected client and bike
+  const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [selectedBike, setSelectedBike] = useState<any>(null);
 
-  // Calculate on input change
-  useEffect(() => {
-    if (loanType === 'cash') {
-      setCalculation(calculateCashLoan(principal, monthlyRate, termMonths));
-    } else {
-      setCalculation(calculateBikeLoan(bikePrice, deposit, weeklyRate, termWeeks));
-    }
-  }, [loanType, principal, bikePrice, deposit, monthlyRate, weeklyRate, termMonths, termWeeks]);
+  // 1. Math Sync: Always matches backend logic
+  const results = useMemo(() => {
+    return loanType === 'CASH' 
+      ? calculateCashLoan(amount, rate, term)
+      : calculateBikeLoan(amount, deposit, rate, term);
+  }, [loanType, amount, deposit, rate, term]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // 2. Submission Handler (Policy Locked)
+  const handlePost = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!notes.trim()) {
-      toast.error('Policy [2026-01-10]: Justification note is required');
-      return;
+    // Policy [2026-01-10] Justification Check
+    if (notes.trim().length < 15) {
+      return toast.error("Policy Violation: Audit justification must be at least 15 characters.");
     }
 
-    const payload = {
-      clientId: clientId || 'temp-client-id',
-      loanType: loanType.toUpperCase(),
-      principalAmount: loanType === 'cash' ? principal : (bikePrice - deposit),
-      interestRate: loanType === 'cash' ? monthlyRate / 100 : weeklyRate / 100,
-      term_months: loanType === 'cash' ? termMonths : undefined,
-      term_weeks: loanType === 'bike' ? termWeeks : undefined,
-      deposit: loanType === 'bike' ? deposit : 0,
-      notes: `[2026-01-10]: ${notes}`,
-      loan_number: `LN-${Date.now()}`,
-      start_date: new Date().toISOString()
-    };
+    setLoading(true);
+    try {
+      const payload = {
+        client_id: clientId,
+        loan_type: loanType,
+        principal_amount: loanType === 'CASH' ? amount : (amount - deposit),
+        interest_rate: rate / 100,
+        term_period: term, // Months for cash, Weeks for bike
+        notes: `[POLICY 2026-01-10]: ${notes}`,
+        start_date: new Date().toISOString()
+      };
 
-    onSubmit(payload);
+      await loanApi.createLoan(payload);
+      toast.success("Disbursement Recorded and Locked.");
+      onSuccess();
+    } catch (error: any) {
+      toast.error("API Connection Error: Could not post to Railway.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Loan Type Switcher */}
-      <div className="flex p-1.5 bg-gray-100 rounded-xl max-w-md mx-auto">
-        <button
-          type="button"
-          onClick={() => setLoanType('cash')}
-          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-bold transition-all ${
-            loanType === 'cash' 
-              ? 'bg-white shadow-md text-blue-600' 
-              : 'text-gray-500 hover:text-blue-600'
-          }`}
-        >
-          <Banknote className="w-5 h-5" /> Cash Loan
-        </button>
-        <button
-          type="button"
-          onClick={() => setLoanType('bike')}
-          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-bold transition-all ${
-            loanType === 'bike' 
-              ? 'bg-white shadow-md text-orange-600' 
-              : 'text-gray-500 hover:text-orange-600'
-          }`}
-        >
-          <Bike className="w-5 h-5" /> Bike Loan
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Inputs Panel */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center gap-2 text-gray-400 mb-2">
-            <Calculator className="w-4 h-4" />
-            <span className="text-xs font-bold uppercase tracking-wider">Loan Parameters</span>
-          </div>
-
-          {loanType === 'cash' ? (
-            <div className="space-y-4">
-              <div>
-                <Label>Principal Amount (UGX)</Label>
-                <input
-                  type="number"
-                  value={principal}
-                  onChange={(e) => setPrincipal(Number(e.target.value))}
-                  className="text-2xl font-bold text-blue-600"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Monthly Interest Rate (%)</Label>
-                  <input
-                    type="number"
-                    value={monthlyRate}
-                    onChange={(e) => setMonthlyRate(Number(e.target.value))}
-                  />
-                </div>
-                <div>
-                  <Label>Term (Months)</Label>
-                  <input
-                    type="number"
-                    value={termMonths}
-                    onChange={(e) => setTermMonths(Number(e.target.value))}
-                  />
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Bike Price (UGX)</Label>
-                  <input
-                    type="number"
-                    value={bikePrice}
-                    onChange={(e) => setBikePrice(Number(e.target.value))}
-                    className="font-bold text-orange-600"
-                  />
-                </div>
-                <div>
-                  <Label>Deposit (UGX)</Label>
-                  <input
-                    type="number"
-                    value={deposit}
-                    onChange={(e) => setDeposit(Number(e.target.value))}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Weekly Interest Rate (%)</Label>
-                  <input
-                    type="number"
-                    value={weeklyRate}
-                    onChange={(e) => setWeeklyRate(Number(e.target.value))}
-                  />
-                </div>
-                <div>
-                  <Label>Term (Weeks)</Label>
-                  <input
-                    type="number"
-                    value={termWeeks}
-                    onChange={(e) => setTermWeeks(Number(e.target.value))}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
+    <form onSubmit={handlePost} className="grid grid-cols-1 lg:grid-cols-12 gap-6 p-1">
+      <div className="lg:col-span-7 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm space-y-6">
+        <div className="flex bg-slate-100 p-1 rounded-2xl w-fit">
+          <button type="button" onClick={() => setLoanType('CASH')} className={`px-8 py-2.5 rounded-xl font-black text-xs transition-all ${loanType === 'CASH' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>CASH</button>
+          <button type="button" onClick={() => setLoanType('BIKE')} className={`px-8 py-2.5 rounded-xl font-black text-xs transition-all ${loanType === 'BIKE' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-400'}`}>BIKE</button>
         </div>
 
-        {/* Calculation Summary */}
-        <Card className={`${
-          loanType === 'cash' 
-            ? 'bg-gradient-to-br from-blue-600 to-blue-800' 
-            : 'bg-gradient-to-br from-orange-500 to-orange-700'
-        } text-white`}>
-          <CardContent className="pt-6 space-y-4">
-            <div className="flex justify-between items-start">
-              <div className="p-2 bg-white/20 rounded-lg">
-                <Calculator className="w-5 h-5" />
-              </div>
-              <span className="text-xs font-bold uppercase opacity-70">
-                {loanType === 'cash' ? 'Monthly' : 'Weekly'} Payment
-              </span>
-            </div>
-            
-            <div>
-              <p className="text-3xl font-black">
-                {Math.round(calculation.installment || 0).toLocaleString()} 
-                <span className="text-lg opacity-60 ml-1">UGX</span>
-              </p>
-            </div>
-
-            <div className="space-y-2 pt-4 border-t border-white/20 text-sm">
-              <div className="flex justify-between">
-                <span className="opacity-70">Principal</span>
-                <span className="font-bold">{calculation.principalAmount?.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="opacity-70">Total Interest</span>
-                <span className="font-bold">{Math.round(calculation.totalInterest || 0).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-base font-bold">
-                <span>Total Payable</span>
-                <span>{Math.round(calculation.totalPayable || 0).toLocaleString()}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Policy Section */}
-      <div className="bg-red-50 border border-red-100 rounded-xl p-6 space-y-4">
-        <div className="flex items-center gap-2 text-red-600">
-          <ShieldCheck className="w-5 h-5" />
-          <span className="text-sm font-bold uppercase tracking-wider">Policy [2026-01-10] Audit Trail</span>
-        </div>
-        <div>
-          <Label className="text-red-700">Justification Note (Required)</Label>
-          <textarea
-            required
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Explain the purpose of this loan disbursement. This note is immutable and linked to your staff ID."
-            className="w-full p-3 bg-white border border-red-200 rounded-lg text-sm focus:ring-2 focus:ring-red-500 outline-none h-24"
+        {/* Client Search Component */}
+        <div className="space-y-2">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Select Client</label>
+          <ClientSearch 
+            onSelect={(client) => setSelectedClient(client)} 
+            selectedClient={selectedClient}
           />
         </div>
+
+        <div className="space-y-4">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{loanType === 'CASH' ? 'Principal (UGX)' : 'Bike Sale Price'}</label>
+          
+          {/* Bike Search for BIKE loans */}
+          {loanType === 'BIKE' && (
+            <BikeSearch 
+              onSelect={(bike) => {
+                setSelectedBike(bike);
+                setAmount(bike.current_value);
+              }} 
+              selectedBike={selectedBike} 
+            />
+          )}
+          
+          {/* Amount input - shown for CASH or when no bike selected */}
+          {(loanType === 'CASH' || !selectedBike) && (
+            <input 
+              type="number" 
+              value={amount} 
+              onChange={e => setAmount(Number(e.target.value))} 
+              className="w-full p-6 bg-slate-50 rounded-3xl text-4xl font-black outline-none focus:ring-2 focus:ring-blue-500" 
+            />
+          )}
+          
+          {loanType === 'BIKE' && (
+            <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
+              <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Deposit</label>
+              <input type="number" value={deposit} onChange={e => setDeposit(Number(e.target.value))} className="w-full p-4 bg-slate-50 rounded-2xl font-bold" />
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 bg-slate-50 rounded-2xl">
+              <label className="text-[10px] font-bold text-slate-400">RATE %</label>
+              <input type="number" value={rate} onChange={e => setRate(Number(e.target.value))} className="w-full bg-transparent text-xl font-bold outline-none" />
+            </div>
+            <div className="p-4 bg-slate-50 rounded-2xl">
+              <label className="text-[10px] font-bold text-slate-400 uppercase">{loanType === 'CASH' ? 'Months' : 'Weeks'}</label>
+              <input type="number" value={term} onChange={e => setTerm(Number(e.target.value))} className="w-full bg-transparent text-xl font-bold outline-none" />
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-6 border-t border-red-50">
+          <label className="flex items-center gap-2 text-[10px] font-black text-red-500 uppercase mb-3">
+            <AlertCircle className="w-4 h-4" /> Audit Justification (Immutable)
+          </label>
+          <textarea value={notes} onChange={e => setNotes(e.target.value)} className="w-full p-5 bg-red-50/10 border border-red-100 rounded-2xl text-sm h-32 outline-none" placeholder="Explain the purpose of this disbursement..." />
+        </div>
       </div>
 
-      {/* Submit Button */}
-      <div className="flex justify-end">
-        <Button 
-          type="submit" 
-          disabled={isSubmitting || !notes.trim()}
-          className="gap-2"
-        >
-          {isSubmitting ? (
-            <>Processing...</>
-          ) : (
-            <><Save className="w-4 h-4" /> Create Loan</>
-          )}
-        </Button>
+      <div className="lg:col-span-5 flex flex-col gap-6">
+        <div className={`p-10 rounded-[3rem] text-white shadow-xl flex-1 flex flex-col justify-between ${loanType === 'CASH' ? 'bg-blue-600' : 'bg-orange-600'}`}>
+          <Calculator className="w-12 h-12 opacity-20" />
+          <div>
+            <p className="text-[10px] font-black uppercase opacity-60 tracking-widest font-mono">Installment</p>
+            <h2 className="text-5xl font-black mt-2 tracking-tighter">
+              {results.installment.toLocaleString()} <span className="text-sm opacity-50 uppercase font-mono tracking-normal">UGX</span>
+            </h2>
+            <p className="text-sm font-bold opacity-40 mt-2 italic">per {loanType === 'CASH' ? 'month' : 'week'}</p>
+          </div>
+          <div className="mt-12 pt-8 border-t border-white/10 space-y-4">
+             <div className="flex justify-between items-center opacity-70">
+               <span className="text-[10px] font-bold uppercase">Total Interest</span>
+               <span className="font-black">{Math.round(results.totalInterest).toLocaleString()}</span>
+             </div>
+             <div className="flex justify-between items-center text-2xl">
+               <span className="font-bold opacity-80 uppercase text-xs">Total Payable</span>
+               <span className="font-black border-b-2 border-white/30">{Math.round(results.totalPayable).toLocaleString()}</span>
+             </div>
+          </div>
+        </div>
+
+        <button type="submit" disabled={loading} className="w-full py-8 bg-slate-900 text-white rounded-[2.5rem] font-black text-xl hover:bg-black transition-all flex items-center justify-center gap-4 disabled:opacity-50 shadow-2xl">
+          {loading ? "EXECUTING..." : "SAVE TO RAILWAY"}
+          <Save className="w-6 h-6" />
+        </button>
+
+        <div className="flex items-center gap-3 p-4 bg-slate-100 rounded-2xl border border-slate-200">
+          <ShieldCheck className="w-5 h-5 text-slate-400" />
+          <p className="text-[9px] leading-tight text-slate-500 font-bold uppercase font-mono italic">
+            Entries are read-only for staff immediately after saving [Policy 2026-01-10].
+          </p>
+        </div>
       </div>
     </form>
   );
