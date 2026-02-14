@@ -1,0 +1,48 @@
+{
+  "total_files": 39,
+  "modules": {
+    "auth": [
+      "E:/v/bingo_vintage_web/backend/app/api\\auth.py",
+      "E:/v/bingo_vintage_web/backend/app/api\\test_auth.py",
+      "E:/v/bingo_vintage_web/backend/app/api\\routers\\auth.py"
+    ],
+    "clients": [
+      "E:/v/bingo_vintage_web/backend/app/api\\delete_problematic_clients.py",
+      "E:/v/bingo_vintage_web/backend/app/api\\test_clients.py",
+      "E:/v/bingo_vintage_web/backend/app/api\\routers\\clients.py"
+    ],
+    "loans": [
+      "E:/v/bingo_vintage_web/backend/app/api\\routers\\loans.py"
+    ],
+    "payments": [
+      "E:/v/bingo_vintage_web/backend/app/api\\routers\\payments.py"
+    ],
+    "bikes": [
+      "E:/v/bingo_vintage_web/backend/app/api\\routers\\bikes.py"
+    ],
+    "reports": [
+      "E:/v/bingo_vintage_web/backend/app/api\\routers\\reports.py"
+    ],
+    "settings": [
+      "E:/v/bingo_vintage_web/backend/app/api\\routers\\settings.py"
+    ],
+    "users": [
+      "E:/v/bingo_vintage_web/backend/app/api\\routers\\users.py"
+    ],
+    "audit": [
+      "E:/v/bingo_vintage_web/backend/app/api\\models_audit.py",
+      "E:/v/bingo_vintage_web/backend/app/api\\routers\\audit.py"
+    ],
+    "sync": [
+      "E:/v/bingo_vintage_web/backend/app/api\\routers\\sync.py"
+    ],
+    "schedules": [
+      "E:/v/bingo_vintage_web/backend/app/api\\routers\\schedules.py"
+    ],
+    "receipts": [
+      "E:/v/bingo_vintage_web/backend/app/api\\routers\\receipts.py"
+    ]
+  },
+  "python_api_path": "E:/v/bingo_vintage_web/backend/app/api",
+  "nestjs_api_path": "E:/v/bingo_vintage_web/backend"
+}
