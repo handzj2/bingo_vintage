@@ -8,6 +8,7 @@ import { Client }           from '../clients/entities/client.entity';
 import { LoanSchedule }     from '../schedules/entities/schedule.entity';
 import { Bike, BikeStatus } from '../bikes/entities/bike.entity';
 import { SettingsService }  from '../settings/settings.service';
+import { sanitiseDto }      from '../../common/utils/sanitise';
 import { LedgerService }    from '../ledger/ledger.service';
 import { BikesService }     from '../bikes/bikes.service';
 import { addMonths, addWeeks } from 'date-fns';
@@ -116,7 +117,8 @@ export class LoansService {
   }
 
   // ── Apply for loan (main creation path) ─────────────────────────────────────
-  async applyForLoan(data: ApplyLoanDto, user: RequestUser): Promise<Loan> {
+  async applyForLoan(rawData: ApplyLoanDto, user: RequestUser): Promise<Loan> {
+    const data = sanitiseDto(rawData);
     return this.loansRepo.manager.transaction(async (em) => {
       const { clientId, bikeId, amount, months = 12, interestRate } = data;
 

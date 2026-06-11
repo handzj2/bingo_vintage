@@ -2,6 +2,7 @@ import {
   Controller, Post, Body, Get, Request,
   UseGuards, Patch,
 } from '@nestjs/common';
+import { AuthRequest } from '../../common/helpers/role-helper';
 import {
   ApiTags, ApiOperation, ApiBearerAuth,
 } from '@nestjs/swagger';
@@ -38,7 +39,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current authenticated user profile' })
-  async me(@Request() req: any) {
+  async me(@Request() req: AuthRequest) {
     return req.user;
   }
 }

@@ -8,6 +8,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
   assertAdmin as helperAssertAdmin,
   assertRole  as helperAssertRole,
+  AuthRequest,
 } from '../../common/helpers/role-helper';
 
 /**
@@ -28,35 +29,35 @@ export class BranchesController {
 
   @Get()
   @ApiOperation({ summary: 'List all branches (admin/manager)' })
-  findAll(@Query('tenantId') tenantId: string, @Request() req: any) {
+  findAll(@Query('tenantId') tenantId: string, @Request() req: AuthRequest) {
     this.assertAdminOrManager(req);
     return this.branchesService.findAll(tenantId ? Number(tenantId) : undefined);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a single branch' })
-  findOne(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+  findOne(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
     this.assertAdminOrManager(req);
     return this.branchesService.findOne(id);
   }
 
   @Post()
   @ApiOperation({ summary: 'Create a branch (admin only)' })
-  create(@Body() data: any, @Request() req: any) {
+  create(@Body() data: any, @Request() req: AuthRequest) {
     this.assertAdmin(req);
     return this.branchesService.create(data);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a branch (admin only)' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() data: any, @Request() req: any) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() data: any, @Request() req: AuthRequest) {
     this.assertAdmin(req);
     return this.branchesService.update(id, data);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a branch (admin only)' })
-  remove(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+  remove(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
     this.assertAdmin(req);
     return this.branchesService.remove(id);
   }

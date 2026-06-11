@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { sanitiseDto } from '../../common/utils/sanitise';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Client } from './entities/client.entity';
@@ -7,7 +8,8 @@ import { Client } from './entities/client.entity';
 export class ClientsService {
   constructor(@InjectRepository(Client) private clientRepo: Repository<Client>) {}
 
-  async registerRider(clientData: any) {
+  async registerRider(rawClientData: any) {
+    const clientData = sanitiseDto(rawClientData);
     // 1. Security Check: Prevent duplicate NIN, Phone, Email, or ID Number during registration
     const duplicateChecks = [];
     
@@ -74,7 +76,8 @@ export class ClientsService {
     return client;
   }
 
-  async update(id: number, updateData: any) {
+  async update(id: number, rawUpdateData: any) {
+    const updateData = sanitiseDto(rawUpdateData);
     // 1. Check if client exists
     const client = await this.findOne(id);
     

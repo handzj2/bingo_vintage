@@ -33,9 +33,14 @@ export function sanitiseText(value: string | undefined | null): string | undefin
 /**
  * Apply sanitiseText to all string fields of an object.
  * Use in service methods before persisting free-text inputs.
+ *
+ * Generic T is preserved — TypeScript retains full DTO type downstream.
+ * Only string fields are mutated; numeric/enum/boolean fields are untouched.
+ * The `object` constraint (not `Record<string,unknown>`) accepts all DTOs
+ * without requiring callers to cast.
  */
-export function sanitiseDto<T extends Record<string, unknown>>(dto: T): T {
-  const out: Record<string, unknown> = { ...dto };
+export function sanitiseDto<T extends object>(dto: T): T {
+  const out = { ...dto } as Record<string, unknown>;
   for (const [key, val] of Object.entries(out)) {
     if (typeof val === 'string') out[key] = sanitiseText(val);
   }

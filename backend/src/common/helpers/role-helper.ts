@@ -22,6 +22,13 @@ export interface RequestUser {
 }
 
 /**
+ * Typed Express request carrying the JWT-validated user.
+ * Use this instead of `Request & { user: any }` in all controllers.
+ * Pattern: NestJS official docs + Stripe internal typing convention.
+ */
+export type AuthRequest = import('express').Request & { user: RequestUser };
+
+/**
  * Safely resolve the numeric user ID from req.user.
  * Resolution order: id → userId → sub
  * Use this in ALL services instead of user.id directly.

@@ -9,6 +9,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
   assertAdmin as helperAssertAdmin,
   assertRole  as helperAssertRole,
+  AuthRequest,
 } from '../../common/helpers/role-helper';
 
 /**
@@ -70,7 +71,7 @@ export class PasswordResetAdminController {
 
   @Get()
   @ApiOperation({ summary: 'List all password reset requests (admin/manager)' })
-  async listRequests(@Request() req: any) {
+  async listRequests(@Request() req: AuthRequest) {
     this.assertAdminOrManager(req);
     return this.service.listRequests();
   }
@@ -78,7 +79,7 @@ export class PasswordResetAdminController {
   @Post(':id/approve')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Approve a reset request and generate OTP (admin)' })
-  async approveRequest(@Param('id') id: string, @Request() req: any) {
+  async approveRequest(@Param('id') id: string, @Request() req: AuthRequest) {
     this.assertAdmin(req);
     return this.service.approveRequest(id, req.user.userId, req.user.username);
   }

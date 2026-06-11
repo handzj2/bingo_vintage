@@ -1,4 +1,6 @@
 import { assertAdmin, assertRole, getEffectiveRole } from '../../common/helpers/role-helper';
+import { AuthRequest } from '../../common/helpers/role-helper';
+import { Throttle } from '@nestjs/throttler';
 import { 
   Controller, 
   Get, 
@@ -11,7 +13,8 @@ import {
   Request,
   ForbiddenException,
   Query,
-  SetMetadata
+  SetMetadata,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -30,7 +33,7 @@ export class PaymentsController {
   @Post()
   @Throttle({ default: { ttl: 60_000, limit: 10 } })  // 10 payment submissions/min per IP
   @ApiOperation({ summary: 'Create a new payment' })
-  create(@Body() createPaymentDto: CreatePaymentDto, @Request() req: any) {
+  create(@Body() createPaymentDto: CreatePaymentDto, @Request() req: AuthRequest) {
     // ✅ POLICY: Only cashier, manager, admin can record payments — not agents
     const role = getEffectiveRole(req?.user);
     if (role === 'agent') {
@@ -65,7 +68,7 @@ export class PaymentsController {
   @Get()
   @ApiOperation({ summary: 'Get payments — cursor-paginated. Pass ?cursor=<lastId>&limit=50' })
   findAll(
-    @Request() req: any,
+    @Request() req: AuthRequest,
     @Query('limit')  limit?:  number,
     @Query('cursor') cursor?: number,
   ) {
@@ -78,8 +81,8 @@ export class PaymentsController {
 
   @Get('loan/:loanId')
   @ApiOperation({ summary: 'Get payments by loan ID' })
-  findByLoanId(@Param('loanId') loanId: string) {
-    return this.paymentsService.findByLoanId(+loanId);
+  findByLoanId(@Param('loanId', ParseIntPipe) loanId: number) {
+    return this.paymentsService.findByLoanId(loanId);
   }
 
   @Get('receipt/:receiptNumber')
@@ -90,7 +93,7 @@ export class PaymentsController {
 
   @Get('today')
   @ApiOperation({ summary: 'Get today\'s payments' })
-  getTodayPayments(@Request() req: any) {
+  getTodayPayments(@Request() req: AuthRequest) {
     return this.paymentsService.getTodayPayments(req?.user?.tenantId);
   }
 
@@ -103,6 +106,7 @@ export class PaymentsController {
   @Get('search/range')
   @ApiOperation({ summary: 'Find payments between two dates' })
   async findByDateRange(
+    @Request() req: AuthRequest,
     @Query('startDate') start: string,
     @Query('endDate') end: string,
   ) {
@@ -111,8 +115,8 @@ export class PaymentsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get payment by ID' })
-  findOne(@Param('id') id: string) {
-    return this.paymentsService.findOne(+id);
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.paymentsService.findOne(id);
   }
 
   // ⚡ FINAL STEP: Enhanced Admin-Only Reversal Endpoint with Dual Security [cite: 2026-01-10]
@@ -126,7 +130,7 @@ export class PaymentsController {
   async reversePayment(
     @Param('id') id: number, 
     @Body('reason') reason: string, 
-    @Request() req: any
+    @Request() req: AuthRequest
   ) {
     // The RolesGuard already validates admin role, but we keep user extraction
     const adminUser = req.user;
@@ -138,15 +142,15 @@ export class PaymentsController {
   @Patch(':id/reverse')
   @ApiOperation({ summary: 'Reverse payment (Legacy endpoint)' })
   async legacyReversePayment(
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Body() reverseDto: ReversePaymentDto,
-    @Request() req: any,
+    @Request() req: AuthRequest,
   ) {
     const adminName = req.user?.username || req.user?.email || 'System Administrator';
     assertAdmin(req.user, 'Policy [2026-01-10]: Only administrators can reverse payments');
     
     return this.paymentsService.reversePayment(
-      +id, 
+      id, 
       req.user, // Pass user object instead of just name
       reverseDto.reversal_reason
     );
@@ -158,7 +162,7 @@ export class PaymentsController {
   // GET pending requests (admin view)
   @Get('reversal-requests')
   @ApiOperation({ summary: 'Get all pending reversal requests (Admin only)' })
-  async getPendingReversalRequests(@Request() req: any) {
+  async getPendingReversalRequests(@Request() req: AuthRequest) {
     const user = req.user;
     assertRole(user, ['admin', 'manager'], 'Admin or manager access required');
     return this.paymentsService.getPendingReversalRequests();
@@ -168,31 +172,31 @@ export class PaymentsController {
   @Post(':id/request-reversal')
   @ApiOperation({ summary: 'Request a reversal (cashier submits, admin approves)' })
   async requestReversal(
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Body('reason') reason: string,
-    @Request() req: any,
+    @Request() req: AuthRequest,
   ) {
     const user = req.user;
     const requestedBy = user.email || user.username;
-    return this.paymentsService.requestReversal(+id, requestedBy, reason);
+    return this.paymentsService.requestReversal(id, requestedBy, reason);
   }
 
   // Admin approves a reversal request
   @Post(':id/approve-reversal')
   @ApiOperation({ summary: 'Approve a reversal request (Admin only)' })
-  async approveReversal(@Param('id') id: string, @Request() req: any) {
-    return this.paymentsService.approveReversalRequest(+id, req.user);
+  async approveReversal(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
+    return this.paymentsService.approveReversalRequest(id, req.user);
   }
 
   // Admin rejects a reversal request
   @Post(':id/reject-reversal')
   @ApiOperation({ summary: 'Reject a reversal request (Admin only)' })
   async rejectReversal(
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Body('reason') reason: string,
-    @Request() req: any,
+    @Request() req: AuthRequest,
   ) {
-    return this.paymentsService.rejectReversalRequest(+id, req.user, reason);
+    return this.paymentsService.rejectReversalRequest(id, req.user, reason);
   }
 
   @Delete(':id')

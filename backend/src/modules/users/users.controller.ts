@@ -8,7 +8,10 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { assertAdmin } from '../../common/helpers/role-helper';
+import {
+  assertAdmin,
+  AuthRequest,
+} from '../../common/helpers/role-helper';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -58,14 +61,14 @@ export class UsersController {
 
   @Patch(':id/deactivate')
   @ApiOperation({ summary: 'Deactivate a user account (Admin only)' })
-  deactivate(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+  deactivate(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
     assertAdmin(req.user, 'Admin only');
     return this.usersService.deactivate(id);
   }
 
   @Patch(':id/activate')
   @ApiOperation({ summary: 'Reactivate a user account (Admin only)' })
-  activate(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+  activate(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
     assertAdmin(req.user, 'Admin only');
     return this.usersService.activate(id);
   }
@@ -75,7 +78,7 @@ export class UsersController {
   updatePermissions(
     @Param('id', ParseIntPipe) id: number,
     @Body('permissions') permissions: Record<string, boolean>,
-    @Request() req: any,
+    @Request() req: AuthRequest,
   ) {
     assertAdmin(req.user, 'Admin only');
     return this.usersService.updatePermissions(id, permissions);
@@ -83,7 +86,7 @@ export class UsersController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a user (Admin only)' })
-  remove(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+  remove(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
     assertAdmin(req.user, 'Admin only');
     return this.usersService.remove(id);
   }

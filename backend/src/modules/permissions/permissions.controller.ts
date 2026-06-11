@@ -2,6 +2,7 @@ import {
   Controller, Get, Post, Delete, Body, Param,
   UseGuards, Request,
 } from '@nestjs/common';
+import { AuthRequest } from '../../common/helpers/role-helper';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -17,7 +18,7 @@ export class PermissionsController {
 
   @Get()
   @ApiOperation({ summary: 'List all permissions visible to current tenant' })
-  findAll(@Request() req: any) {
+  findAll(@Request() req: AuthRequest) {
     return this.permissionsService.findAll(req.user?.tenantId);
   }
 
@@ -25,7 +26,7 @@ export class PermissionsController {
   @UseGuards(RolesGuard)
   @Roles('admin')
   @ApiOperation({ summary: 'Create a custom permission (admin only)' })
-  create(@Body() dto: CreatePermissionDto, @Request() req: any) {
+  create(@Body() dto: CreatePermissionDto, @Request() req: AuthRequest) {
     return this.permissionsService.create(dto, req.user?.tenantId);
   }
 

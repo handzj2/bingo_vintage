@@ -5,7 +5,10 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ReceiptsService } from './receipts.service';
-import { getEffectiveRole } from '../../common/helpers/role-helper';
+import {
+  getEffectiveRole,
+  AuthRequest,
+} from '../../common/helpers/role-helper';
 
 /**
  * ReceiptsController — Phase 2
@@ -30,7 +33,7 @@ export class ReceiptsController {
   @ApiOperation({ summary: 'Get receipt by payment ID (tenant-isolated, audit-logged)' })
   async getByPaymentId(
     @Param('id', ParseIntPipe) id: number,
-    @Request() req: any,
+    @Request() req: AuthRequest,
   ) {
     const user = req.user;
 
@@ -45,7 +48,8 @@ export class ReceiptsController {
 
     const tenantId = user.tenantId;   // Phase 4: no ?? 1
     const actor    = user.email || user.username || String(user.userId);
-    const ip       = req.ip || req.headers?.['x-forwarded-for'] || '';
+    const rawIp    = req.ip || req.headers?.['x-forwarded-for'] || '';
+    const ip       = Array.isArray(rawIp) ? rawIp[0] : rawIp;
 
     // Phase 2: getEffectiveRole() instead of user.role
     if (getEffectiveRole(user) === 'agent') {
@@ -59,7 +63,7 @@ export class ReceiptsController {
   @ApiOperation({ summary: 'Get receipt by receipt number string' })
   async getByNumber(
     @Param('receiptNumber') receiptNumber: string,
-    @Request() req: any,
+    @Request() req: AuthRequest,
   ) {
     const user = req.user;
 
@@ -71,7 +75,8 @@ export class ReceiptsController {
 
     const tenantId = user.tenantId;   // Phase 4: no ?? 1
     const actor    = user.email || user.username || String(user.userId);
-    const ip       = req.ip || req.headers?.['x-forwarded-for'] || '';
+    const rawIp    = req.ip || req.headers?.['x-forwarded-for'] || '';
+    const ip       = Array.isArray(rawIp) ? rawIp[0] : rawIp;
 
     // Phase 2: getEffectiveRole() instead of user.role
     if (getEffectiveRole(user) === 'agent') {
@@ -85,7 +90,7 @@ export class ReceiptsController {
   @ApiOperation({ summary: 'List receipt summaries for a loan' })
   async getByLoan(
     @Param('loanId', ParseIntPipe) loanId: number,
-    @Request() req: any,
+    @Request() req: AuthRequest,
   ) {
     if (!req.user.tenantId) {
       throw new ForbiddenException(

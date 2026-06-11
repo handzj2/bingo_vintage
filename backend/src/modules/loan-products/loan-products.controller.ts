@@ -8,6 +8,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
   assertAdmin as helperAssertAdmin,
   assertRole  as helperAssertRole,
+  AuthRequest,
 } from '../../common/helpers/role-helper';
 
 /**
@@ -24,35 +25,35 @@ export class LoanProductsController {
 
   @Get()
   @ApiOperation({ summary: 'List all loan products (admin/manager)' })
-  findAll(@Query('tenantId') tenantId: string, @Request() req: any) {
+  findAll(@Query('tenantId') tenantId: string, @Request() req: AuthRequest) {
     this.assertAdminOrManager(req);
     return this.loanProductsService.findAll(tenantId ? Number(tenantId) : undefined);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a single loan product' })
-  findOne(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+  findOne(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
     this.assertAdminOrManager(req);
     return this.loanProductsService.findOne(id);
   }
 
   @Post()
   @ApiOperation({ summary: 'Create a loan product (admin only)' })
-  create(@Body() data: any, @Request() req: any) {
+  create(@Body() data: any, @Request() req: AuthRequest) {
     this.assertAdmin(req);
     return this.loanProductsService.create(data);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a loan product (admin only)' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() data: any, @Request() req: any) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() data: any, @Request() req: AuthRequest) {
     this.assertAdmin(req);
     return this.loanProductsService.update(id, data);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a loan product (admin only)' })
-  remove(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+  remove(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
     this.assertAdmin(req);
     return this.loanProductsService.remove(id);
   }

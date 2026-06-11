@@ -5,7 +5,10 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TenantsService } from './tenants.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { assertAdmin as helperAssertAdmin } from '../../common/helpers/role-helper';
+import {
+  assertAdmin as helperAssertAdmin,
+  AuthRequest,
+} from '../../common/helpers/role-helper';
 
 /**
  * TenantsController — Phase 2
@@ -21,35 +24,35 @@ export class TenantsController {
 
   @Get()
   @ApiOperation({ summary: 'List all tenants (admin only)' })
-  findAll(@Request() req: any) {
+  findAll(@Request() req: AuthRequest) {
     this.assertAdmin(req);
     return this.tenantsService.findAll();
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a single tenant' })
-  findOne(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+  findOne(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
     this.assertAdmin(req);
     return this.tenantsService.findOne(id);
   }
 
   @Post()
   @ApiOperation({ summary: 'Create a tenant (admin only)' })
-  create(@Body() data: any, @Request() req: any) {
+  create(@Body() data: any, @Request() req: AuthRequest) {
     this.assertAdmin(req);
     return this.tenantsService.create(data);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a tenant (admin only)' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() data: any, @Request() req: any) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() data: any, @Request() req: AuthRequest) {
     this.assertAdmin(req);
     return this.tenantsService.update(id, data);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a tenant (admin only)' })
-  remove(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+  remove(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
     this.assertAdmin(req);
     return this.tenantsService.remove(id);
   }

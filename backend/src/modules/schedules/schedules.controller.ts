@@ -2,6 +2,7 @@ import {
   Controller, Get, Post, Patch, Param, Query,
   ParseIntPipe, UseGuards, Request,
 } from '@nestjs/common';
+import { AuthRequest } from '../../common/helpers/role-helper';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SchedulesService } from './schedules.service';
@@ -55,7 +56,7 @@ export class SchedulesController {
 
   @Patch('alerts/:id/resolve')
   @ApiOperation({ summary: 'Resolve an alert' })
-  resolveAlert(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+  resolveAlert(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
     const who = req.user?.username || req.user?.email || 'system';
     return this.schedulesService.resolveAlert(id, who);
   }

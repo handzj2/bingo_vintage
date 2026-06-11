@@ -2,6 +2,7 @@ import {
   Controller, Get, Post, Patch, Delete, Body,
   Param, ParseIntPipe, UseGuards, Request,
 } from '@nestjs/common';
+import { AuthRequest } from '../../common/helpers/role-helper';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -24,20 +25,20 @@ export class RolesController {
 
   @Get()
   @ApiOperation({ summary: 'List all roles for the current tenant' })
-  findAll(@Request() req: any) {
+  findAll(@Request() req: AuthRequest) {
     return this.rolesService.findAll(req.user.tenantId);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a role with its permissions' })
-  findOne(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+  findOne(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
     return this.rolesService.findOne(id, req.user.tenantId);
   }
 
   @Post()
   @Roles('admin')
   @ApiOperation({ summary: 'Create a new role (admin only)' })
-  create(@Body() body: { name: string; description?: string; isDefault?: boolean }, @Request() req: any) {
+  create(@Body() body: { name: string; description?: string; isDefault?: boolean }, @Request() req: AuthRequest) {
     return this.rolesService.create(body, req.user.tenantId);
   }
 
@@ -47,7 +48,7 @@ export class RolesController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { name?: string; description?: string; isDefault?: boolean },
-    @Request() req: any,
+    @Request() req: AuthRequest,
   ) {
     return this.rolesService.update(id, body, req.user.tenantId);
   }
@@ -55,7 +56,7 @@ export class RolesController {
   @Delete(':id')
   @Roles('admin')
   @ApiOperation({ summary: 'Delete a role (admin only)' })
-  remove(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+  remove(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
     return this.rolesService.remove(id, req.user.tenantId);
   }
 
@@ -67,7 +68,7 @@ export class RolesController {
   assignPermission(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { permissionCode: string },
-    @Request() req: any,
+    @Request() req: AuthRequest,
   ) {
     return this.rolesService.assignPermission(id, { permissionCode: body.permissionCode, grantedBy: req.user.userId }, req.user.tenantId);
   }
@@ -78,7 +79,7 @@ export class RolesController {
   setPermissions(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { codes: string[] },
-    @Request() req: any,
+    @Request() req: AuthRequest,
   ) {
     return this.rolesService.setPermissions(id, body.codes, req.user.tenantId, req.user.userId);
   }
@@ -89,7 +90,7 @@ export class RolesController {
   revokePermission(
     @Param('id', ParseIntPipe) id: number,
     @Param('code') code: string,
-    @Request() req: any,
+    @Request() req: AuthRequest,
   ) {
     return this.rolesService.revokePermission(id, code, req.user.tenantId);
   }

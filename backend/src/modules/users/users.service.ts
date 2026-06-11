@@ -8,6 +8,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import * as bcrypt from 'bcrypt';
+import { sanitiseDto } from '../../common/utils/sanitise';
 
 @Injectable()
 export class UsersService {
@@ -16,7 +17,8 @@ export class UsersService {
     private usersRepository: Repository<User>,
   ) {}
 
-  async create(createUserDto: CreateUserDto): Promise<User> {
+  async create(rawDto: CreateUserDto): Promise<User> {
+    const createUserDto = sanitiseDto(rawDto);
     const existing = await this.usersRepository.findOne({
       where: [
         { email: createUserDto.email },
@@ -104,7 +106,8 @@ export class UsersService {
     return this.usersRepository.findOne({ where: { username } });
   }
 
-  async update(id: number, updateUserDto: UpdateUserDto): Promise<User> {
+  async update(id: number, rawDto: UpdateUserDto): Promise<User> {
+    const updateUserDto = sanitiseDto(rawDto);
     const user = await this.findOne(id);
 
     if (updateUserDto.full_name) user.fullName = updateUserDto.full_name;

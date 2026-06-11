@@ -32,7 +32,7 @@ import { CreateLoanDto } from './dto/create-loan.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { BikesService } from '../bikes/bikes.service';
-import { assertAdmin, assertRole } from '../../common/helpers/role-helper';
+import { assertAdmin, assertRole, AuthRequest } from '../../common/helpers/role-helper';
 import { ApplyLoanDto } from './dto/apply-loan.dto';
 
 // ==================== DTO DEFINITIONS ====================
@@ -213,7 +213,7 @@ export class LoansController {
   })
   @ApiResponse({ status: 201, description: 'Loan application submitted successfully' })
   @ApiResponse({ status: 400, description: 'Bad request' })
-  async apply(@Body() data: ApplyLoanDto, @Request() req: any) {
+  async apply(@Body() data: ApplyLoanDto, @Request() req: AuthRequest) {
     try {
       const user = req.user;
       return await this.loansService.applyForLoan(data, user);
@@ -246,11 +246,11 @@ export class LoansController {
   @ApiQuery({ name: 'endDate',   required: false, description: 'Filter by end date (YYYY-MM-DD)' })
   @ApiResponse({ status: 200, description: 'Loans retrieved successfully' })
   async findAll(
+    @Request() req: AuthRequest,
     @Query('status')    status?:    string,
     @Query('type')      type?:      string,
     @Query('startDate') startDate?: string,
     @Query('endDate')   endDate?:   string,
-    @Request() req?: any,
   ) {
     try {
       return await this.loansService.findAll({ status, type, startDate, endDate, tenantId: req.user?.tenantId });
@@ -392,7 +392,7 @@ export class LoansController {
   async approveLoan(
     @Param('id', ParseIntPipe) id: number,
     @Body() approvalDto: AdminApprovalDto,
-    @Request() req: any,
+    @Request() req: AuthRequest,
   ) {
     try {
       const user = req.user;
@@ -417,7 +417,7 @@ export class LoansController {
   async reverseLoan(
     @Param('id', ParseIntPipe) id: number,
     @Body() reversalDto: AdminReversalDto,
-    @Request() req: any,
+    @Request() req: AuthRequest,
   ) {
     try {
       const user = req.user;
@@ -441,7 +441,7 @@ export class LoansController {
   async updateLoan(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateDto: UpdateLoanDto,
-    @Request() req: any,
+    @Request() req: AuthRequest,
   ) {
     try {
       const user = req.user;
@@ -464,7 +464,7 @@ export class LoansController {
   @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
   async deleteLoan(
     @Param('id', ParseIntPipe) id: number,
-    @Request() req: any,
+    @Request() req: AuthRequest,
   ) {
     try {
       const user = req.user;
@@ -488,7 +488,7 @@ export class LoansController {
   async updateLoanStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body('status') status: string,
-    @Request() req: any,
+    @Request() req: AuthRequest,
   ) {
     try {
       const user = req.user;
@@ -509,7 +509,7 @@ export class LoansController {
   })
   @SetMetadata('roles', ['admin', 'manager'])
   @ApiResponse({ status: 200, description: 'Summary retrieved successfully' })
-  async getPortfolioSummary(@Request() req: any) {
+  async getPortfolioSummary(@Request() req: AuthRequest) {
     try {
       assertRole(req.user, ['admin', 'manager'], 'Admin or manager access required');
       return await this.loansService.getPortfolioSummary(req.user);
@@ -525,7 +525,7 @@ export class LoansController {
   })
   @SetMetadata('roles', ['admin', 'manager', 'agent'])
   @ApiResponse({ status: 200, description: 'Overdue report retrieved successfully' })
-  async getOverdueLoansReport() {
+  async getOverdueLoansReport(@Request() req: AuthRequest) {
     try {
       return await this.loansService.getOverdueLoansReport(req?.user?.tenantId);
     } catch (error) {
@@ -543,7 +543,7 @@ export class LoansController {
   @ApiResponse({ status: 200, description: 'Audit trail retrieved successfully' })
   async getLoanAuditTrail(
     @Param('loanId', ParseIntPipe) loanId: number,
-    @Request() req: any,
+    @Request() req: AuthRequest,
   ) {
     try {
       const user = req.user;
