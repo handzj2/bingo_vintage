@@ -56,7 +56,6 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 3001;
   await app.listen(port);
-  const logger = app.get ? app.get('NestApplication')?.logger : null;
   console.info(JSON.stringify({ level: 'info', message: `API started`, port, env: process.env.NODE_ENV, ts: new Date().toISOString() }));
 }
 
