@@ -1,0 +1,23 @@
+// Example Consolidation of your 10+ Python models
+model Client {
+  id                Int      @id @default(autoincrement())
+  nin               String   @unique   // From clients.py
+  full_name         String
+  phone             String
+  monthly_income    Float?             // From clients.py
+  residence_type    String?            // For Asset Recovery
+  gps_location      String?            // 2026 Policy Requirement
+  loans             Loan[]
+  payments          Payment[]
+  audit_logs        Audit[]
+}
+
+model Loan {
+  id                Int      @id @default(autoincrement())
+  client_id         Int
+  loan_amount       Float
+  weekly_installment Float             // From schedules.py logic
+  status            String   @default("ACTIVE")
+  schedules         Schedule[]
+  audit_logs        Audit[]
+}

@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+.next/
+out/
+build/
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEbackend/.env
+backend/.env.railway
+frontend/.env.local
+
+backend/dist/
+frontend/.next/
+
+*.tsbuildinfo
+*.zip
+.vscode/
+.idea/
+
+# Lock files at wrong level
+yarn.lock

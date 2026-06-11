@@ -1,0 +1,139 @@
+
+D:\local deploy\bingo_vintage\frontend\src>tree /F /A
+Folder PATH listing for volume New Volume
+Volume serial number is E28F-EC8F
+D:.
++---app
+|   |   layout.tsx
+|   |   page.tsx
+|   |
+|   +---auth
+|   |   \---login
+|   |       |   page.tsx
+|   |       |
+|   |       \---reset-password
+|   |               page.tsx
+|   |
+|   \---dashboard
+|       |   layout.tsx
+|       |   page.tsx
+|       |
+|       +---audit
+|       |       page.tsx
+|       |
+|       +---clients
+|       |   |   page.tsx
+|       |   |
+|       |   +---create
+|       |   |       page.tsx
+|       |   |
+|       |   \---[id]
+|       |       |   page.tsx
+|       |       |
+|       |       \---edit
+|       |               page.tsx
+|       |
+|       +---inventory
+|       |       page.tsx
+|       |
+|       +---loans
+|       |   |   page.tsx
+|       |   |
+|       |   \---create
+|       |           page.tsx
+|       |
+|       +---payments
+|       |       page.tsx
+|       |
+|       +---reversals
+|       |       page.tsx
+|       |
+|       \---settings
+|               page.tsx
+|
++---components
+|   +---layout
+|   |   +---Footer
+|   |   |       Footer.tsx
+|   |   |
+|   |   +---Sidebar
+|   |   |       MobileSidebar.tsx
+|   |   |       Sidebar.tsx
+|   |   |
+|   |   \---Topbar
+|   |           Topbar.tsx
+|   |
+|   \---ui
+|       |   Alert.tsx
+|       |   badge.tsx
+|       |   Button.tsx
+|       |   card.tsx
+|       |   input.tsx
+|       |   Label.tsx
+|       |   LoadingSpinner.tsx
+|       |   Modal.tsx
+|       |   select.tsx
+|       |   StatusBadge.tsx
+|       |   table.tsx
+|       |   Tabs.tsx
+|       |   textarea.tsx
+|       |   utils.ts
+|       |
+|       \---shared
+|               ErrorState.tsx
+|               Loader.tsx
+|
++---contexts
+|       AuthContext.tsx
+|
++---features
+|   +---clients
+|   |       client.api.ts
+|   |       client.types.ts
+|   |       ClientForm.tsx
+|   |       ClientTable.tsx
+|   |
+|   \---loans
+|       |   CreateLoanForm.tsx
+|       |   CreateLoanTab.tsx
+|       |   loan.api.ts
+|       |   loan.types.ts
+|       |   loan.utils.ts
+|       |   LoanTabRebuild.tsx
+|       |
+|       +---components
+|       |       LoanForm.tsx
+|       |
+|       \---utils
+|               calculations.ts
+|
++---hooks
+|       useAuth.ts
+|       useDebounce.ts
+|       useFetch.ts
+|
++---lib
+|   |   api.ts
+|   |   constants.ts
+|   |   utils.ts
+|   |   validators.ts
+|   |
+|   \---api
+|           client.ts
+|           types.ts
+|
++---services
+|       clientFormAdapter.ts
+|       ClientFormModel.ts
+|       clientListAdapter.ts
+|       clientNormalizer.ts
+|
++---styles
+|       auth.css
+|       dashboard.css
+|       globals.css
+|
+\---types
+        api.ts
+        loan.ts
+        user.ts
