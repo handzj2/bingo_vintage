@@ -16,6 +16,13 @@ async function bootstrap() {
       : ['error', 'warn', 'log', 'debug'],
   });
 
+  // Override NestJS internal error handler to prevent process.exit on DB timeout
+  // Without this, TypeORM connection errors during retry kill the entire process
+  const httpAdapter = app.getHttpAdapter();
+  httpAdapter.getInstance().on('error', (err: Error) => {
+    console.error('HTTP adapter error (non-fatal):', err.message);
+  });
+
   app.enableShutdownHooks();
   app.use(helmet());
   app.use(compression());
@@ -61,8 +68,8 @@ async function bootstrap() {
 }
 
 bootstrap().catch(err => {
-  console.error('Bootstrap error:', err.message);
-  process.exit(1);
+  // Log but do not exit — Railway health check must be able to reach the process
+  console.error('Bootstrap error (non-fatal):', err?.message ?? err);
 });
 
 // Catch TypeORM and other async errors that escape bootstrap

@@ -74,13 +74,15 @@ import { TenantsModule }        from './modules/tenants/tenants.module';
           autoLoadEntities: true,
           entities:   ['dist/**/*.entity.js'],
           migrations: ['dist/database/migrations/*.js'],
-          migrationsRun: true,
+          migrationsRun: false,
           synchronize: false,
           namingStrategy: new SnakeNamingStrategy(),
 
-          // Never throw on connect failure — let HTTP server start first
-          retryAttempts:          0,
-          connectTimeoutMS:   10000,
+          // Retry indefinitely so TypeORM never throws and bootstrap() completes.
+          // HTTP server starts immediately. DB connects when Railway network is ready.
+          retryAttempts: 2147483647,
+          retryDelay:          5000,
+          connectTimeoutMS:    8000,
 
           extra: {
             min: 0,
@@ -91,9 +93,7 @@ import { TenantsModule }        from './modules/tenants/tenants.module';
 
           ssl: isExternal ? { rejectUnauthorized: false } : false,
 
-          logging: nodeEnv === 'development'
-            ? ['error', 'warn', 'migration']
-            : ['error', 'migration'],
+          logging: ['error'],
         };
       },
     }),
