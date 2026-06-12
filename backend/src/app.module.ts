@@ -55,15 +55,18 @@ import { TenantsModule }        from './modules/tenants/tenants.module';
         const databaseUrl = configService.get<string>('DATABASE_URL');
         const nodeEnv     = configService.get<string>('NODE_ENV', 'development');
 
-        // Temporary diagnostic — remove after confirmed working
-        console.log('DATABASE_URL present:', !!databaseUrl);
         if (databaseUrl) {
           try {
             const u = new URL(databaseUrl);
             console.log('DB HOST:', u.host);
-            console.log('DB PROTOCOL:', u.protocol);
           } catch { console.log('DB URL parse error'); }
         }
+
+        const isExternal = !!databaseUrl && (
+          databaseUrl.includes('rlwy.net') ||
+          databaseUrl.includes('supabase') ||
+          databaseUrl.includes('neon')
+        );
 
         return {
           type: 'postgres',
@@ -71,37 +74,26 @@ import { TenantsModule }        from './modules/tenants/tenants.module';
           autoLoadEntities: true,
           entities:   ['dist/**/*.entity.js'],
           migrations: ['dist/database/migrations/*.js'],
-
-          // PHASE 2: migrations run automatically on startup
           migrationsRun: true,
-
-          // PHASE 2: synchronize ALWAYS false — migrations are authoritative
           synchronize: false,
-
           namingStrategy: new SnakeNamingStrategy(),
 
-          // retryAttempts: 0 — TypeORM will not crash the process on
-          // connection failure. HTTP server starts immediately.
-          // DB reconnects automatically when it becomes available.
-          retryAttempts: 0,
+          // Never throw on connect failure — let HTTP server start first
+          retryAttempts:          0,
+          connectTimeoutMS:   10000,
 
           extra: {
-            min: 1,
+            min: 0,
             max: 10,
             connectionTimeoutMillis: 10_000,
             idleTimeoutMillis:       30_000,
           },
 
-          // Railway internal network: SSL not required (internal hostname).
-          // External providers (supabase, neon) require SSL.
-          // DATABASE_URL from Railway plugin uses *.railway.internal — no SSL needed.
-          ssl: (databaseUrl && (
-            databaseUrl.includes('supabase') ||
-            databaseUrl.includes('neon') ||
-            databaseUrl.includes('rlwy.net')
-          )) ? { rejectUnauthorized: false } : false,
+          ssl: isExternal ? { rejectUnauthorized: false } : false,
 
-          logging: nodeEnv === 'development' ? ['error', 'warn', 'migration'] : ['error', 'migration'],
+          logging: nodeEnv === 'development'
+            ? ['error', 'warn', 'migration']
+            : ['error', 'migration'],
         };
       },
     }),

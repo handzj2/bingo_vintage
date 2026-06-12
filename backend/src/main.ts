@@ -57,7 +57,16 @@ async function bootstrap() {
 
   const port = Number(process.env.PORT ?? 3001);
   await app.listen(port, '0.0.0.0');
-  console.info(JSON.stringify({ level: 'info', message: `API started`, port, env: process.env.NODE_ENV, ts: new Date().toISOString() }));
+  console.info(JSON.stringify({ level: 'info', message: 'API started', port, env: process.env.NODE_ENV, ts: new Date().toISOString() }));
 }
 
-bootstrap();
+bootstrap().catch(err => {
+  console.error('Bootstrap error:', err.message);
+  process.exit(1);
+});
+
+// Catch TypeORM and other async errors that escape bootstrap
+process.on('unhandledRejection', (reason: any) => {
+  console.error('Unhandled rejection (non-fatal):', reason?.message ?? reason);
+  // Do NOT exit — let the HTTP server keep running
+});
