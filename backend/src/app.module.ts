@@ -71,17 +71,19 @@ import { TenantsModule }        from './modules/tenants/tenants.module';
           namingStrategy: new SnakeNamingStrategy(),
 
           extra: {
-            min: 2,
+            min: 1,
             max: 10,
-            connectionTimeoutMillis:  5_000,
+            connectionTimeoutMillis: 15_000,
             idleTimeoutMillis:       30_000,
-            acquireTimeoutMillis:     8_000,
           },
 
+          // Railway internal network: SSL not required (internal hostname).
+          // External providers (supabase, neon) require SSL.
+          // DATABASE_URL from Railway plugin uses *.railway.internal — no SSL needed.
           ssl: (databaseUrl && (
-            databaseUrl.includes('railway') ||
             databaseUrl.includes('supabase') ||
-            databaseUrl.includes('neon')
+            databaseUrl.includes('neon') ||
+            databaseUrl.includes('rlwy.net')
           )) ? { rejectUnauthorized: false } : false,
 
           logging: nodeEnv === 'development' ? ['error', 'warn', 'migration'] : ['error', 'migration'],
