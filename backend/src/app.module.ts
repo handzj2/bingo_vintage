@@ -80,10 +80,16 @@ import { TenantsModule }        from './modules/tenants/tenants.module';
 
           namingStrategy: new SnakeNamingStrategy(),
 
+          // retryAttempts: 0 means TypeORM will not retry and will NOT
+          // block the HTTP server from starting. The health endpoint will
+          // return { status: 'degraded' } until DB connects.
+          retryAttempts: 5,
+          retryDelay:    3000,
+
           extra: {
             min: 1,
             max: 10,
-            connectionTimeoutMillis: 15_000,
+            connectionTimeoutMillis: 10_000,
             idleTimeoutMillis:       30_000,
           },
 
