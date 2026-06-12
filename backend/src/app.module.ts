@@ -55,6 +55,16 @@ import { TenantsModule }        from './modules/tenants/tenants.module';
         const databaseUrl = configService.get<string>('DATABASE_URL');
         const nodeEnv     = configService.get<string>('NODE_ENV', 'development');
 
+        // Temporary diagnostic — remove after confirmed working
+        console.log('DATABASE_URL present:', !!databaseUrl);
+        if (databaseUrl) {
+          try {
+            const u = new URL(databaseUrl);
+            console.log('DB HOST:', u.host);
+            console.log('DB PROTOCOL:', u.protocol);
+          } catch { console.log('DB URL parse error'); }
+        }
+
         return {
           type: 'postgres',
           url:  databaseUrl,

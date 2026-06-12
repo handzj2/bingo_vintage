@@ -7,6 +7,7 @@ import compression              from 'compression';   // ✅ default import (wor
 import helmet                   from 'helmet';
 
 async function bootstrap() {
+  console.log('BOOTSTRAP STARTED');
   const app = await NestFactory.create(AppModule, {
     // In production, Railway captures stdout — NestJS structured logs
     // are readable in Railway's log stream and any forwarded sink.
@@ -54,8 +55,8 @@ async function bootstrap() {
     SwaggerModule.setup('api/docs', app, document);
   }
 
-  const port = process.env.PORT ?? 3001;
-  await app.listen(port);
+  const port = Number(process.env.PORT ?? 3001);
+  await app.listen(port, '0.0.0.0');
   console.info(JSON.stringify({ level: 'info', message: `API started`, port, env: process.env.NODE_ENV, ts: new Date().toISOString() }));
 }
 
