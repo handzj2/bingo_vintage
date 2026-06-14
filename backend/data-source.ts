@@ -4,18 +4,16 @@ import { SnakeNamingStrategy } from 'typeorm-naming-strategies';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-/**
- * PHASE 2 — Standalone DataSource for CLI migrations
- * Used by: typeorm migration:run / migration:show / migration:revert / migration:generate
- */
+const isCompiled = __filename.endsWith('.js');
+
 export const AppDataSource = new DataSource({
   type: 'postgres',
   url: process.env.DATABASE_URL,
   synchronize: false,
-  migrationsRun: false,          // CLI controls this
+  migrationsRun: false,
   namingStrategy: new SnakeNamingStrategy(),
-  entities:   ['src/**/*.entity.ts'],
-  migrations: ['database/migrations/*.ts'],
+  entities:   isCompiled ? ['dist/src/**/*.entity.js'] : ['src/**/*.entity.ts'],
+  migrations: isCompiled ? ['dist/database/migrations/*.js'] : ['database/migrations/*.ts'],
   ssl: process.env.DATABASE_URL?.includes('railway') ||
        process.env.DATABASE_URL?.includes('supabase') ||
        process.env.DATABASE_URL?.includes('neon')

@@ -3,6 +3,7 @@ builder = "nixpacks"
 
 [deploy]
 startCommand = "node dist/src/main"
-healthcheckPath = "/"
-healthcheckPort = 8080
+healthcheckPath = "/api/health"
 healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3

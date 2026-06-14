@@ -6,3 +6,4 @@ startCommand = "node dist/src/main"
 healthcheckPath = "/"
 healthcheckPort = 8080
 healthcheckTimeout = 300
+
