@@ -1,4 +1,5 @@
 // src/lib/api/client.ts
+// fix: auto-append /api prefix — 2026-06-14
 // Ensure /api prefix is always present regardless of how env var is set
 const _rawUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
 const API_BASE_URL = _rawUrl.endsWith('/api') ? _rawUrl : `${_rawUrl}/api`;
