@@ -1,3 +1,4 @@
+// build-fix: AuthContext — types corrected 2026-06-14
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
@@ -53,8 +54,9 @@ interface MeResponse {
   username:             string;
   email:                string;
   full_name:            string;
-  role_name:            string;
-  role:                 string;
+  role_name?:           string;
+  roleName?:            string;   // camelCase variant from JWT strategy
+  role?:                string;
   must_change_password: boolean;
   permissions?:         string[];  // ← populated by controller from req.user
 }
@@ -118,7 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         username:           d.username,
         email:              d.email,
         full_name:          d.full_name ?? d.username,
-        role:               d.role_name ?? d.role ?? 'unknown',
+        role:               d.role_name ?? d.roleName ?? d.role ?? 'unknown',
         permissions:        d.permissions ?? [],
         mustChangePassword: d.must_change_password ?? false,
       });
