@@ -3,7 +3,5 @@ builder = "nixpacks"
 
 [deploy]
 startCommand = "node dist/src/main"
-healthcheckPath = "/"
-healthcheckPort = 8080
+healthcheckPath = "/health"
 healthcheckTimeout = 300
-
