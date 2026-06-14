@@ -69,7 +69,7 @@ import { TenantsModule }        from './modules/tenants/tenants.module';
           entities:         ['dist/**/*.entity.js'],
           migrations:       ['dist/database/migrations/*.js'],
           migrationsRun:    false,
-          synchronize:      true,
+          synchronize:      false,
           namingStrategy:   new SnakeNamingStrategy(),
           retryAttempts:    2147483647,
           retryDelay:       5000,
