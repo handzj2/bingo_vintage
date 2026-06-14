@@ -1,57 +1,73 @@
-// health route test
-import { NestFactory }    from '@nestjs/core';
+import express from 'express';
+import { createProxyMiddleware } from 'http-proxy-middleware';
+import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import { AppModule }      from './app.module';
+import { AppModule } from './app.module';
 import { AllExceptionFilter } from './common/filters/all-exception.filter';
 import compression from 'compression';
-import helmet      from 'helmet';
-import * as http   from 'http';
+import helmet from 'helmet';
 
-const port = Number(process.env.PORT ?? 3001);
+const MAIN_PORT = Number(process.env.PORT ?? 3000);
+const NEST_PORT = 3001; // internal only
 
-// Step 1: Bind to port immediately so Railway health check gets a 200
-// before NestJS or TypeORM finish initialising
-const tempServer = http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ status: 'starting' }));
-});
+async function start() {
+  // ------------------- Express health wrapper -------------------
+  const app = express();
 
-tempServer.listen(port, '0.0.0.0', () => {
-  console.log(`Health server ready on port ${port}`);
-});
+  // Permanent health endpoint – always available
+  app.get('/health', (_req, res) => {
+    res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+  });
 
-// Step 2: Initialise NestJS in background
-async function bootstrap() {
-  console.log('BOOTSTRAP STARTED');
+  // Proxy everything else to NestJS
+  const proxy = createProxyMiddleware({
+    target: `http://127.0.0.1:${NEST_PORT}`,
+    changeOrigin: true,
+    on: {
+      error: (_err, _req, res) => {
+        res.status(502).json({ error: 'Backend not ready' });
+      },
+    },
+  });
+  app.use('/', proxy);
 
-  const app = await NestFactory.create(AppModule, {
+  // Start Express on the main port – always listening
+  app.listen(MAIN_PORT, '0.0.0.0', () => {
+    console.log(`Express health wrapper on port ${MAIN_PORT}`);
+  });
+
+  // ------------------- Start NestJS on internal port -------------------
+  const nestApp = await NestFactory.create(AppModule, {
     logger: process.env.NODE_ENV === 'production'
       ? ['error', 'warn', 'log']
       : ['error', 'warn', 'log', 'debug'],
   });
 
-  app.enableShutdownHooks();
-  app.use(helmet());
-  app.use(compression());
-  app.useGlobalFilters(new AllExceptionFilter());
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist:            true,
-    forbidNonWhitelisted: true,
-    transform:            true,
-  }));
+  nestApp.enableShutdownHooks();
+  nestApp.use(helmet());
+  nestApp.use(compression());
+  nestApp.useGlobalFilters(new AllExceptionFilter());
+  nestApp.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+  nestApp.setGlobalPrefix('api');
 
-  app.setGlobalPrefix('api');
-
+  // CORS – allow your Vercel frontend
   const allowedOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:3000')
-    .split(',').map(o => o.trim());
-
-  app.enableCors({
-    origin:      allowedOrigins,
+    .split(',')
+    .map(o => o.trim());
+  nestApp.enableCors({
+    origin: allowedOrigins,
     credentials: true,
-    methods:     ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
+  // Swagger (non‑production)
   if (process.env.NODE_ENV !== 'production') {
     const config = new DocumentBuilder()
       .setTitle('Bingo Vintage API')
@@ -59,24 +75,14 @@ async function bootstrap() {
       .setVersion('1.0')
       .addBearerAuth()
       .build();
-    SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, config));
+    SwaggerModule.setup('api/docs', nestApp, SwaggerModule.createDocument(nestApp, config));
   }
 
-  // Step 3: Hand off port from temp server to NestJS
-  await new Promise<void>(resolve => tempServer.close(() => resolve()));
-  await app.listen(port, '0.0.0.0');
-
-  console.info(JSON.stringify({
-    level: 'info', message: 'API started',
-    port, env: process.env.NODE_ENV, ts: new Date().toISOString(),
-  }));
+  await nestApp.listen(NEST_PORT, '127.0.0.1');
+  console.log(`NestJS running internally on port ${NEST_PORT}`);
 }
 
-bootstrap().catch(err => {
-  console.error('Bootstrap failed:', err?.message ?? err);
-  // Keep temp server alive — do not exit
-});
-
-process.on('unhandledRejection', (reason: any) => {
-  console.error('Unhandled rejection:', reason?.message ?? reason);
+start().catch(err => {
+  console.error('Start failed:', err);
+  process.exit(1);
 });
