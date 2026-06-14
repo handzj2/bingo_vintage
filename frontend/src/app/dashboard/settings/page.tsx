@@ -130,6 +130,7 @@ function UserFormModal({ user, onClose, onSaved }: any) {
           password:   form.password,
           full_name:  form.full_name,
           tenant_id:  tenantId,
+          roleName:   form.role || 'cashier',
         });
       if (res.id || res.success) { onSaved(); onClose(); }
       else setError(res.message || 'Failed to save');
