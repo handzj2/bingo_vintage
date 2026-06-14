@@ -3,5 +3,5 @@ builder = "nixpacks"
 
 [deploy]
 startCommand = "node dist/src/main"
-healthcheckPath = "/api/health"
+healthcheckPath = "/health"
 healthcheckTimeout = 60
