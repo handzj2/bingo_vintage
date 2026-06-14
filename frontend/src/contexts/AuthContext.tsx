@@ -1,3 +1,4 @@
+// fix: read roleName from /me response — admin access restored 2026-06-14
 // build-fix: AuthContext — types corrected 2026-06-14
 'use client';
 
