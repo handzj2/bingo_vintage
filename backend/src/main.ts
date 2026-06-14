@@ -25,8 +25,13 @@ async function start() {
     target: `http://127.0.0.1:${NEST_PORT}`,
     changeOrigin: true,
     on: {
-      error: (_err, _req, res) => {
-        res.status(502).json({ error: 'Backend not ready' });
+      error: (_err: any, _req: any, res: any) => {
+        // res could be a Socket or an Express Response
+        if (res && typeof res.status === 'function') {
+          res.status(502).json({ error: 'Backend not ready' });
+        } else if (res && res.destroy) {
+          res.destroy();
+        }
       },
     },
   });
