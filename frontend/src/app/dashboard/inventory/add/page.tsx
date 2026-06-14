@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
 
-type NewBike = Omit<Bike, 'id' | 'created_at' | 'updated_at'>;
+type NewBike = Omit<Bike, 'id' | 'created_at' | 'updated_at' | 'tenant_id' | 'branch_id'>;
 
 export default function AddBikePage() {
   const { user, isLoading: authLoading } = useAuth();

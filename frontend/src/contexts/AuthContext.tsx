@@ -118,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         username:           d.username,
         email:              d.email,
         full_name:          d.full_name ?? d.username,
-        role:               d.roleName ?? d.role_name ?? d.role ?? 'unknown',
+        role:               d.role_name ?? d.role ?? 'unknown',
         permissions:        d.permissions ?? [],
         mustChangePassword: d.must_change_password ?? false,
       });

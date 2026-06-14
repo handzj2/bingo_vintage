@@ -529,7 +529,7 @@ export default function PaymentsPage() {
         (data && typeof data === 'object' && 'items' in data)
           ? data
           : { items: Array.isArray(data) ? data : (data?.data ?? data?.payments ?? []), nextCursor: null, count: 0 };
-      list.sort((a, b) =>
+      items.sort((a: any, b: any) =>
         new Date(b.paymentDate || b.payment_date || b.createdAt || 0).getTime() -
         new Date(a.paymentDate || a.payment_date || a.createdAt || 0).getTime()
       );

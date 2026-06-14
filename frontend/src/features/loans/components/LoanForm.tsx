@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import type { ApplyLoanRequest } from '@/shared/api-types';
 import { calculateCashLoan, calculateBikeLoan } from '../utils/calculations';
 import { loanApi } from '../loan.api';
 import { ShieldCheck, Save, Calculator, AlertCircle } from 'lucide-react';
@@ -49,7 +50,7 @@ export function LoanForm({ clientId, onSuccess }: { clientId?: number; onSuccess
     setLoading(true);
     try {
       // Payload matches ApplyLoanDto exactly
-      const payload: Record<string, any> = {
+      const payload: ApplyLoanRequest = {
         clientId:     resolvedClientId,
         amount:       loanType === 'CASH' ? amount : (amount - deposit),
         months:       term,
@@ -88,7 +89,7 @@ export function LoanForm({ clientId, onSuccess }: { clientId?: number; onSuccess
 
         <div className="space-y-2">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Select Client</label>
-          <ClientSearch onSelect={(client) => setSelectedClient(client)} selectedClient={selectedClient} />
+          <ClientSearch onSelect={(client) => setSelectedClient(client)} selected={selectedClient} />
         </div>
 
         <div className="space-y-4">
@@ -101,8 +102,8 @@ export function LoanForm({ clientId, onSuccess }: { clientId?: number; onSuccess
               setSelectedBike(bike);
               // Phase 3.1: PostgreSQL DECIMAL returns as string — parse to number
               // Prevents NaN from `amount - deposit` arithmetic downstream
-              setAmount(Number(bike.sale_price) || Number(bike.current_value) || 0);
-            }} selectedBike={selectedBike} />
+              setAmount(Number(bike.sale_price) || 0);
+            }} selected={selectedBike} />
           )}
 
           {(loanType === 'CASH' || !selectedBike) && (

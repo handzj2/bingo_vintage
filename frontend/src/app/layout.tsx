@@ -1,10 +1,9 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+// Inter loaded via CSS in globals.css — avoids Google Fonts network call at build time
 import '@/styles/globals.css';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { Toaster } from 'react-hot-toast';
 
-const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Bingo Vintage - Lending System',
@@ -18,7 +17,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body>
         <AuthProvider>
           {children}
           <Toaster position="top-right" />

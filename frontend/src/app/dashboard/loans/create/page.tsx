@@ -808,7 +808,13 @@ export default function CreateLoanPage() {
         const months    = Number(form.term_months);
 
         // Phase 6.2: prevent submission with zero/empty term
-        const termVal = isCash ? Number(form.term_months) : Number(weeks);
+        // Compute bike weeks from form state (weeksInput/calcWeeks are in JSX scope only)
+        const _weeksInput = Number(form.term_weeks_input) || 0;
+        const _weeklyAmt  = Number(form.weekly_installment) || 0;
+        const _balance    = Number(form.principal_amount) || 0;
+        const _calcWeeks  = _weeklyAmt > 0 && _balance > 0 ? Math.ceil(_balance / _weeklyAmt) : 0;
+        const _activeWeeks = form.bike_mode === 'weeks' ? _weeksInput : _calcWeeks;
+        const termVal = isCash ? Number(form.term_months) : _activeWeeks;
         if (!termVal || termVal <= 0) {
           setError('Loan term must be greater than zero.');
           setSubmitting(false);

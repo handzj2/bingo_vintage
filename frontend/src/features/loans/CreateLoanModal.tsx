@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/Button';
 import { Label } from '@/components/ui/Label';
 import { toast } from 'sonner';
+import type { ApplyLoanRequest } from '@/shared/api-types';
 
 type LoanType = 'cash' | 'bike';
 
@@ -64,7 +65,7 @@ export function CreateLoanModal({ onClose, onSuccess, clientId, initialLoanType 
        * start_date: omitted — optional, backend defaults to now().
        * notes: whitelisted in ApplyLoanDto.
        */
-      const payload: Record<string, any> = {
+      const payload: ApplyLoanRequest = {
         clientId:     Number(clientId) || undefined,
         loanType,                                                   // already 'cash' or 'bike'
         amount:       loanType === 'cash' ? principal : (bikePrice - deposit),
