@@ -16,16 +16,9 @@ export default function CreateClientPage() {
       </div>
 
       <ClientForm
-        mode="create"
-        onSubmit={async data => {
-          try {
-            await createClient(data);
-            toast.success('Client created successfully');
-            router.push('/dashboard/clients');
-          } catch (error) {
-            toast.error('Failed to create client');
-            throw error;
-          }
+        onSuccess={() => {
+          toast.success('Client created successfully');
+          router.push('/dashboard/clients');
         }}
       />
     </div>

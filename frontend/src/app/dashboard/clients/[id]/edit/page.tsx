@@ -84,20 +84,15 @@ export default function EditClientPage({ params }: any) {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="p-6">
           <ClientForm
-            mode="edit"
+            isEdit={true}
+            clientId={client?.id ? Number(client.id) : undefined}
             initialData={client ? {
               ...client,
               monthly_income: String(client.monthly_income ?? ''),
             } : undefined}
-            onSubmit={async data => {
-              try {
-                await updateClient(params.id, data);
-                toast.success('Client updated successfully');
-                router.push(`/dashboard/clients/${params.id}`);
-              } catch (error) {
-                toast.error('Failed to update client');
-                throw error;
-              }
+            onSuccess={() => {
+              toast.success('Client updated successfully');
+              router.push(`/dashboard/clients/${params.id}`);
             }}
           />
         </div>
