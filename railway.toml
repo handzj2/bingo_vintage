@@ -5,4 +5,4 @@ builder = "nixpacks"
 startCommand = "node dist/src/main"
 healthcheckPath = "/"
 healthcheckPort = 8080
-healthcheckTimeout = 60
+healthcheckTimeout = 300
