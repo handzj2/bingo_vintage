@@ -1,3 +1,4 @@
+// build-fix: page — types corrected 2026-06-14
 'use client';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -103,6 +104,8 @@ function Modal({ title, onClose, children }: any) {
 }
 
 function UserFormModal({ user, onClose, onSaved }: any) {
+  const { user: me } = useAuth();
+  const tenantId = me?.tenantId ?? user?.tenant_id ?? 1;
   const isEdit = !!user;
   const [form, setForm] = useState({
     username: user?.username || '', email: user?.email || '',
@@ -126,6 +129,7 @@ function UserFormModal({ user, onClose, onSaved }: any) {
           email:      form.email,
           password:   form.password,
           full_name:  form.full_name,
+          tenant_id:  tenantId,
         });
       if (res.id || res.success) { onSaved(); onClose(); }
       else setError(res.message || 'Failed to save');

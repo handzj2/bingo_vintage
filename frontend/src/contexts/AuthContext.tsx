@@ -14,6 +14,7 @@ export interface User {
   email:               string;
   full_name:           string;
   role:                string;
+  tenantId?:           number;
   permissions:         string[];   // ← FIX: was missing — caused all permission gates to fail
   mustChangePassword?: boolean;
 }
@@ -41,6 +42,7 @@ interface LoginUserPayload {
   email:              string;
   fullName:           string;
   roleName:           string;
+  tenantId?:          number;
   mustChangePassword: boolean;
 }
 
@@ -58,6 +60,8 @@ interface MeResponse {
   role_name?:           string;
   roleName?:            string;   // camelCase variant from JWT strategy
   role?:                string;
+  tenantId?:            number;
+  tenant_id?:           number;
   must_change_password: boolean;
   permissions?:         string[];  // ← populated by controller from req.user
 }
@@ -122,6 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email:              d.email,
         full_name:          d.full_name ?? d.username,
         role:               d.role_name ?? d.roleName ?? d.role ?? 'unknown',
+        tenantId:           d.tenantId ?? d.tenant_id ?? undefined,
         permissions:        d.permissions ?? [],
         mustChangePassword: d.must_change_password ?? false,
       });
@@ -194,6 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email:              d.email,
         full_name:          d.fullName ?? d.username,
         role:               d.roleName ?? 'unknown',
+        tenantId:           d.tenantId ?? undefined,
         permissions:        [],  // populated below via refreshUser()
         mustChangePassword: d.mustChangePassword ?? false,
       };
