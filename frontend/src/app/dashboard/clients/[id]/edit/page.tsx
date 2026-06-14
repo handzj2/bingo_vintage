@@ -85,7 +85,10 @@ export default function EditClientPage({ params }: any) {
         <div className="p-6">
           <ClientForm
             mode="edit"
-            initialData={client}
+            initialData={client ? {
+              ...client,
+              monthly_income: String(client.monthly_income ?? ''),
+            } : undefined}
             onSubmit={async data => {
               try {
                 await updateClient(params.id, data);
