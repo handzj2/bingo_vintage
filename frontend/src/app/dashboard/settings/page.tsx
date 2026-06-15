@@ -362,7 +362,7 @@ function PermissionsModal({ user, onClose, onSaved }: any) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm border ${ROLE_COLORS[getRole(user)] || 'bg-gray-100 border-gray-200'}`}>
-              {(user.fullName || user.full_name || user.username || '?').charAt(0).toUpperCase()
+              {(user.fullName || user.full_name || user.username || '?').charAt(0).toUpperCase()}
             </div>
             <div>
               <p className="font-black text-gray-900">{user.fullName || user.username}</p>
