@@ -61,15 +61,14 @@ export class AuthService {
     user.password_hash  = hashed;
     user.tenantId       = tenantId;
 
-    const roleName = dto.roleName ?? 'cashier';
-    const roleId   = await this.resolveRoleId(roleName, tenantId);
+    const roleId = dto.roleId ?? await this.resolveRoleId('cashier', tenantId);
     if (!roleId) {
-      throw new BadRequestException(`Role "${roleName}" not found for this tenant.`);
+      throw new BadRequestException(`Default role "cashier" not found for this tenant.`);
     }
     user.roleId = roleId;
 
     const savedUser        = await this.userRepository.save(user);
-    const roleNameForJwt   = await this.getRoleName(roleId) ?? roleName;
+    const roleNameForJwt   = await this.getRoleName(roleId) ?? 'cashier';
 
     const payload = {
       sub:      savedUser.id,

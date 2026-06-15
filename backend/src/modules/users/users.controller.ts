@@ -27,9 +27,10 @@ export class UsersController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List all users' })
-  findAll() {
-    return this.usersService.findAll();
+  @ApiOperation({ summary: 'List all users (tenant-scoped)' })
+  findAll(@Request() req: AuthRequest) {
+    // Scoped to the calling user's tenant — superadmin never appears
+    return this.usersService.findAll(req.user?.tenantId);
   }
 
   @Get('stats')

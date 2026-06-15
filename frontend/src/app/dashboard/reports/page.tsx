@@ -1,5 +1,6 @@
 'use client';
 
+import RouteGuard from '@/components/ui/RouteGuard';
 import { useState, useEffect, useCallback } from 'react';
 import {
   BarChart3, TrendingUp, AlertTriangle, Users, DollarSign,
@@ -158,6 +159,8 @@ export default function ReportsPage() {
   const weekTotal = weekly.reduce((s: number, d: any) => s + Number(d.total || 0), 0);
 
   return (
+    <RouteGuard permission="report.view" roles={['admin','manager']}>
+
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
@@ -406,5 +409,6 @@ export default function ReportsPage() {
         </div>
       )}
     </div>
+    </RouteGuard>
   );
 }

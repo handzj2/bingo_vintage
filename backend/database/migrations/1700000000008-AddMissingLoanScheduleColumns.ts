@@ -19,8 +19,8 @@ export class AddMissingLoanScheduleColumns1700000000008 implements MigrationInte
         ADD COLUMN IF NOT EXISTS "late_fee_amount"       DECIMAL(12,2) NOT NULL DEFAULT 0,
         ADD COLUMN IF NOT EXISTS "penalty_amount"        DECIMAL(12,2) NOT NULL DEFAULT 0,
         ADD COLUMN IF NOT EXISTS "last_penalty_applied"  DATE,
-        ADD COLUMN IF NOT EXISTS "tenant_id"             INTEGER       DEFAULT 1,
-        ADD COLUMN IF NOT EXISTS "branch_id"             INTEGER       DEFAULT 1
+        ADD COLUMN IF NOT EXISTS "tenant_id"             INTEGER       DEFAULT NULL,
+        ADD COLUMN IF NOT EXISTS "branch_id"             INTEGER       DEFAULT NULL
     `);
   }
 

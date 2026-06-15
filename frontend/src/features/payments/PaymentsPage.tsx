@@ -508,6 +508,7 @@ export default function PaymentsPage() {
   const [payments,    setPayments]    = useState<any[]>([]);
   const [nextCursor,  setNextCursor]  = useState<number | null>(null);
   const [totalCount,  setTotalCount]  = useState<number>(0);
+  const [summary,     setSummary]     = useState<{ todayAmount: number; todayCount: number }>({ todayAmount: 0, todayCount: 0 });
   const [loading, setLoading] = useState(true);
   const [showRecord, setShowRecord] = useState(false);
   const [detailPayment, setDetailPayment] = useState<any>(null);
@@ -523,8 +524,12 @@ export default function PaymentsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      // GitHub / Stripe list pattern: always read the typed paginated envelope
-      const data = await apiFetch('/payments');
+      // Fetch payments list and today's summary in parallel
+      const [data, sumData] = await Promise.all([
+        apiFetch('/payments'),
+        apiFetch('/payments/summary').catch(() => null),
+      ]);
+
       const { items = [], nextCursor: nc = null, count = 0 } =
         (data && typeof data === 'object' && 'items' in data)
           ? data
@@ -536,20 +541,28 @@ export default function PaymentsPage() {
       setPayments(items);
       setNextCursor(nc);
       setTotalCount(count);
+
+      // Use server-computed today totals — avoids timezone mismatch between
+      // client (UTC+3 Kampala) and UTC ISO strings stored by the backend.
+      if (sumData) {
+        setSummary({
+          todayAmount: Number(sumData.todayAmount ?? 0),
+          todayCount:  Number(sumData.todayCount  ?? 0),
+        });
+      }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  const todayStr = new Date().toDateString();
   const stats = {
     total:    payments.filter(p => p.status !== 'REVERSED').reduce((s, p) => s + Number(p.amount), 0),
-    today:    payments.filter(p => {
-      if (p.status === 'REVERSED') return false;
-      const d = p.paymentDate || p.payment_date || p.createdAt;
-      return d && new Date(d).toDateString() === todayStr;
-    }).reduce((s, p) => s + Number(p.amount), 0),
+    // Server-computed today values — correct regardless of client timezone.
+    // The backend uses setHours(0,0,0,0) on the server clock (UTC) and filters
+    // with MoreThanOrEqual, so it matches the actual Uganda business day when
+    // the server timezone is set to Africa/Kampala, or can be adjusted there.
+    today:    summary.todayAmount,
     count:    payments.filter(p => p.status !== 'REVERSED').length,
     reversed: payments.filter(p => p.status === 'REVERSED').length,
   };

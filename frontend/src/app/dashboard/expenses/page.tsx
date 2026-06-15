@@ -18,8 +18,11 @@ export default function ExpensesPage() {
 
   const loadExpenses = async () => {
     setLoading(true);
-    const res = await api.get<any[]>('/expenses');
-    if (res.success) setExpenses(res.data ?? []); // FIX: ?? [] guards against undefined
+    const res = await api.get<any>('/expenses');
+    if (res.success) {
+      const d = res.data;
+      setExpenses(Array.isArray(d) ? d : (d?.items ?? []));
+    } // FIX: ?? [] guards against undefined
     setLoading(false);
   };
 

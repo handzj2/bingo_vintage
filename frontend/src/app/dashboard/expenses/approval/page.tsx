@@ -1,5 +1,6 @@
 'use client';
 
+import RouteGuard from '@/components/ui/RouteGuard';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api/client';
@@ -73,7 +74,7 @@ export default function ExpenseApprovalPage() {
 
   if (!canApprove) {
     return (
-      <div className="p-6 max-w-2xl mx-auto mt-12 text-center">
+    <div className="p-6 max-w-2xl mx-auto mt-12 text-center">
         <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
           <XCircle className="w-8 h-8 text-red-400" />
         </div>
@@ -86,6 +87,8 @@ export default function ExpenseApprovalPage() {
   }
 
   return (
+    <RouteGuard permission="expense.approve" roles={['admin','manager']}>
+
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -178,5 +181,6 @@ export default function ExpenseApprovalPage() {
         </div>
       )}
     </div>
+    </RouteGuard>
   );
 }

@@ -1,0 +1,238 @@
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, Between } from 'typeorm';
+import { Payment } from '../payments/entities/payment.entity';
+import { Loan, LoanStatus } from '../loans/entities/loan.entity';
+import { LoanSchedule } from '../schedules/entities/schedule.entity';
+import { startOfDay, endOfDay, subDays } from 'date-fns';
+
+@Injectable()
+export class ReportsService {
+  constructor(
+    @InjectRepository(Payment)      private paymentRepo:  Repository<Payment>,
+    @InjectRepository(Loan)         private loanRepo:     Repository<Loan>,
+    @InjectRepository(LoanSchedule) private scheduleRepo: Repository<LoanSchedule>,
+  ) {}
+
+  // ── Daily summary ─────────────────────────────────────────────────────────
+  async getDailySummary(date: Date = new Date()) {
+    const start = startOfDay(date);
+    const end   = endOfDay(date);
+
+    const [payments, newLoans] = await Promise.all([
+      this.paymentRepo.find({ where: { paymentDate: Between(start, end) } }),
+      this.loanRepo.count({ where: { createdAt: Between(start, end), status: LoanStatus.ACTIVE } }),
+    ]);
+
+    const totalCollected = payments.reduce((s, p) => s + Number(p.amount), 0);
+    const methodBreakdown = payments.reduce((acc: any, p) => {
+      const m = String(p.paymentMethod);
+      if (!acc[m]) acc[m] = { count: 0, amount: 0 };
+      acc[m].count++;
+      acc[m].amount += Number(p.amount);
+      return acc;
+    }, {});
+
+    return {
+      date: start,
+      total_collected: Math.round(totalCollected),
+      transaction_count: payments.length,
+      method_breakdown: methodBreakdown,
+      new_loans: newLoans,
+    };
+  }
+
+  // ── 7-day collection sparkline ────────────────────────────────────────────
+  async getWeeklyCollections() {
+    const results = [];
+    for (let i = 6; i >= 0; i--) {
+      const d     = subDays(new Date(), i);
+      const start = startOfDay(d);
+      const end   = endOfDay(d);
+      const rows  = await this.paymentRepo.find({ where: { paymentDate: Between(start, end) } });
+      results.push({
+        date:  d.toISOString().slice(0, 10),
+        total: rows.reduce((s, p) => s + Number(p.amount), 0),
+        count: rows.length,
+      });
+    }
+    return results;
+  }
+
+  // ── Arrears / overdue report ───────────────────────────────────────────────
+  async getArrearsReport() {
+    const rows = await this.loanRepo.manager.query(
+      `SELECT
+         l.id, l.loan_number, l.balance, l.loan_type,
+         c.first_name, c.last_name, c.phone,
+         COUNT(ls.id)        AS overdue_installments,
+         SUM(ls.amount_due - ls.amount_paid) AS total_overdue,
+         MIN(ls.due_date)    AS oldest_overdue_date
+       FROM loans l
+       JOIN clients c ON c.id = l.client_id
+       JOIN loan_schedules ls ON ls.loan_id = l.id
+        AND ls.status = 'OVERDUE'
+       WHERE l.status IN ('ACTIVE','DELINQUENT')
+       GROUP BY l.id, l.loan_number, l.balance, l.loan_type,
+                c.first_name, c.last_name, c.phone
+       ORDER BY total_overdue DESC`,
+    );
+    return rows.map((r: any) => ({
+      loanId:              r.id,
+      loanNumber:          r.loan_number,
+      clientName:          `${r.first_name} ${r.last_name}`.trim(),
+      phone:               r.phone,
+      loanType:            r.loan_type,
+      balance:             Number(r.balance),
+      overdueInstallments: Number(r.overdue_installments),
+      totalOverdue:        Math.round(Number(r.total_overdue)),
+      oldestOverdueDate:   r.oldest_overdue_date,
+      daysOverdue: r.oldest_overdue_date
+        ? Math.floor((Date.now() - new Date(r.oldest_overdue_date).getTime()) / 86400000)
+        : 0,
+    }));
+  }
+
+  // ── Portfolio aging (30 / 60 / 90 / 90+ days buckets) ─────────────────────
+  async getPortfolioAging() {
+    const today = new Date().toISOString().slice(0, 10);
+    const rows = await this.loanRepo.manager.query(
+      `SELECT
+         CASE
+           WHEN (CURRENT_DATE - MIN(ls.due_date)) <= 30  THEN '1-30 days'
+           WHEN (CURRENT_DATE - MIN(ls.due_date)) <= 60  THEN '31-60 days'
+           WHEN (CURRENT_DATE - MIN(ls.due_date)) <= 90  THEN '61-90 days'
+           ELSE '90+ days'
+         END AS bucket,
+         COUNT(DISTINCT l.id)               AS loan_count,
+         SUM(ls.amount_due - ls.amount_paid) AS at_risk
+       FROM loans l
+       JOIN loan_schedules ls ON ls.loan_id = l.id AND ls.status = 'OVERDUE'
+       WHERE l.status IN ('ACTIVE','DELINQUENT')
+       GROUP BY bucket
+       ORDER BY bucket`,
+    );
+    return rows.map((r: any) => ({
+      bucket:    r.bucket,
+      loanCount: Number(r.loan_count),
+      atRisk:    Math.round(Number(r.at_risk)),
+    }));
+  }
+
+  // ── Portfolio summary ─────────────────────────────────────────────────────
+  async getPortfolioSummary() {
+    const [totalRow] = await this.loanRepo.manager.query(
+      `SELECT
+         COUNT(*)                                            AS total_loans,
+         COUNT(*) FILTER (WHERE status='ACTIVE')            AS active,
+         COUNT(*) FILTER (WHERE status='PENDING_APPROVAL')  AS pending,
+         COUNT(*) FILTER (WHERE status='DELINQUENT')        AS delinquent,
+         COUNT(*) FILTER (WHERE status='COMPLETED')         AS completed,
+         SUM(principal_amount)                              AS total_principal,
+         SUM(balance)                                       AS total_outstanding,
+         SUM(balance) FILTER (WHERE status='DELINQUENT')   AS delinquent_balance
+       FROM loans WHERE deleted_at IS NULL`,
+    );
+    const [payRow] = await this.loanRepo.manager.query(
+      `SELECT COALESCE(SUM(amount),0) AS total_collected FROM payments WHERE status='COMPLETED'`,
+    );
+    const [bikeRow] = await this.loanRepo.manager.query(
+      `SELECT COUNT(*) FILTER (WHERE status='AVAILABLE') AS available,
+              COUNT(*) FILTER (WHERE status='LOANED')    AS loaned,
+              COUNT(*) FILTER (WHERE status='SOLD')      AS sold
+         FROM bikes`,
+    );
+
+    return {
+      loans: {
+        total:      Number(totalRow.total_loans),
+        active:     Number(totalRow.active),
+        pending:    Number(totalRow.pending),
+        delinquent: Number(totalRow.delinquent),
+        completed:  Number(totalRow.completed),
+      },
+      financials: {
+        totalPrincipal:     Math.round(Number(totalRow.total_principal || 0)),
+        totalOutstanding:   Math.round(Number(totalRow.total_outstanding || 0)),
+        totalCollected:     Math.round(Number(payRow.total_collected || 0)),
+        delinquentBalance:  Math.round(Number(totalRow.delinquent_balance || 0)),
+      },
+      bikes: {
+        available: Number(bikeRow.available),
+        loaned:    Number(bikeRow.loaned),
+        sold:      Number(bikeRow.sold),
+      },
+      generatedAt: new Date(),
+    };
+  }
+
+  // ── CSV export helpers ────────────────────────────────────────────────────
+  async getPaymentsCsv(startDate?: string, endDate?: string): Promise<string> {
+    const start = startDate ? new Date(startDate) : subDays(new Date(), 30);
+    const end   = endDate   ? new Date(endDate)   : new Date();
+    const rows  = await this.paymentRepo.manager.query(
+      `SELECT p.receipt_number, p.created_at::date AS date, p.amount,
+              p.payment_method, p.status, p.collected_by,
+              l.loan_number, l.loan_type,
+              c.first_name || ' ' || c.last_name AS client_name, c.phone
+         FROM payments p
+         JOIN loans l   ON l.id = p.loan_id
+         JOIN clients c ON c.id = l.client_id
+        WHERE p.created_at BETWEEN $1 AND $2
+        ORDER BY p.created_at DESC`,
+      [start, end],
+    );
+    const header = 'Receipt,Date,Amount,Method,Status,Collected By,Loan #,Type,Client,Phone\n';
+    const lines  = rows.map((r: any) =>
+      [r.receipt_number, r.date, r.amount, r.payment_method, r.status,
+       r.collected_by || '', r.loan_number, r.loan_type,
+       `"${r.client_name}"`, r.phone].join(',')
+    );
+    return header + lines.join('\n');
+  }
+
+  async getLoansCsv(): Promise<string> {
+    const rows = await this.loanRepo.manager.query(
+      `SELECT l.loan_number, l.loan_type, l.status, l.principal_amount,
+              l.total_amount, l.balance, l.interest_rate, l.term_months,
+              l.term_weeks, l.weekly_amount, l.start_date, l.created_at::date AS created,
+              c.first_name || ' ' || c.last_name AS client_name, c.phone,
+              b.registration_number AS bike_plate
+         FROM loans l
+         JOIN clients c ON c.id = l.client_id
+         LEFT JOIN bikes b ON b.id = l.bike_id
+        WHERE l.deleted_at IS NULL
+        ORDER BY l.created_at DESC`,
+    );
+    const header = 'Loan #,Type,Status,Principal,Total,Balance,Rate,Months,Weeks,Weekly,Start,Created,Client,Phone,Bike Plate\n';
+    const lines  = rows.map((r: any) =>
+      [r.loan_number, r.loan_type, r.status, r.principal_amount, r.total_amount,
+       r.balance, r.interest_rate, r.term_months, r.term_weeks || '',
+       r.weekly_amount || '', r.start_date, r.created,
+       `"${r.client_name}"`, r.phone, r.bike_plate || ''].join(',')
+    );
+    return header + lines.join('\n');
+  }
+
+  async getClientsCsv(): Promise<string> {
+    const rows = await this.loanRepo.manager.query(
+      `SELECT c.id, c.first_name || ' ' || c.last_name AS name, c.phone, c.nin,
+              c.occupation, c.monthly_income, c.status, c.verified, c.created_at::date AS joined,
+              COUNT(l.id) AS total_loans,
+              COUNT(l.id) FILTER (WHERE l.status='ACTIVE') AS active_loans,
+              COALESCE(SUM(l.balance) FILTER (WHERE l.status IN ('ACTIVE','DELINQUENT')),0) AS outstanding
+         FROM clients c
+         LEFT JOIN loans l ON l.client_id = c.id AND l.deleted_at IS NULL
+        GROUP BY c.id, c.first_name, c.last_name, c.phone, c.nin,
+                 c.occupation, c.monthly_income, c.status, c.verified, c.created_at
+        ORDER BY c.created_at DESC`,
+    );
+    const header = 'ID,Name,Phone,NIN,Occupation,Monthly Income,Status,Verified,Joined,Total Loans,Active Loans,Outstanding Balance\n';
+    const lines  = rows.map((r: any) =>
+      [r.id, `"${r.name}"`, r.phone, r.nin || '', r.occupation || '',
+       r.monthly_income, r.status, r.verified, r.joined,
+       r.total_loans, r.active_loans, r.outstanding].join(',')
+    );
+    return header + lines.join('\n');
+  }
+}

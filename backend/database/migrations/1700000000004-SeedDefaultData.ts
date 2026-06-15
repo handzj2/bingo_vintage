@@ -99,7 +99,7 @@ export class SeedDefaultData1700000000004 implements MigrationInterface {
         ('loan.processing_fee',     '0',    1, now(), now()),
         ('loan.default_term_months','12',   1, now(), now()),
         ('LOAN_LATE_FEE_RATE',      '0.05', 1, now(), now())
-      ON CONFLICT (key) DO NOTHING;
+      ON CONFLICT (key, tenant_id) DO NOTHING;
     `);
   }
 

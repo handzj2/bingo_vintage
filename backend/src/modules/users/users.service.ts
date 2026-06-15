@@ -85,8 +85,14 @@ export class UsersService {
     return this.usersRepository.save(user);
   }
 
-  async findAll(): Promise<User[]> {
-    return this.usersRepository.find({ relations: ['roleRelation'] });
+  async findAll(tenantId?: number): Promise<User[]> {
+    // Always scope to tenant. Never expose superadmin or other tenants' users.
+    // tenantId=NULL superadmin accounts are explicitly excluded.
+    if (!tenantId) return [];
+    return this.usersRepository.find({
+      where: { tenantId },
+      relations: ['roleRelation'],
+    });
   }
 
   async findOne(id: number): Promise<User> {
@@ -107,6 +113,12 @@ export class UsersService {
   }
 
   async update(id: number, rawDto: UpdateUserDto): Promise<User> {
+    // Security: block modification of superadmin accounts by tenant admins
+    const target = await this.usersRepository.findOne({ where: { id } });
+    if (!target) throw new Error('User not found');
+    if (target.tenantId == null) {
+      throw new Error('Superadmin accounts cannot be modified through this endpoint');
+    }
     const updateUserDto = sanitiseDto(rawDto);
     const user = await this.findOne(id);
 

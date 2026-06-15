@@ -49,6 +49,8 @@ export class AddReversalStatusToPayments1700000000017 implements MigrationInterf
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`DROP INDEX IF EXISTS idx_payments_reversal_status`);
+    // Clear all reversal_status values first so the type has no dependents
+    await queryRunner.query(`UPDATE payments SET reversal_status = NULL WHERE reversal_status IS NOT NULL`);
     await queryRunner.query(`ALTER TABLE payments DROP COLUMN IF EXISTS reversal_status`);
     await queryRunner.query(`DROP TYPE IF EXISTS reversal_status_enum`);
   }

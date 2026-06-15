@@ -24,6 +24,7 @@ const api = {
 };
 
 const ROLES = ['admin', 'manager', 'cashier', 'agent'];
+const ROLE_ID_MAP: Record<string, number> = { admin: 1, manager: 2, cashier: 3, agent: 4 };
 const ROLE_COLORS: Record<string, string> = {
   admin:   'bg-red-100 text-red-700 border-red-200',
   manager: 'bg-purple-100 text-purple-700 border-purple-200',
@@ -130,7 +131,7 @@ function UserFormModal({ user, onClose, onSaved }: any) {
           password:   form.password,
           full_name:  form.full_name,
           tenant_id:  tenantId,
-          roleName:   form.role || 'cashier',
+          roleId:     ROLE_ID_MAP[form.role] ?? ROLE_ID_MAP['cashier'],
         });
       if (res.id || res.success) { onSaved(); onClose(); }
       else setError(res.message || 'Failed to save');

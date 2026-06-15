@@ -116,6 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ── refreshUser ────────────────────────────────────────────────────────
 
   const refreshUser = useCallback(async () => {
+    try {
     const res = await api.get<MeResponse>('/auth/me');
 
     if (res.success && res.data) {
@@ -131,6 +132,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         mustChangePassword: d.must_change_password ?? false,
       });
     } else {
+      // 401 = token expired or superadmin tenant check failed — clear session
+      api.clearToken();
+      clearUser();
+    }
+    } catch (err) {
+      // Network error or unexpected failure — clear session gracefully
+      console.warn('refreshUser failed:', err);
       api.clearToken();
       clearUser();
     }

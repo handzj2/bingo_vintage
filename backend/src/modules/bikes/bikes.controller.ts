@@ -3,7 +3,8 @@ import { AuthRequest } from '../../common/helpers/role-helper';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { BikesService } from './bikes.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
+import { RolesGuard }   from '../auth/guards/roles.guard';
+import { Roles }        from '../auth/decorators/roles.decorator';
 
 class UpdateBikeDto {
   model?: string;
@@ -21,6 +22,7 @@ export class BikesController {
   constructor(private readonly bikesService: BikesService) {}
 
   @Post()
+  @Roles('admin', 'manager')
   async create(@Body() data: any) {
     return await this.bikesService.create(data);
   }
@@ -40,6 +42,7 @@ export class BikesController {
   }
 
   @Patch(':id')
+  @Roles('admin', 'manager')
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() data: UpdateBikeDto,
@@ -49,6 +52,7 @@ export class BikesController {
   }
 
   @Delete(':id')
+  @Roles('admin')
   async remove(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: AuthRequest,
@@ -57,6 +61,7 @@ export class BikesController {
   }
 
   @Patch(':id/maintenance')
+  @Roles('admin', 'manager')
   async setMaintenance(@Param('id', ParseIntPipe) id: number) {
     return await this.bikesService.setMaintenance(id);
   }

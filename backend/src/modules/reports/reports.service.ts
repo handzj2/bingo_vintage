@@ -15,13 +15,13 @@ export class ReportsService {
   ) {}
 
   // ── Daily summary ─────────────────────────────────────────────────────────
-  async getDailySummary(date: Date = new Date()) {
+  async getDailySummary(tenantId: number, date: Date = new Date()) {
     const start = startOfDay(date);
     const end   = endOfDay(date);
 
     const [payments, newLoans] = await Promise.all([
-      this.paymentRepo.find({ where: { paymentDate: Between(start, end) } }),
-      this.loanRepo.count({ where: { createdAt: Between(start, end), status: LoanStatus.ACTIVE } }),
+      this.paymentRepo.find({ where: { tenantId, paymentDate: Between(start, end) } }),
+      this.loanRepo.count({ where: { tenantId, createdAt: Between(start, end), status: LoanStatus.ACTIVE } }),
     ]);
 
     const totalCollected = payments.reduce((s, p) => s + Number(p.amount), 0);
@@ -43,13 +43,13 @@ export class ReportsService {
   }
 
   // ── 7-day collection sparkline ────────────────────────────────────────────
-  async getWeeklyCollections() {
+  async getWeeklyCollections(tenantId: number) {
     const results = [];
     for (let i = 6; i >= 0; i--) {
       const d     = subDays(new Date(), i);
       const start = startOfDay(d);
       const end   = endOfDay(d);
-      const rows  = await this.paymentRepo.find({ where: { paymentDate: Between(start, end) } });
+      const rows  = await this.paymentRepo.find({ where: { tenantId, paymentDate: Between(start, end) } });
       results.push({
         date:  d.toISOString().slice(0, 10),
         total: rows.reduce((s, p) => s + Number(p.amount), 0),
@@ -60,7 +60,7 @@ export class ReportsService {
   }
 
   // ── Arrears / overdue report ───────────────────────────────────────────────
-  async getArrearsReport() {
+  async getArrearsReport(tenantId: number) {
     const rows = await this.loanRepo.manager.query(
       `SELECT
          l.id, l.loan_number, l.balance, l.loan_type,
@@ -94,7 +94,7 @@ export class ReportsService {
   }
 
   // ── Portfolio aging (30 / 60 / 90 / 90+ days buckets) ─────────────────────
-  async getPortfolioAging() {
+  async getPortfolioAging(tenantId: number) {
     const today = new Date().toISOString().slice(0, 10);
     const rows = await this.loanRepo.manager.query(
       `SELECT
@@ -120,7 +120,7 @@ export class ReportsService {
   }
 
   // ── Portfolio summary ─────────────────────────────────────────────────────
-  async getPortfolioSummary() {
+  async getPortfolioSummary(tenantId: number) {
     const [totalRow] = await this.loanRepo.manager.query(
       `SELECT
          COUNT(*)                                            AS total_loans,
@@ -167,7 +167,7 @@ export class ReportsService {
   }
 
   // ── CSV export helpers ────────────────────────────────────────────────────
-  async getPaymentsCsv(startDate?: string, endDate?: string): Promise<string> {
+  async getPaymentsCsv(tenantId: number, startDate?: string, endDate?: string): Promise<string> {
     const start = startDate ? new Date(startDate) : subDays(new Date(), 30);
     const end   = endDate   ? new Date(endDate)   : new Date();
     const rows  = await this.paymentRepo.manager.query(
@@ -191,7 +191,7 @@ export class ReportsService {
     return header + lines.join('\n');
   }
 
-  async getLoansCsv(): Promise<string> {
+  async getLoansCsv(tenantId: number): Promise<string> {
     const rows = await this.loanRepo.manager.query(
       `SELECT l.loan_number, l.loan_type, l.status, l.principal_amount,
               l.total_amount, l.balance, l.interest_rate, l.term_months,
@@ -214,7 +214,7 @@ export class ReportsService {
     return header + lines.join('\n');
   }
 
-  async getClientsCsv(): Promise<string> {
+  async getClientsCsv(tenantId: number): Promise<string> {
     const rows = await this.loanRepo.manager.query(
       `SELECT c.id, c.first_name || ' ' || c.last_name AS name, c.phone, c.nin,
               c.occupation, c.monthly_income, c.status, c.verified, c.created_at::date AS joined,
