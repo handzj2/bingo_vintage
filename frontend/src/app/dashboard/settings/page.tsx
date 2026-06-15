@@ -39,6 +39,7 @@ const PERMISSION_GROUPS = [
     group: 'Pages & Navigation',
     icon: '🗂️',
     permissions: [
+      // These keys match sidebar permKey values — controls menu visibility
       { key: 'view_dashboard',  label: 'Dashboard',        desc: 'Access the main dashboard',                  defaults: ['admin','manager','cashier','agent'] },
       { key: 'view_clients',    label: 'Clients',          desc: 'View and search client records',             defaults: ['admin','manager','agent'] },
       { key: 'view_loans',      label: 'Loans',            desc: 'View loan list and loan details',            defaults: ['admin','manager','agent'] },
@@ -55,27 +56,46 @@ const PERMISSION_GROUPS = [
     group: 'Client Actions',
     icon: '👤',
     permissions: [
-      { key: 'create_clients',  label: 'Register Clients', desc: 'Create new client records',                  defaults: ['admin','manager','agent'] },
-      { key: 'edit_clients',    label: 'Edit Clients',     desc: 'Modify existing client information',         defaults: ['admin','manager'] },
-      { key: 'delete_clients',  label: 'Delete Clients',   desc: 'Permanently remove client records',          defaults: ['admin'] },
+      // Keys match backend permission codes — enforced by PermissionGuard
+      { key: 'client.create',   label: 'Register Clients', desc: 'Create new client records',                  defaults: ['admin','manager','agent'] },
+      { key: 'client.edit',     label: 'Edit Clients',     desc: 'Modify existing client information',         defaults: ['admin','manager'] },
+      { key: 'client.view',     label: 'View Clients',     desc: 'View client records and profiles',           defaults: ['admin','manager','cashier','agent'] },
     ],
   },
   {
     group: 'Loan Actions',
     icon: '💰',
     permissions: [
-      { key: 'create_loans',    label: 'Create Loans',     desc: 'Submit new loan applications',               defaults: ['admin','manager','agent'] },
-      { key: 'approve_loans',   label: 'Approve Loans',    desc: 'Approve or reject loan applications',        defaults: ['admin','manager'] },
-      { key: 'edit_loans',      label: 'Edit Loans',       desc: 'Modify existing loan terms',                 defaults: ['admin'] },
+      { key: 'loan.create',     label: 'Create Loans',     desc: 'Submit new loan applications',               defaults: ['admin','manager','agent'] },
+      { key: 'loan.approve',    label: 'Approve Loans',    desc: 'Approve or reject loan applications',        defaults: ['admin','manager'] },
+      { key: 'loan.view',       label: 'View Loans',       desc: 'View loan list and loan details',            defaults: ['admin','manager','agent'] },
     ],
   },
   {
     group: 'Payment Actions',
     icon: '🧾',
     permissions: [
-      { key: 'create_payments',  label: 'Record Payments',  desc: 'Enter new payment transactions',            defaults: ['admin','manager','cashier'] },
-      { key: 'request_reversal', label: 'Request Reversal', desc: 'Submit a reversal request to admin',        defaults: ['admin','manager','cashier'] },
-      { key: 'approve_reversal', label: 'Approve Reversals',desc: 'Approve or reject reversal requests',       defaults: ['admin','manager'] },
+      { key: 'payment.create',  label: 'Record Payments',  desc: 'Enter new payment transactions',             defaults: ['admin','manager','cashier'] },
+      { key: 'payment.view',    label: 'View Payments',    desc: 'View payment history',                       defaults: ['admin','manager','cashier'] },
+      { key: 'payment.reverse', label: 'Reverse Payments', desc: 'Approve or initiate payment reversals',      defaults: ['admin'] },
+    ],
+  },
+  {
+    group: 'Expense Actions',
+    icon: '🧮',
+    permissions: [
+      { key: 'expense.create',  label: 'Create Expenses',  desc: 'Submit expense claims',                      defaults: ['admin','manager','cashier'] },
+      { key: 'expense.approve', label: 'Approve Expenses', desc: 'Approve or reject expense claims',           defaults: ['admin','manager'] },
+    ],
+  },
+  {
+    group: 'System',
+    icon: '⚙️',
+    permissions: [
+      { key: 'drawer.manage',   label: 'Cash Drawer',      desc: 'Open, close and reconcile cash drawers',     defaults: ['admin','manager','cashier'] },
+      { key: 'report.view',     label: 'Reports',          desc: 'Access financial and portfolio reports',     defaults: ['admin','manager'] },
+      { key: 'settings.manage', label: 'Manage Settings',  desc: 'Change system configuration',                defaults: ['admin'] },
+      { key: 'user.manage',     label: 'Manage Users',     desc: 'Create and manage staff accounts',           defaults: ['admin'] },
     ],
   },
 ];

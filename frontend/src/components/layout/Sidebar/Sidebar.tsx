@@ -40,14 +40,31 @@ const ALL_NAV = [
   { name: 'Settings',   href: '/dashboard/settings',  icon: Settings,  permKey: 'view_settings',  defaultRoles: ['admin'] },
 ];
 
+// Map sidebar nav keys to backend permission codes
+const NAV_TO_BACKEND: Record<string, string> = {
+  'view_clients':   'client.view',
+  'view_loans':     'loan.view',
+  'view_payments':  'payment.view',
+  'view_reports':   'report.view',
+  'view_expenses':  'expense.create',
+  'expense.approve':'expense.approve',
+  'drawer.manage':  'drawer.manage',
+};
+
 function canView(user: any, permKey: string, defaultRoles: string[]): boolean {
   if (!user) return false;
   const role = (user.role || '').toLowerCase();
   // superadmin and admin always see everything
   if (role === 'superadmin' || role === 'admin') return true;
-  // Check custom JSONB permission override (Record<string,boolean> stored per-user)
   const perms = user.permissions;
-  if (perms && typeof perms === 'object' && !Array.isArray(perms)) {
+  if (!perms) return defaultRoles.includes(role);
+  // string[] — permissions from /auth/me (backend codes like 'loan.view')
+  if (Array.isArray(perms)) {
+    const backendCode = NAV_TO_BACKEND[permKey] ?? permKey;
+    return perms.includes(backendCode);
+  }
+  // Record<string,boolean> — custom JSONB overrides from Settings page
+  if (typeof perms === 'object') {
     const stored = (perms as Record<string,boolean>)[permKey];
     if (stored !== undefined) return stored;
   }
