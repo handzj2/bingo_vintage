@@ -108,8 +108,29 @@ function defaultPermsForRole(role: string): Record<string, boolean> {
   return out;
 }
 
+function getRole(user: any): string {
+  // Users list API returns roleRelation.name (snake_case: role_relation?.name)
+  // after SnakeCaseInterceptor it may be role_relation.name
+  return (
+    user.role ||
+    user.roleName ||
+    user.role_name ||
+    user.roleRelation?.name ||
+    user.role_relation?.name ||
+    'cashier'
+  ).toLowerCase();
+}
+
 function resolvePerms(user: any): Record<string, boolean> {
-  return { ...defaultPermsForRole(user.role || 'cashier'), ...(user.permissions || {}) };
+  const role = getRole(user);
+  const defaults = defaultPermsForRole(role);
+  const saved = user.permissions;
+  // If saved permissions is a plain object (Record<string,boolean>), merge it over defaults
+  // If it's a string[] (from /auth/me), ignore it — it uses backend codes not toggle keys
+  if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+    return { ...defaults, ...saved };
+  }
+  return defaults;
 }
 
 function Modal({ title, onClose, children }: any) {
@@ -148,7 +169,7 @@ function UserFormModal({ user, onClose, onSaved }: any) {
     username:  user?.username || '',
     email:     user?.email || '',
     full_name: user?.fullName || user?.full_name || '',
-    role:      user?.role || 'cashier',
+    role:      getRole(user) || 'cashier',
     branch_id: user?.branchId || user?.branch_id || '',
     password:  '',
   });
@@ -316,7 +337,7 @@ function PermissionsModal({ user, onClose, onSaved }: any) {
   const [saved, setSaved]   = useState(false);
 
   const toggle = (key: string) => setPerms(p => ({ ...p, [key]: !p[key] }));
-  const resetToDefaults = () => setPerms(defaultPermsForRole(user.role));
+  const resetToDefaults = () => setPerms(defaultPermsForRole(getRole(user)));
 
   const handleSave = async () => {
     setSaving(true); setError('');
@@ -340,14 +361,14 @@ function PermissionsModal({ user, onClose, onSaved }: any) {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm border ${ROLE_COLORS[user.role] || 'bg-gray-100 border-gray-200'}`}>
-              {(user.fullName || user.username || '?').charAt(0).toUpperCase()}
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm border ${ROLE_COLORS[getRole(user)] || 'bg-gray-100 border-gray-200'}`}>
+              {(user.fullName || user.full_name || user.username || '?').charAt(0).toUpperCase()
             </div>
             <div>
               <p className="font-black text-gray-900">{user.fullName || user.username}</p>
               <p className="text-xs text-gray-400">
                 @{user.username} ·&nbsp;
-                <span className={`font-semibold capitalize px-1.5 py-0.5 rounded text-xs ${ROLE_COLORS[user.role]}`}>{user.role}</span>
+                <span className={`font-semibold capitalize px-1.5 py-0.5 rounded text-xs ${ROLE_COLORS[getRole(user)]}`}>{getRole(user)}</span>
                 {customised.length > 0 && <span className="ml-2 text-amber-600 font-semibold">{customised.length} custom override{customised.length > 1 ? 's' : ''}</span>}
               </p>
             </div>
@@ -370,7 +391,7 @@ function PermissionsModal({ user, onClose, onSaved }: any) {
               </div>
               <div className="space-y-2">
                 {group.permissions.map(p => {
-                  const isDefault = p.defaults.includes(user.role);
+                  const isDefault = p.defaults.includes(getRole(user));
                   const current   = perms[p.key] ?? isDefault;
                   const changed   = current !== isDefault;
                   return (
