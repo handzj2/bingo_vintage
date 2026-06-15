@@ -27,7 +27,7 @@ interface AuthContextType {
   isLoading:               boolean;
   login:                   (credentials: LoginCredentials) => Promise<void>;
   logout:                  () => void;
-  refreshUser:             () => Promise<void>;
+  refreshUser:             (throwOn401?: boolean) => Promise<void>;
   clearMustChangePassword: () => void;
   /** Check if the current user has a specific backend permission code */
   can:                     (permission: string) => boolean;
@@ -124,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // ── refreshUser ────────────────────────────────────────────────────────
 
-  const refreshUser = useCallback(async () => {
+  const refreshUser = useCallback(async (throwOn401 = false) => {
     try {
     const res = await api.get<MeResponse>('/auth/me');
 
@@ -147,12 +147,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         mustChangePassword: d.must_change_password ?? false,
       });
     } else {
-      // 401 = token expired or superadmin tenant check failed — clear session
+      // 401 = token expired, missing branch, or tenant check failed
       api.clearToken();
       clearUser();
+      if (throwOn401) {
+        throw new Error(res.message ?? 'Account setup incomplete. Contact your administrator.');
+      }
     }
-    } catch (err) {
-      // Network error or unexpected failure — clear session gracefully
+    } catch (err: any) {
+      // Re-throw during login flow so login page can surface the message
+      if (throwOn401) throw err;
+      // Background refresh failure — clear session gracefully
       console.warn('refreshUser failed:', err);
       api.clearToken();
       clearUser();
@@ -231,7 +236,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       persistUser(mappedUser);
 
       // Immediately refresh to load permissions from /auth/me
-      await refreshUser();
+      // Pass true so any 401 (e.g. cashier missing branchId) surfaces as a login error
+      await refreshUser(true);
 
       router.push(mappedUser.mustChangePassword ? '/auth/set-new-password' : '/dashboard');
     },
