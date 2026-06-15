@@ -862,7 +862,7 @@ export default function SettingsPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('users');
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   if (!isAdmin) {
     return (
       <div className="p-8 flex items-center justify-center min-h-[60vh]">

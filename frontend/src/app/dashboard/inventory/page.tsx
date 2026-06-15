@@ -224,7 +224,7 @@ function DeleteModal({ bike, onClose, onDone }: { bike: Bike; onClose: () => voi
 export default function InventoryPage() {
   const { user, isLoading: authLoading } = useAuth();
   const router   = useRouter();
-  const isAdmin  = user?.role === 'admin';
+  const isAdmin  = user?.role === 'admin' || user?.role === 'superadmin';
   const canEdit  = user?.role === 'admin' || user?.role === 'manager';
 
   const [bikes, setBikes]       = useState<Bike[]>([]);

@@ -208,7 +208,7 @@ export default function DashboardPage() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [load]);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'manager';
+  const isAdmin = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'superadmin';
   const methodBreakdown = Object.entries(stats?.byMethod || {}).map(([method, amount]) => ({
     method, amount: amount as number,
     cfg: METHODS[method] || { label: method, icon: Wallet, color: 'text-gray-600 bg-gray-50' },

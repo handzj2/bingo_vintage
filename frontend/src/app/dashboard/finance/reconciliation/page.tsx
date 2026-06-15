@@ -18,7 +18,7 @@ export default function ReconciliationPage() {
   const { user, isLoading } = useAuth();
   const router              = useRouter();
 
-  const canAccess = user?.role === 'admin' || user?.role === 'manager';
+  const canAccess = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'superadmin';
 
   useEffect(() => {
     if (!isLoading && !user) {

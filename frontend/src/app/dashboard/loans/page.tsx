@@ -187,7 +187,7 @@ function DeleteModal({ loan, onClose, onDone }: { loan: any; onClose: () => void
 export default function LoansPage() {
   const { user } = useAuth();
   const isAdmin     = user?.role === 'admin' || user?.role === 'manager';
-  const isAdminOnly = user?.role === 'admin';
+  const isAdminOnly = user?.role === 'admin' || user?.role === 'superadmin';
   const searchParams   = useSearchParams();
   const router         = useRouter();
   const loanTypeFilter = searchParams.get('type') || 'all';

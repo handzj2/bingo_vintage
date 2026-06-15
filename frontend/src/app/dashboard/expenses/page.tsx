@@ -27,7 +27,7 @@ export default function ExpensesPage() {
   };
 
   const filteredExpenses = expenses.filter(e => filter === 'all' || e.status === filter);
-  const canCreate = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'cashier';
+  const canCreate = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'cashier' || user?.role === 'superadmin';
 
   return (
     <div className="p-6 max-w-7xl mx-auto">

@@ -41,7 +41,7 @@ export default function LoanDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router  = useRouter();
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const isManager = user?.role === 'manager';
   const canApprove = isAdmin;
 
