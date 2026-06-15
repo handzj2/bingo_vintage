@@ -10,7 +10,7 @@ export const AppDataSource = new DataSource({
   type: 'postgres',
   url: process.env.DATABASE_URL,
   synchronize: false,
-  migrationsRun: false,
+  migrationsRun: false,  // consistent with app.module.ts
   namingStrategy: new SnakeNamingStrategy(),
   entities:   isCompiled ? ['dist/src/**/*.entity.js'] : ['src/**/*.entity.ts'],
   migrations: isCompiled ? ['dist/database/migrations/*.js'] : ['database/migrations/*.ts'],

@@ -126,7 +126,7 @@ export class SeedDefaultData1700000000004 implements MigrationInterface {
         ('loan.processing_fee',     '0',    (SELECT id FROM tenants WHERE slug='bingo-vintage' LIMIT 1), now(), now()),
         ('loan.default_term_months','12',   (SELECT id FROM tenants WHERE slug='bingo-vintage' LIMIT 1), now(), now()),
         ('LOAN_LATE_FEE_RATE',      '0.05', (SELECT id FROM tenants WHERE slug='bingo-vintage' LIMIT 1), now(), now())
-      ON CONFLICT (key, tenant_id) DO NOTHING;
+      ON CONFLICT (key) DO NOTHING;  -- constraint is on key alone, not (key, tenant_id)
     `);
   }
 
