@@ -1,0 +1,42 @@
+import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { AuthService } from './auth.service';
+import { AuthController } from './auth.controller';
+import { JwtStrategy } from './strategies/jwt.strategy';
+import { User } from '../users/entities/user.entity';
+import { UsersModule } from '../users/users.module';
+
+/**
+ * AuthModule — Phase 1
+ *
+ * CHANGE FROM ORIGINAL
+ * ────────────────────
+ * TypeOrmModule.forFeature([User]) was already present.
+ * No structural change needed — kept exactly as-is.
+ * JwtStrategy now injects UserRepository (declared in forFeature).
+ */
+@Module({
+  imports: [
+    UsersModule,
+    PassportModule,
+    ConfigModule,
+    TypeOrmModule.forFeature([User]),
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => ({
+        secret: configService.get<string>('JWT_SECRET') || 'default-secret-key',
+        signOptions: {
+          expiresIn: configService.get<string>('JWT_EXPIRES_IN', '24h'),
+        },
+      }),
+      inject: [ConfigService],
+    }),
+  ],
+  controllers: [AuthController],
+  providers: [AuthService, JwtStrategy],
+  exports: [AuthService, JwtModule],
+})
+export class AuthModule {}
