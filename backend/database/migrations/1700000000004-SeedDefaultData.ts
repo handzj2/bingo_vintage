@@ -1,17 +1,3 @@
-/**
- * Migration 004 — SeedDefaultData
- * Patched 2026-06-15: idempotency fix for environments where tenant id != 1
- *
- * Root cause: original guards used WHERE id = 1 which failed on Railway
- * because the tenant was created with id = 2 by the sequence.
- * The slug unique constraint fired on retry because the data existed
- * under a different id.
- *
- * Fix: all guards now check by slug/name instead of hardcoded id.
- * All inserts omit the id column and let PostgreSQL assign it.
- * Roles and settings look up tenant dynamically via slug.
- * This migration is now fully idempotent regardless of id sequence.
- */
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class SeedDefaultData1700000000004 implements MigrationInterface {
@@ -126,7 +112,7 @@ export class SeedDefaultData1700000000004 implements MigrationInterface {
         ('loan.processing_fee',     '0',    (SELECT id FROM tenants WHERE slug='bingo-vintage' LIMIT 1), now(), now()),
         ('loan.default_term_months','12',   (SELECT id FROM tenants WHERE slug='bingo-vintage' LIMIT 1), now(), now()),
         ('LOAN_LATE_FEE_RATE',      '0.05', (SELECT id FROM tenants WHERE slug='bingo-vintage' LIMIT 1), now(), now())
-      ON CONFLICT (key) DO NOTHING;  -- constraint is on key alone, not (key, tenant_id)
+      ON CONFLICT (key, tenant_id) DO NOTHING;
     `);
   }
 
