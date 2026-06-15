@@ -1,5 +1,6 @@
 // build-fix: page — types corrected 2026-06-14
 // RBAC patch 2026-06-15: ROLE_ID_MAP removed; dynamic roles + branches; branch required for cashier
+// RBAC patch 2026-06-15: branch selector required for cashier; dynamic roles; ROLE_ID_MAP removed
 'use client';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
