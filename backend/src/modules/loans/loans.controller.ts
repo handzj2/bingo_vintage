@@ -1,3 +1,4 @@
+// RBAC patch 2026-06-15: loan approval assertAdmin -> assertAdminOrManager
 import { IsNumber, IsPositive, IsOptional, IsString, IsIn } from 'class-validator';
 import { AdminApprovalDto } from './dto/admin-approval.dto';
 import {

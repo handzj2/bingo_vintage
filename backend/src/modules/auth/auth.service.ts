@@ -1,3 +1,4 @@
+// RBAC patch 2026-06-15: login response includes tenantId field
 import {
   Injectable, UnauthorizedException, ConflictException,
   Logger, BadRequestException, NotFoundException,

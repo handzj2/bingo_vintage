@@ -1,3 +1,4 @@
+// RBAC patch 2026-06-15: cashier in BRANCH_REQUIRED_ROLES; superadmin exempt from tenant null check
 import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { PassportStrategy }    from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';

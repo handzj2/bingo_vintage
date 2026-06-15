@@ -1,3 +1,17 @@
+/**
+ * Migration 004 — SeedDefaultData
+ * Patched 2026-06-15: idempotency fix for environments where tenant id != 1
+ *
+ * Root cause: original guards used WHERE id = 1 which failed on Railway
+ * because the tenant was created with id = 2 by the sequence.
+ * The slug unique constraint fired on retry because the data existed
+ * under a different id.
+ *
+ * Fix: all guards now check by slug/name instead of hardcoded id.
+ * All inserts omit the id column and let PostgreSQL assign it.
+ * Roles and settings look up tenant dynamically via slug.
+ * This migration is now fully idempotent regardless of id sequence.
+ */
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class SeedDefaultData1700000000004 implements MigrationInterface {
@@ -52,17 +66,22 @@ export class SeedDefaultData1700000000004 implements MigrationInterface {
     // ── DEFAULT TENANT ──────────────────────────────────────────────────────
     // Uses WHERE NOT EXISTS to avoid any constraint dependency.
     await queryRunner.query(`
-      INSERT INTO tenants (id, name, slug, description, is_active, created_at, updated_at)
-      SELECT 1, 'Bingo Vintage', 'bingo-vintage', 'Motorcycle Loan Management', true, now(), now()
-      WHERE NOT EXISTS (SELECT 1 FROM tenants WHERE id = 1);
+      INSERT INTO tenants (name, slug, description, is_active, created_at, updated_at)
+      SELECT 'Bingo Vintage', 'bingo-vintage', 'Motorcycle Loan Management', true, now(), now()
+      WHERE NOT EXISTS (SELECT 1 FROM tenants WHERE slug = 'bingo-vintage');
     `);
     await queryRunner.query(`SELECT setval('tenants_id_seq', (SELECT MAX(id) FROM tenants));`);
 
     // ── DEFAULT BRANCH ──────────────────────────────────────────────────────
     await queryRunner.query(`
-      INSERT INTO branches (id, tenant_id, name, location, is_active, created_at, updated_at)
-      SELECT 1, 1, 'Main Branch', 'Kampala', true, now(), now()
-      WHERE NOT EXISTS (SELECT 1 FROM branches WHERE id = 1);
+      INSERT INTO branches (tenant_id, name, location, is_active, created_at, updated_at)
+      SELECT t.id, 'Main Branch', 'Kampala', true, now(), now()
+      FROM tenants t WHERE t.slug = 'bingo-vintage'
+      AND NOT EXISTS (
+        SELECT 1 FROM branches b
+        JOIN tenants t2 ON t2.id = b.tenant_id
+        WHERE t2.slug = 'bingo-vintage' AND b.name = 'Main Branch'
+      );
     `);
     await queryRunner.query(`SELECT setval('branches_id_seq', (SELECT MAX(id) FROM branches));`);
 
@@ -70,23 +89,31 @@ export class SeedDefaultData1700000000004 implements MigrationInterface {
     // Single inserts with explicit NOT EXISTS to avoid any constraint assumptions.
     await queryRunner.query(`
       INSERT INTO roles (tenant_id, name, description, is_default, created_at, updated_at)
-      SELECT 1, 'admin',   'System administrator with full access',    false, now(), now()
-      WHERE NOT EXISTS (SELECT 1 FROM roles WHERE tenant_id = 1 AND name = 'admin');
+      SELECT t.id, 'admin',   'System administrator with full access',    false, now(), now()
+      FROM tenants t WHERE t.slug = 'bingo-vintage'
+      AND NOT EXISTS (SELECT 1 FROM roles r JOIN tenants t2 ON t2.id = r.tenant_id
+        WHERE t2.slug = 'bingo-vintage' AND r.name = 'admin');
     `);
     await queryRunner.query(`
       INSERT INTO roles (tenant_id, name, description, is_default, created_at, updated_at)
-      SELECT 1, 'manager', 'Branch manager with approval permissions', false, now(), now()
-      WHERE NOT EXISTS (SELECT 1 FROM roles WHERE tenant_id = 1 AND name = 'manager');
+      SELECT t.id, 'manager', 'Branch manager with approval permissions', false, now(), now()
+      FROM tenants t WHERE t.slug = 'bingo-vintage'
+      AND NOT EXISTS (SELECT 1 FROM roles r JOIN tenants t2 ON t2.id = r.tenant_id
+        WHERE t2.slug = 'bingo-vintage' AND r.name = 'manager');
     `);
     await queryRunner.query(`
       INSERT INTO roles (tenant_id, name, description, is_default, created_at, updated_at)
-      SELECT 1, 'agent',   'Loan agent — create and track loans',      false, now(), now()
-      WHERE NOT EXISTS (SELECT 1 FROM roles WHERE tenant_id = 1 AND name = 'agent');
+      SELECT t.id, 'agent',   'Loan agent — create and track loans',      false, now(), now()
+      FROM tenants t WHERE t.slug = 'bingo-vintage'
+      AND NOT EXISTS (SELECT 1 FROM roles r JOIN tenants t2 ON t2.id = r.tenant_id
+        WHERE t2.slug = 'bingo-vintage' AND r.name = 'agent');
     `);
     await queryRunner.query(`
       INSERT INTO roles (tenant_id, name, description, is_default, created_at, updated_at)
-      SELECT 1, 'cashier', 'Cashier — record payments and expenses',   true,  now(), now()
-      WHERE NOT EXISTS (SELECT 1 FROM roles WHERE tenant_id = 1 AND name = 'cashier');
+      SELECT t.id, 'cashier', 'Cashier — record payments and expenses',   true,  now(), now()
+      FROM tenants t WHERE t.slug = 'bingo-vintage'
+      AND NOT EXISTS (SELECT 1 FROM roles r JOIN tenants t2 ON t2.id = r.tenant_id
+        WHERE t2.slug = 'bingo-vintage' AND r.name = 'cashier');
     `);
 
     // ── DEFAULT APP SETTINGS ───────────────────────────────────────────────
@@ -95,10 +122,10 @@ export class SeedDefaultData1700000000004 implements MigrationInterface {
     await queryRunner.query(`
       INSERT INTO app_settings (key, value, tenant_id, created_at, updated_at)
       VALUES
-        ('LOAN_INTEREST_RATE',      '0.15', 1, now(), now()),
-        ('loan.processing_fee',     '0',    1, now(), now()),
-        ('loan.default_term_months','12',   1, now(), now()),
-        ('LOAN_LATE_FEE_RATE',      '0.05', 1, now(), now())
+        ('LOAN_INTEREST_RATE',      '0.15', (SELECT id FROM tenants WHERE slug='bingo-vintage' LIMIT 1), now(), now()),
+        ('loan.processing_fee',     '0',    (SELECT id FROM tenants WHERE slug='bingo-vintage' LIMIT 1), now(), now()),
+        ('loan.default_term_months','12',   (SELECT id FROM tenants WHERE slug='bingo-vintage' LIMIT 1), now(), now()),
+        ('LOAN_LATE_FEE_RATE',      '0.05', (SELECT id FROM tenants WHERE slug='bingo-vintage' LIMIT 1), now(), now())
       ON CONFLICT (key, tenant_id) DO NOTHING;
     `);
   }

@@ -1,5 +1,6 @@
 // fix: read roleName from /me response — admin access restored 2026-06-14
 // build-fix: AuthContext — types corrected 2026-06-14
+// RBAC patch 2026-06-15: can() supports string[] and Record<string,boolean>; permissions normalized
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';

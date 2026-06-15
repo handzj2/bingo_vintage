@@ -1,3 +1,4 @@
+// RBAC patch 2026-06-15: canView() superadmin/admin bypass; handles both permission formats
 'use client';
 
 import React, { useState, useEffect } from 'react';

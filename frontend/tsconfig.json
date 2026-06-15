@@ -1,3 +1,4 @@
+// RBAC patch 2026-06-15: backend pollution files excluded from Next.js compilation
 {
   "_comment": "build-fix 2026-06-15: exclude backend files so Vercel does not try to compile typeorm/data-source",
   "compilerOptions": {

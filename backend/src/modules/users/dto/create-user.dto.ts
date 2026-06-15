@@ -1,3 +1,4 @@
+// RBAC patch 2026-06-15: roleName field added (preferred over roleId)
 import { IsEmail, IsString, IsNotEmpty, MinLength, IsOptional, IsNumber } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 

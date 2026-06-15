@@ -1,3 +1,4 @@
+// RBAC patch 2026-06-15: /auth/me serializes Set<string> permissions to string[]
 import {
   Controller, Post, Body, Get, Request,
   UseGuards, Patch,

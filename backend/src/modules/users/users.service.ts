@@ -1,3 +1,4 @@
+// RBAC patch 2026-06-15: roleName resolution, branch validation, superadmin protection, tenant scoping
 import {
   Injectable, NotFoundException, ConflictException, BadRequestException,
 } from '@nestjs/common';
