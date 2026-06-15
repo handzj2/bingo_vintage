@@ -40,6 +40,12 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current authenticated user profile' })
   async me(@Request() req: AuthRequest) {
-    return req.user;
+    const u = req.user;
+    // Serialize Set<string> to string[] for JSON transport.
+    // Set does not serialize via JSON.stringify — produces {} instead of [...].
+    const permissions = u.permissions instanceof Set
+      ? Array.from(u.permissions)
+      : (Array.isArray(u.permissions) ? u.permissions : []);
+    return { ...u, permissions };
   }
 }

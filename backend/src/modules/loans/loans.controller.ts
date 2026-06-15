@@ -381,13 +381,14 @@ export class LoansController {
 
   @Post(':id/approve')
   @ApiOperation({
-    summary: 'Admin only: Approve or reject a loan',
-    description: 'Only administrators can approve or reject loans per policy [2026-01-10]',
+    summary: 'Admin or Manager: Approve or reject a loan',
+    description: 'Administrators and Managers can approve or reject loans. '
+      + 'Managers handle day-to-day portfolio approvals; Admins retain strategic override.',
   })
   @ApiParam({ name: 'id', example: 1, description: 'Loan ID' })
-  @SetMetadata('roles', ['admin'])
+  @SetMetadata('roles', ['admin', 'manager'])
   @ApiResponse({ status: 200, description: 'Loan approval processed successfully' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Admin role required' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Admin or Manager role required' })
   @ApiResponse({ status: 404, description: 'Loan not found' })
   async approveLoan(
     @Param('id', ParseIntPipe) id: number,
@@ -396,7 +397,7 @@ export class LoansController {
   ) {
     try {
       const user = req.user;
-      assertAdmin(user, 'Policy [2026-01-10]: Only administrators can approve loans');
+      assertRole(user, ['admin', 'manager'], 'Loan approval requires Admin or Manager role.');
       return await this.loansService.approveOrRejectLoan(id, approvalDto, user);
     } catch (error) {
       if (error instanceof ForbiddenException || error instanceof BadRequestException) throw error;

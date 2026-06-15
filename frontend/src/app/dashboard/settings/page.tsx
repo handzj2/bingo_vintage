@@ -23,8 +23,8 @@ const api = {
   async del(p: string)           { const r = await fetch(`${API_URL}${p}`, { method:'DELETE', headers: this.h() }); return r.json(); },
 };
 
-const ROLES = ['admin', 'manager', 'cashier', 'agent'];
-const ROLE_ID_MAP: Record<string, number> = { admin: 1, manager: 2, cashier: 3, agent: 4 };
+// Role names — IDs are loaded dynamically from /api/roles to avoid hardcoded ID assumptions
+const ROLES = ['admin', 'manager', 'cashier', 'loan_officer', 'agent'];
 const ROLE_COLORS: Record<string, string> = {
   admin:   'bg-red-100 text-red-700 border-red-200',
   manager: 'bg-purple-100 text-purple-700 border-purple-200',
@@ -107,11 +107,28 @@ function Modal({ title, onClose, children }: any) {
 function UserFormModal({ user, onClose, onSaved }: any) {
   const { user: me } = useAuth();
   const tenantId = me?.tenantId ?? user?.tenant_id ?? 1;
+  const [availableRoles, setAvailableRoles] = useState<{id:number,name:string}[]>([]);
+  const [availableBranches, setAvailableBranches] = useState<{id:number,name:string}[]>([]);
   const isEdit = !!user;
+
+  // Load roles and branches dynamically
+  useEffect(() => {
+    api.get('/roles').then((res: any) => {
+      const roles = Array.isArray(res) ? res : (res.data ?? []);
+      setAvailableRoles(roles);
+    }).catch(() => {});
+    api.get('/admin/branches').then((res: any) => {
+      const branches = Array.isArray(res) ? res : (res.data ?? []);
+      setAvailableBranches(branches);
+    }).catch(() => {});
+  }, []);
   const [form, setForm] = useState({
-    username: user?.username || '', email: user?.email || '',
+    username:  user?.username || '',
+    email:     user?.email || '',
     full_name: user?.fullName || user?.full_name || '',
-    role: user?.role || 'cashier', password: '',
+    role:      user?.role || 'cashier',
+    branch_id: user?.branchId || user?.branch_id || '',
+    password:  '',
   });
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -120,6 +137,11 @@ function UserFormModal({ user, onClose, onSaved }: any) {
   const handleSubmit = async () => {
     setError('');
     if (!form.username || !form.email || !form.full_name) return setError('All fields are required');
+    // Branch is required for branch-scoped roles
+    const branchRequiredRoles = ['cashier', 'credit_officer', 'teller', 'branch_manager'];
+    if (branchRequiredRoles.includes(form.role) && !form.branch_id) {
+      return setError(`Branch assignment is required for ${form.role} role. Please select a branch.`);
+    }
     if (!isEdit && form.password.length < 6) return setError('Password must be at least 6 characters');
     setLoading(true);
     try {
@@ -131,7 +153,9 @@ function UserFormModal({ user, onClose, onSaved }: any) {
           password:   form.password,
           full_name:  form.full_name,
           tenant_id:  tenantId,
-          roleId:     ROLE_ID_MAP[form.role] ?? ROLE_ID_MAP['cashier'],
+          // Send roleName — backend resolves role ID by name per tenant
+          roleName:   form.role || 'cashier',
+          branch_id:  form.branch_id ? Number(form.branch_id) : undefined,
         });
       if (res.id || res.success) { onSaved(); onClose(); }
       else setError(res.message || 'Failed to save');
@@ -155,10 +179,35 @@ function UserFormModal({ user, onClose, onSaved }: any) {
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1">Role</label>
           <select className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={form.role} onChange={e => setForm({...form, role: e.target.value})}>
+            value={form.role} onChange={e => setForm({...form, role: e.target.value, branch_id: ''})}>
             {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase()+r.slice(1)}</option>)}
           </select>
         </div>
+        {/* Branch selector — required for cashier, credit_officer, teller, branch_manager */}
+        {['cashier','credit_officer','teller','branch_manager'].includes(form.role) && (
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">
+              Branch <span className="text-red-500">*</span>
+              <span className="ml-1 text-xs font-normal text-gray-400">(required for {form.role} role)</span>
+            </label>
+            <select
+              className={`w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                !form.branch_id ? 'border-amber-300 bg-amber-50' : 'border-gray-200'
+              }`}
+              value={form.branch_id}
+              onChange={e => setForm({...form, branch_id: e.target.value})}>
+              <option value="">— Select a branch —</option>
+              {availableBranches.map((b: any) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+            {availableBranches.length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">
+                ⚠ No branches found. Create a branch first before assigning a {form.role}.
+              </p>
+            )}
+          </div>
+        )}
         {!isEdit && (
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Password</label>

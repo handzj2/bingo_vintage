@@ -40,10 +40,16 @@ const ALL_NAV = [
 
 function canView(user: any, permKey: string, defaultRoles: string[]): boolean {
   if (!user) return false;
-  // FIX: user.role is the correct field — User interface has no roleName property
   const role = (user.role || '').toLowerCase();
-  const stored = user.permissions?.[permKey];
-  if (stored !== undefined) return stored;
+  // superadmin and admin always see everything
+  if (role === 'superadmin' || role === 'admin') return true;
+  // Check custom JSONB permission override (Record<string,boolean> stored per-user)
+  const perms = user.permissions;
+  if (perms && typeof perms === 'object' && !Array.isArray(perms)) {
+    const stored = (perms as Record<string,boolean>)[permKey];
+    if (stored !== undefined) return stored;
+  }
+  // Fall back to role-based default
   return defaultRoles.includes(role);
 }
 

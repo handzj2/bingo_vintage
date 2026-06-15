@@ -15,7 +15,10 @@ export interface User {
   full_name:           string;
   role:                string;
   tenantId?:           number;
-  permissions:         string[];   // ← FIX: was missing — caused all permission gates to fail
+  // permissions can arrive as string[] (backend RBAC codes) or
+  // Record<string,boolean> (custom UI overrides saved to user.permissions JSONB).
+  // can() handles both forms transparently.
+  permissions:         string[] | Record<string, boolean>;
   mustChangePassword?: boolean;
 }
 
@@ -107,8 +110,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const can = useCallback(
     (permission: string): boolean => {
       if (!user) return false;
-      if (user.role === 'admin') return true;
-      return user.permissions?.includes(permission) ?? false;
+      if (user.role === 'admin' || user.role === 'superadmin') return true;
+      const perms = user.permissions;
+      if (!perms) return false;
+      // Handle string[] (backend RBAC codes from /auth/me)
+      if (Array.isArray(perms)) return perms.includes(permission);
+      // Handle Record<string,boolean> (custom UI overrides stored in user.permissions JSONB)
+      if (typeof perms === 'object') return (perms as Record<string, boolean>)[permission] === true;
+      return false;
     },
     [user],
   );
@@ -128,7 +137,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         full_name:          d.full_name ?? d.username,
         role:               d.role_name ?? d.roleName ?? d.role ?? 'unknown',
         tenantId:           d.tenantId ?? d.tenant_id ?? undefined,
-        permissions:        d.permissions ?? [],
+        // Normalize permissions: /me returns string[] (serialized Set), 
+        // but we also support Record<string,boolean> for custom overrides.
+        permissions:        Array.isArray(d.permissions)
+                              ? d.permissions
+                              : (d.permissions && typeof d.permissions === 'object'
+                                  ? d.permissions
+                                  : []),
         mustChangePassword: d.must_change_password ?? false,
       });
     } else {

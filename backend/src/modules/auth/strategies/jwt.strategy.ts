@@ -18,7 +18,9 @@ import { User }                from '../../users/entities/user.entity';
  *  4. No ?? 1 fallback anywhere — removed entirely.
  */
 
-/** Roles that must have a branch_id assigned to operate. */
+/** Roles that must have a branch_id assigned to operate.
+ *  Cashiers are branch-bound — they can only operate within their assigned branch.
+ *  A cashier account without a branch_id is invalid and must not authenticate. */
 const BRANCH_REQUIRED_ROLES: readonly string[] = [
   'cashier',
   'credit_officer',

@@ -24,8 +24,13 @@ export class CreateUserDto {
   full_name: string;
 
   @IsOptional()
+  @IsString()
+  @ApiProperty({ example: 'cashier', required: false, description: 'Role name (preferred over roleId — IDs vary per environment)' })
+  roleName?: string;
+
+  @IsOptional()
   @IsNumber()
-  @ApiProperty({ example: 2, required: false, description: 'Role ID from roles table' })
+  @ApiProperty({ example: 2, required: false, description: 'Role ID (deprecated — use roleName instead)' })
   roleId?: number;
 
   @IsOptional()

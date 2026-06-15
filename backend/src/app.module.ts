@@ -69,7 +69,7 @@ import { SuperAdminModule }     from './modules/superadmin/superadmin.module';
           autoLoadEntities: true,
           entities:         ['dist/**/*.entity.js'],
           migrations:       ['dist/database/migrations/*.js'],
-          migrationsRun:    false,
+          migrationsRun:    true,   // runs pending migrations on startup (including 019 RBAC seed)
           synchronize:      false,
           namingStrategy:   new SnakeNamingStrategy(),
           retryAttempts:    2147483647,

@@ -2,7 +2,11 @@
   "_comment": "build-fix 2026-06-15: exclude backend files so Vercel does not try to compile typeorm/data-source",
   "compilerOptions": {
     "target": "es5",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": false,
@@ -17,7 +21,9 @@
     "incremental": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": [
+        "src/*"
+      ]
     },
     "forceConsistentCasingInFileNames": true,
     "plugins": [
@@ -26,12 +32,25 @@
       }
     ]
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
   "exclude": [
     "node_modules",
     "data-source.ts",
     "database/**",
     "dist/**",
-    "test/**"
+    "test/**",
+    "src/app.module.ts",
+    "src/main.ts",
+    "src/common/**/*",
+    "src/modules/**/*",
+    "src/services/clientFormAdapter.ts",
+    "src/services/clientListAdapter.ts",
+    "src/services/clientNormalizer.ts",
+    "database/**/*"
   ]
 }

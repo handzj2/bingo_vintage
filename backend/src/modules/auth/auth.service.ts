@@ -136,6 +136,7 @@ export class AuthService {
         roleName,
         isActive:           user.isActive,
         fullName:           user.fullName,
+        tenantId:           user.tenantId ?? null,   // needed by AuthContext on first login
         mustChangePassword: mustChange,
       },
     };

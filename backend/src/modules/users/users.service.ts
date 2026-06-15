@@ -71,15 +71,42 @@ export class UsersService {
     user.tenantId = tenantId;   // Phase 4: validated — never null
     user.branchId = branchId;   // Phase 4: null when not supplied (branch is optional)
 
-    if (createUserDto.roleId) {
+    // Resolve role by name first (preferred — IDs are not stable across environments)
+    // Fall back to roleId if provided, then default to 'cashier'
+    if (createUserDto.roleName) {
+      const resolvedId = await this.resolveRoleId(createUserDto.roleName, user.tenantId);
+      if (!resolvedId) {
+        throw new BadRequestException(
+          `Role '${createUserDto.roleName}' not found for this tenant. ` +
+          `Please create the role first or use one of: admin, manager, cashier, loan_officer, agent.`,
+        );
+      }
+      user.roleId = resolvedId;
+    } else if (createUserDto.roleId) {
       user.roleId = createUserDto.roleId;
     } else {
-      // Fallback to a default role (e.g., 'user')
-      const defaultRoleId = await this.resolveRoleId('user', user.tenantId);
+      // Default to cashier — the most common operational role
+      const defaultRoleId = await this.resolveRoleId('cashier', user.tenantId)
+        ?? await this.resolveRoleId('user', user.tenantId);
       if (!defaultRoleId) {
-        throw new BadRequestException('Default role "user" not found. Please provide a roleId.');
+        throw new BadRequestException(
+          'Default role not found. Please provide a roleName.',
+        );
       }
       user.roleId = defaultRoleId;
+    }
+
+    // Enterprise RBAC: branch-scoped roles must have a branch assigned.
+    // A cashier without a branch cannot operate — they would have no cash drawer scope.
+    const BRANCH_REQUIRED_ROLES = ['cashier', 'credit_officer', 'teller', 'branch_manager'];
+    const assignedRoleName = await this.resolveRoleName(user.roleId, user.tenantId);
+    if (assignedRoleName && BRANCH_REQUIRED_ROLES.includes(assignedRoleName.toLowerCase())) {
+      if (!user.branchId) {
+        throw new BadRequestException(
+          `Branch assignment is required for '${assignedRoleName}' role. ` +
+          `Please assign a branch before creating this user.`,
+        );
+      }
     }
 
     return this.usersRepository.save(user);
@@ -195,6 +222,15 @@ export class UsersService {
     if (!user) return null;
     const valid = await bcrypt.compare(password, user.password_hash);
     return valid ? user : null;
+  }
+
+  private async resolveRoleName(roleId: number | null, tenantId: number): Promise<string | null> {
+    if (!roleId) return null;
+    const rows = await this.usersRepository.manager.query(
+      `SELECT name FROM roles WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+      [roleId, tenantId],
+    );
+    return rows[0]?.name ?? null;
   }
 
   private async resolveRoleId(roleName: string, tenantId: number): Promise<number | null> {
