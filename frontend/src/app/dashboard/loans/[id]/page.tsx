@@ -101,7 +101,11 @@ export default function LoanDetailPage() {
     try {
       const res = await fetch(`${API_URL}/loans/${id}/approve`, {
         method: 'POST', headers: getH(),
-        body: JSON.stringify({ status: approveAction, comments: approveComment || undefined, policyReference: '2026-01-10' }),
+        body: JSON.stringify({
+          // Map to AdminApprovalDto: action='approve'|'reject', reason?
+          action: approveAction === 'approved' ? 'approve' : 'reject',
+          ...(approveComment ? { reason: approveComment } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Action failed');
