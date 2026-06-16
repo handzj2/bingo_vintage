@@ -10,7 +10,7 @@ import { AuthRequest }   from '../../common/helpers/role-helper';
 @ApiBearerAuth()
 @Controller('reports')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('admin', 'manager')
+@Roles('admin', 'manager', 'superadmin')
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 

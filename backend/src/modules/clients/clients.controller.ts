@@ -429,6 +429,14 @@ export class RegisterFullClientDto {
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
+  // REST standard route — POST /clients (used by ClientForm.tsx)
+  @Post()
+  @ApiOperation({ summary: 'Create a new client — REST standard route' })
+  async createClient(@Body() clientData: any) {
+    const transformedData = this.transformClientData(clientData);
+    return await this.clientsService.registerRider(transformedData);
+  }
+
   // Original endpoint
   @Post('register')
   @ApiOperation({ summary: 'Register a new rider with all KYC fields' })
