@@ -72,7 +72,7 @@ function SetNewPasswordInner() {
         // ── LEGACY FLOW: OTP login-based, uses JWT ──────────────
         // POST /auth/password-reset/set-new (requires Bearer JWT)
         const jwtToken = localStorage.getItem('access_token');
-        const res = await fetch(`${API}/auth/password-reset/set-new`, {
+        const res = await fetch(`${API}/auth/password-reset/set-new-password`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwtToken}` },
           body: JSON.stringify({ newPassword: newPass }),
