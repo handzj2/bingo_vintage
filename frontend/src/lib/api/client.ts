@@ -1,3 +1,4 @@
+// patch 2026-06-16T16:30: auto-hydrate token on init — fixes superadmin 401
 // src/lib/api/client.ts
 // fix: auto-append /api prefix — 2026-06-14
 // Ensure /api prefix is always present regardless of how env var is set

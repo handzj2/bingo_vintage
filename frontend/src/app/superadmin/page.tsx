@@ -1,3 +1,4 @@
+// patch 2026-06-16T16:30: hydrate token on mount — fixes stats disappearing on refresh
 // superadmin/page.tsx — platform dashboard
 // RBAC patch 2026-06-15: enterprise stats dashboard
 'use client';

@@ -1,3 +1,4 @@
+// patch 2026-06-16T16:30: superadmin panel link in sidebar footer
 // RBAC patch 2026-06-15: canView() superadmin/admin bypass; handles both permission formats
 // patch 2026-06-16: superadmin panel link added in sidebar footer
 'use client';
