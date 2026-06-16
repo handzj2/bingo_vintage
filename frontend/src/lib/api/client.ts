@@ -42,11 +42,14 @@ class ApiClient {
     }
     try {
       const res = await fetch(url, { ...options, headers });
-      const data = await res.json();
+      // 204 No Content has no body — res.json() would throw
+      const contentType = res.headers.get('content-type') ?? '';
+      const hasBody = res.status !== 204 && contentType.includes('application/json');
+      const data = hasBody ? await res.json() : {};
       return {
         success: res.ok,
         data: res.ok ? data : undefined,
-        message: !res.ok ? data.message || `HTTP ${res.status}` : undefined,
+        message: !res.ok ? (data.message || `HTTP ${res.status}`) : undefined,
         status: res.status,
       };
     } catch (error: any) {

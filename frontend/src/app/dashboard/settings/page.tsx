@@ -465,7 +465,16 @@ function UsersTab() {
     await (u.isActive ? api.patch(`/users/${u.id}/deactivate`, {}) : api.patch(`/users/${u.id}/activate`, {}));
     load();
   };
-  const deleteUser = async (u: any) => { await api.del(`/users/${u.id}`); setConfirmDel(null); load(); };
+  const deleteUser = async (u: any) => {
+    try {
+      await api.del(`/users/${u.id}`);
+      setConfirmDel(null);
+      // Small delay so backend completes before re-fetching
+      setTimeout(load, 300);
+    } catch (e: any) {
+      alert(e?.message ?? 'Failed to delete user');
+    }
+  };
 
   return (
     <div>
