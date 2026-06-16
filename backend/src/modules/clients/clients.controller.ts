@@ -430,10 +430,12 @@ export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
   // REST standard route — POST /clients (used by ClientForm.tsx)
+  // ClientForm sends snake_case fields (first_name, last_name)
+  // so we use transformFormClientData which handles that correctly
   @Post()
   @ApiOperation({ summary: 'Create a new client — REST standard route' })
   async createClient(@Body() clientData: any) {
-    const transformedData = this.transformClientData(clientData);
+    const transformedData = this.transformFormClientData(clientData);
     return await this.clientsService.registerRider(transformedData);
   }
 
