@@ -98,25 +98,31 @@ export class SafeSeedFixes1700000000020 implements MigrationInterface {
       END $$;
     `);
 
-    // ── STEP 4: Backfill app_settings for all tenants ────────────────────────
-    // Migration 004 only worked for tenant_id matching the slug.
-    // Any NEW tenant created via the superadmin portal also needs these defaults.
+    // ── STEP 4: Backfill app_settings — only if tenant_id column exists ────────
+    // Migration 021 adds tenant_id to app_settings when missing.
+    // If 021 has not run yet (e.g. running in order), skip this step safely.
     await queryRunner.query(`
-      INSERT INTO app_settings (key, value, tenant_id, created_at, updated_at)
-      SELECT
-        s.key, s.value, t.id, now(), now()
-      FROM tenants t
-      CROSS JOIN (VALUES
-        ('LOAN_INTEREST_RATE',       '0.15'),
-        ('loan.processing_fee',      '0'),
-        ('loan.default_term_months', '12'),
-        ('LOAN_LATE_FEE_RATE',       '0.05')
-      ) AS s(key, value)
-      WHERE t.is_active = true
-      AND NOT EXISTS (
-        SELECT 1 FROM app_settings a
-        WHERE a.tenant_id = t.id AND a.key = s.key
-      );
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'app_settings' AND column_name = 'tenant_id'
+        ) THEN
+          INSERT INTO app_settings (key, value, tenant_id, created_at, updated_at)
+          SELECT s.key, s.value, t.id, now(), now()
+          FROM tenants t
+          CROSS JOIN (VALUES
+            ('LOAN_INTEREST_RATE',       '0.15'),
+            ('loan.processing_fee',      '0'),
+            ('loan.default_term_months', '12'),
+            ('LOAN_LATE_FEE_RATE',       '0.05')
+          ) AS s(key, value)
+          WHERE t.is_active = true
+          AND NOT EXISTS (
+            SELECT 1 FROM app_settings a
+            WHERE a.tenant_id = t.id AND a.key = s.key
+          );
+        END IF;
+      END $$;
     `);
 
     // ── STEP 5: Backfill RBAC permissions for all tenant roles ───────────────

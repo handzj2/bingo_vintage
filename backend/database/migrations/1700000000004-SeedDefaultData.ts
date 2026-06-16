@@ -103,24 +103,53 @@ export class SeedDefaultData1700000000004 implements MigrationInterface {
     `);
 
     // ── DEFAULT APP SETTINGS ───────────────────────────────────────────────
-    // The app_settings table has a unique constraint on "key" alone, not on (key, tenant_id).
-    // Using ON CONFLICT (key) matches the actual constraint and makes the insert idempotent.
+    // Guard: only insert with tenant_id if the column exists.
+    // Migration 021 adds tenant_id when missing — run 021 first on legacy DBs.
     await queryRunner.query(`
-      INSERT INTO app_settings (key, value, tenant_id, created_at, updated_at)
-      VALUES
-        ('LOAN_INTEREST_RATE',      '0.15', (SELECT id FROM tenants WHERE slug='bingo-vintage' LIMIT 1), now(), now()),
-        ('loan.processing_fee',     '0',    (SELECT id FROM tenants WHERE slug='bingo-vintage' LIMIT 1), now(), now()),
-        ('loan.default_term_months','12',   (SELECT id FROM tenants WHERE slug='bingo-vintage' LIMIT 1), now(), now()),
-        ('LOAN_LATE_FEE_RATE',      '0.05', (SELECT id FROM tenants WHERE slug='bingo-vintage' LIMIT 1), now(), now())
-      ON CONFLICT (key, tenant_id) DO NOTHING;
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'app_settings' AND column_name = 'tenant_id'
+        ) THEN
+          INSERT INTO app_settings (key, value, tenant_id, created_at, updated_at)
+          VALUES
+            ('LOAN_INTEREST_RATE',      '0.15', (SELECT id FROM tenants WHERE slug='bingo-vintage' LIMIT 1), now(), now()),
+            ('loan.processing_fee',     '0',    (SELECT id FROM tenants WHERE slug='bingo-vintage' LIMIT 1), now(), now()),
+            ('loan.default_term_months','12',   (SELECT id FROM tenants WHERE slug='bingo-vintage' LIMIT 1), now(), now()),
+            ('LOAN_LATE_FEE_RATE',      '0.05', (SELECT id FROM tenants WHERE slug='bingo-vintage' LIMIT 1), now(), now())
+          ON CONFLICT (key, tenant_id) DO NOTHING;
+        ELSE
+          -- Fallback: no tenant_id column yet — insert without it
+          INSERT INTO app_settings (key, value, created_at, updated_at)
+          VALUES
+            ('LOAN_INTEREST_RATE',       '0.15', now(), now()),
+            ('loan.processing_fee',      '0',    now(), now()),
+            ('loan.default_term_months', '12',   now(), now()),
+            ('LOAN_LATE_FEE_RATE',       '0.05', now(), now())
+          ON CONFLICT (key) DO NOTHING;
+        END IF;
+      END $$;
     `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Revert seed data – intended only for dev/test environments.
-    await queryRunner.query(`DELETE FROM app_settings  WHERE tenant_id = 1;`);
-    await queryRunner.query(`DELETE FROM roles          WHERE tenant_id = 1;`);
-    await queryRunner.query(`DELETE FROM branches       WHERE id = 1;`);
-    await queryRunner.query(`DELETE FROM tenants        WHERE id = 1;`);
+    // Uses slug-based lookup so it works regardless of assigned id.
+    await queryRunner.query(`
+      DELETE FROM app_settings WHERE tenant_id IN (
+        SELECT id FROM tenants WHERE slug = 'bingo-vintage'
+      );
+    `);
+    await queryRunner.query(`
+      DELETE FROM roles WHERE tenant_id IN (
+        SELECT id FROM tenants WHERE slug = 'bingo-vintage'
+      );
+    `);
+    await queryRunner.query(`
+      DELETE FROM branches WHERE tenant_id IN (
+        SELECT id FROM tenants WHERE slug = 'bingo-vintage'
+      );
+    `);
+    await queryRunner.query(`DELETE FROM tenants WHERE slug = 'bingo-vintage';`);
   }
 }
