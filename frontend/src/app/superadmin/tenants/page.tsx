@@ -1,5 +1,5 @@
-// superadmin/tenants/page.tsx
-// RBAC patch 2026-06-15: enterprise tenant management portal
+// superadmin/tenants/page.tsx — full tenant onboarding + branch management
+// 2026-06-16: enterprise tenant portal with branch allocation
 'use client';
 import { useEffect, useState } from 'react';
 import { superadminApi } from '@/lib/api/superadmin';
@@ -9,16 +9,20 @@ interface Tenant {
   user_count: number; loan_count: number; created_at: string;
   contact_email?: string; contact_phone?: string; description?: string;
 }
-
+interface Branch {
+  id: number; name: string; location: string; is_active: boolean;
+  manager_name?: string; contact_phone?: string; created_at: string;
+}
 interface CreateForm {
   name: string; slug: string; description: string;
   adminUsername: string; adminEmail: string; adminPassword: string;
   contactEmail: string; contactPhone: string;
+  branchName: string; branchLocation: string;
 }
-
 const EMPTY: CreateForm = {
   name: '', slug: '', description: '', adminUsername: '',
   adminEmail: '', adminPassword: '', contactEmail: '', contactPhone: '',
+  branchName: 'Main Branch', branchLocation: '',
 };
 
 function StatusDot({ active }: { active: boolean }) {
@@ -32,15 +36,156 @@ function StatusDot({ active }: { active: boolean }) {
   );
 }
 
+function BranchPanel({ tenant, onClose }: { tenant: Tenant; onClose: () => void }) {
+  const [branches, setBranches]   = useState<Branch[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [showAdd, setShowAdd]     = useState(false);
+  const [form, setForm]           = useState({ name: '', location: '', managerName: '', contactPhone: '' });
+  const [saving, setSaving]       = useState(false);
+  const [toggling, setToggling]   = useState<number | null>(null);
+  const [error, setError]         = useState('');
+
+  const load = () => {
+    setLoading(true);
+    superadminApi.listBranches(tenant.id)
+      .then((d: any) => {
+        const data = d.data ?? d;
+        setBranches(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  };
+  useEffect(load, [tenant.id]);
+
+  const handleAdd = async () => {
+    if (!form.name.trim()) { setError('Branch name is required'); return; }
+    setSaving(true); setError('');
+    try {
+      await superadminApi.createBranch(tenant.id, form);
+      setForm({ name: '', location: '', managerName: '', contactPhone: '' });
+      setShowAdd(false);
+      load();
+    } catch (e: any) { setError(e?.message ?? 'Failed to create branch'); }
+    finally { setSaving(false); }
+  };
+
+  const toggleBranch = async (b: Branch) => {
+    setToggling(b.id);
+    try {
+      await (b.is_active ? superadminApi.deactivateBranch(b.id) : superadminApi.activateBranch(b.id));
+      load();
+    } catch {}
+    finally { setToggling(null); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+          <div>
+            <h2 className="text-lg font-black text-white">{tenant.name}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Branch Management · {branches.length} branch{branches.length !== 1 ? 'es' : ''}</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setShowAdd(true)}
+              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 rounded-lg text-xs font-bold transition">
+              + Add Branch
+            </button>
+            <button onClick={onClose}
+              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs font-bold transition">
+              Close
+            </button>
+          </div>
+        </div>
+
+        {/* Add Branch Form */}
+        {showAdd && (
+          <div className="px-6 py-4 bg-gray-800/50 border-b border-gray-800">
+            <h3 className="text-sm font-bold text-purple-300 mb-3">New Branch</h3>
+            {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                ['Branch Name *', 'name', 'text'],
+                ['Location / Address', 'location', 'text'],
+                ['Manager Name', 'managerName', 'text'],
+                ['Contact Phone', 'contactPhone', 'text'],
+              ].map(([label, field, type]) => (
+                <div key={field}>
+                  <label className="text-xs text-gray-400 mb-1 block">{label}</label>
+                  <input type={type}
+                    value={(form as any)[field]}
+                    onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-3">
+              <button onClick={handleAdd} disabled={saving}
+                className="px-4 py-1.5 bg-purple-600 hover:bg-purple-500 rounded-lg text-xs font-bold disabled:opacity-50 transition">
+                {saving ? 'Creating...' : 'Create Branch'}
+              </button>
+              <button onClick={() => { setShowAdd(false); setError(''); }}
+                className="px-4 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs font-bold transition">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Branch List */}
+        <div className="overflow-y-auto flex-1 p-6 space-y-2">
+          {loading ? (
+            [...Array(3)].map((_, i) => <div key={i} className="bg-gray-800 h-14 rounded-lg animate-pulse" />)
+          ) : branches.length === 0 ? (
+            <div className="text-center text-gray-500 py-12">
+              <p className="text-sm">No branches yet</p>
+              <p className="text-xs mt-1">Add a branch so cashiers can be assigned</p>
+            </div>
+          ) : branches.map(b => (
+            <div key={b.id} className="bg-gray-800 rounded-xl p-4 flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="font-bold text-white text-sm">{b.name}</span>
+                  <StatusDot active={b.is_active} />
+                </div>
+                <div className="text-xs text-gray-400 flex gap-2 flex-wrap">
+                  {b.location && <span>{b.location}</span>}
+                  {b.manager_name && <><span>·</span><span>Mgr: {b.manager_name}</span></>}
+                  {b.contact_phone && <><span>·</span><span>{b.contact_phone}</span></>}
+                </div>
+              </div>
+              <button
+                onClick={() => toggleBranch(b)}
+                disabled={toggling === b.id}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition disabled:opacity-50 ${
+                  b.is_active
+                    ? 'bg-red-900/40 hover:bg-red-800/60 text-red-300'
+                    : 'bg-green-900/40 hover:bg-green-800/60 text-green-300'
+                }`}>
+                {toggling === b.id ? '...' : b.is_active ? 'Deactivate' : 'Activate'}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TenantsPage() {
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm]         = useState<CreateForm>(EMPTY);
-  const [saving, setSaving]     = useState(false);
-  const [error, setError]       = useState('');
-  const [success, setSuccess]   = useState('');
-  const [toggling, setToggling] = useState<number | null>(null);
+  const [tenants, setTenants]     = useState<Tenant[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [showForm, setShowForm]   = useState(false);
+  const [form, setForm]           = useState<CreateForm>(EMPTY);
+  const [saving, setSaving]       = useState(false);
+  const [error, setError]         = useState('');
+  const [success, setSuccess]     = useState('');
+  const [toggling, setToggling]   = useState<number | null>(null);
+  const [branchTenant, setBranchTenant] = useState<Tenant | null>(null);
+  // Extra branches during onboarding
+  const [extraBranches, setExtraBranches] = useState<{name:string;location:string}[]>([]);
 
   const load = () => {
     setLoading(true);
@@ -52,7 +197,6 @@ export default function TenantsPage() {
       })
       .catch((e: any) => { setError(e?.message ?? 'Failed to load tenants'); setLoading(false); });
   };
-
   useEffect(load, []);
 
   const handleNameChange = (name: string) => {
@@ -62,16 +206,26 @@ export default function TenantsPage() {
     }));
   };
 
+  const addExtraBranch = () => setExtraBranches(b => [...b, { name: '', location: '' }]);
+  const removeExtraBranch = (i: number) => setExtraBranches(b => b.filter((_, j) => j !== i));
+  const updateExtraBranch = (i: number, field: string, val: string) =>
+    setExtraBranches(b => b.map((x, j) => j === i ? { ...x, [field]: val } : x));
+
   const handleCreate = async () => {
     if (!form.name || !form.slug || !form.adminUsername || !form.adminEmail || !form.adminPassword) {
       setError('Name, slug, admin username, email and password are required'); return;
     }
+    if (!form.branchName) { setError('Main branch name is required'); return; }
     setError(''); setSaving(true);
     try {
-      const res  = await superadminApi.createTenant(form);
+      const payload = {
+        ...form,
+        additionalBranches: extraBranches.filter(b => b.name.trim()),
+      };
+      const res   = await superadminApi.createTenant(payload);
       const data: any = res.data ?? res;
-      setSuccess(data.message ?? `Tenant "${form.name}" created successfully`);
-      setShowForm(false); setForm(EMPTY); load();
+      setSuccess(data.message ?? `Tenant "${form.name}" created with ${1 + extraBranches.filter(b=>b.name).length} branch(es)`);
+      setShowForm(false); setForm(EMPTY); setExtraBranches([]); load();
     } catch (e: any) { setError(e.message ?? 'Failed to create tenant'); }
     finally { setSaving(false); }
   };
@@ -85,12 +239,14 @@ export default function TenantsPage() {
     finally { setToggling(null); }
   };
 
-  const fields: [string, keyof CreateForm, string][] = [
+  const tenantFields: [string, keyof CreateForm, string][] = [
     ['Tenant Name *',    'name',          'text'    ],
     ['Slug *',           'slug',          'text'    ],
     ['Description',      'description',   'text'    ],
     ['Contact Email',    'contactEmail',  'email'   ],
     ['Contact Phone',    'contactPhone',  'text'    ],
+  ];
+  const adminFields: [string, keyof CreateForm, string][] = [
     ['Admin Username *', 'adminUsername', 'text'    ],
     ['Admin Email *',    'adminEmail',    'email'   ],
     ['Admin Password *', 'adminPassword', 'password'],
@@ -106,7 +262,7 @@ export default function TenantsPage() {
         </div>
         <button onClick={() => { setShowForm(true); setError(''); setSuccess(''); }}
           className="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-bold transition">
-          + New Tenant
+          + Onboard Tenant
         </button>
       </div>
 
@@ -124,61 +280,138 @@ export default function TenantsPage() {
         </div>
       )}
 
-      {/* Create form */}
+      {/* Onboarding Form */}
       {showForm && (
-        <div className="mb-6 bg-gray-800 rounded-xl p-6 border border-purple-700">
-          <h2 className="font-bold mb-1 text-purple-300 text-lg">Create New Tenant</h2>
-          <p className="text-xs text-gray-500 mb-5">An admin account will be created automatically for the new tenant.</p>
-          <div className="grid grid-cols-2 gap-4">
-            {fields.map(([label, field, type]) => (
-              <div key={field}>
-                <label className="text-xs text-gray-400 mb-1 block font-medium">{label}</label>
-                <input
-                  type={type}
-                  value={form[field]}
-                  onChange={e => {
-                    if (field === 'name') handleNameChange(e.target.value);
-                    else setForm(f => ({ ...f, [field]: e.target.value }));
-                  }}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-purple-500 text-white placeholder-gray-500"
-                />
+        <div className="mb-6 bg-gray-800 rounded-xl p-6 border border-purple-700 space-y-6">
+          <div>
+            <h2 className="font-black text-purple-300 text-lg mb-1">Onboard New Tenant</h2>
+            <p className="text-xs text-gray-500">Creates tenant, seeds all roles, creates admin account, and sets up branches.</p>
+          </div>
+
+          {/* Tenant Info */}
+          <div>
+            <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Tenant Details</h3>
+            <div className="grid grid-cols-2 gap-4">
+              {tenantFields.map(([label, field, type]) => (
+                <div key={field}>
+                  <label className="text-xs text-gray-400 mb-1 block font-medium">{label}</label>
+                  <input type={type} value={form[field]}
+                    onChange={e => field === 'name' ? handleNameChange(e.target.value) : setForm(f => ({ ...f, [field]: e.target.value }))}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Admin Account */}
+          <div>
+            <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Admin Account</h3>
+            <div className="grid grid-cols-2 gap-4">
+              {adminFields.map(([label, field, type]) => (
+                <div key={field}>
+                  <label className="text-xs text-gray-400 mb-1 block font-medium">{label}</label>
+                  <input type={type} value={form[field]}
+                    onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-amber-500 mt-2">⚠ Admin will be required to change password on first login.</p>
+          </div>
+
+          {/* Branch Setup */}
+          <div>
+            <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Branch Setup</h3>
+            <p className="text-xs text-gray-500 mb-3">At least one branch is required. Cashiers must be assigned to a branch.</p>
+
+            {/* Main Branch */}
+            <div className="bg-gray-700/50 rounded-lg p-4 mb-3 border border-gray-600">
+              <p className="text-xs font-bold text-purple-300 mb-2">Main Branch *</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-400 mb-1 block">Branch Name *</label>
+                  <input value={form.branchName}
+                    onChange={e => setForm(f => ({ ...f, branchName: e.target.value }))}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+                    placeholder="e.g. Main Branch"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1 block">Location / Address</label>
+                  <input value={form.branchLocation}
+                    onChange={e => setForm(f => ({ ...f, branchLocation: e.target.value }))}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+                    placeholder="e.g. Kampala, Uganda"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Additional Branches */}
+            {extraBranches.map((b, i) => (
+              <div key={i} className="bg-gray-700/30 rounded-lg p-4 mb-3 border border-gray-700">
+                <div className="flex justify-between items-center mb-2">
+                  <p className="text-xs font-bold text-gray-400">Branch {i + 2}</p>
+                  <button onClick={() => removeExtraBranch(i)}
+                    className="text-xs text-red-400 hover:text-red-300">Remove</button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-400 mb-1 block">Branch Name *</label>
+                    <input value={b.name} onChange={e => updateExtraBranch(i, 'name', e.target.value)}
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 mb-1 block">Location</label>
+                    <input value={b.location} onChange={e => updateExtraBranch(i, 'location', e.target.value)}
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
               </div>
             ))}
-          </div>
-          <div className="flex gap-3 mt-5">
-            <button onClick={handleCreate} disabled={saving}
-              className="px-5 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-bold transition disabled:opacity-50">
-              {saving ? 'Creating...' : 'Create Tenant'}
+
+            <button onClick={addExtraBranch}
+              className="text-xs text-purple-400 hover:text-purple-300 font-bold transition">
+              + Add Another Branch
             </button>
-            <button onClick={() => { setShowForm(false); setForm(EMPTY); setError(''); }}
-              className="px-5 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-bold transition">
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-2 border-t border-gray-700">
+            <button onClick={handleCreate} disabled={saving}
+              className="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-bold transition disabled:opacity-50">
+              {saving ? 'Creating...' : '✓ Create Tenant & Branches'}
+            </button>
+            <button onClick={() => { setShowForm(false); setForm(EMPTY); setExtraBranches([]); setError(''); }}
+              className="px-6 py-2.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-bold transition">
               Cancel
             </button>
           </div>
         </div>
       )}
 
-      {/* Tenant list */}
+      {/* Tenant List */}
       {loading ? (
         <div className="space-y-3">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="bg-gray-800 rounded-xl h-20 animate-pulse" />
-          ))}
+          {[...Array(3)].map((_, i) => <div key={i} className="bg-gray-800 rounded-xl h-20 animate-pulse" />)}
         </div>
       ) : tenants.length === 0 ? (
-        <div className="text-center text-gray-500 py-16">No tenants found</div>
+        <div className="text-center text-gray-500 py-16">No tenants yet. Onboard your first tenant above.</div>
       ) : (
         <div className="space-y-3">
           {tenants.map(t => (
             <div key={t.id}
               className="bg-gray-800 border border-gray-700/50 rounded-xl p-5 flex items-center gap-4 hover:border-gray-600 transition">
-              {/* Info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3 mb-1">
                   <span className="font-bold text-white">{t.name}</span>
                   <StatusDot active={t.is_active} />
                 </div>
-                <div className="text-xs text-gray-400 flex gap-3">
+                <div className="text-xs text-gray-400 flex gap-3 flex-wrap">
                   <span>/{t.slug}</span>
                   <span>·</span>
                   <span>{t.user_count ?? 0} users</span>
@@ -187,27 +420,30 @@ export default function TenantsPage() {
                   {t.contact_email && <><span>·</span><span>{t.contact_email}</span></>}
                 </div>
               </div>
-              {/* Date */}
               <div className="text-xs text-gray-500 flex-shrink-0">
                 {new Date(t.created_at).toLocaleDateString()}
               </div>
-              {/* Actions */}
               <div className="flex gap-2 flex-shrink-0">
-                <button
-                  onClick={() => toggle(t)}
-                  disabled={toggling === t.id}
+                <button onClick={() => setBranchTenant(t)}
+                  className="px-3 py-1.5 bg-purple-900/40 hover:bg-purple-800/60 text-purple-300 rounded-lg text-xs font-bold transition">
+                  Branches
+                </button>
+                <button onClick={() => toggle(t)} disabled={toggling === t.id}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition disabled:opacity-50 ${
                     t.is_active
                       ? 'bg-red-900/40 hover:bg-red-800/60 text-red-300'
                       : 'bg-green-900/40 hover:bg-green-800/60 text-green-300'
                   }`}>
-                  {toggling === t.id ? '...' : (t.is_active ? 'Deactivate' : 'Activate')}
+                  {toggling === t.id ? '...' : t.is_active ? 'Deactivate' : 'Activate'}
                 </button>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Branch Management Modal */}
+      {branchTenant && <BranchPanel tenant={branchTenant} onClose={() => setBranchTenant(null)} />}
     </div>
   );
 }

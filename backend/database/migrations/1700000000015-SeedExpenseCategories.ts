@@ -11,27 +11,37 @@ export class SeedExpenseCategories1700000000015 implements MigrationInterface {
   name = 'SeedExpenseCategories1700000000015';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    // Fixed: uses dynamic tenant lookup instead of hardcoded id=1
+    // Safe to run on any database regardless of tenant sequence id
     await queryRunner.query(`
       INSERT INTO expense_categories (tenant_id, name, description, created_at)
-      VALUES
-        (1, 'Utilities',    'Electricity, water, internet',        now()),
-        (1, 'Rent',         'Office or branch rent',               now()),
-        (1, 'Maintenance',  'Bike and office maintenance',         now()),
-        (1, 'Salaries',     'Staff salaries and wages',            now()),
-        (1, 'Transport',    'Fuel, transport, logistics',          now()),
-        (1, 'Office',       'Stationery and office supplies',      now()),
-        (1, 'Marketing',    'Advertising and promotions',          now()),
-        (1, 'Other',        'Miscellaneous expenses',              now())
-      ON CONFLICT DO NOTHING
+      SELECT t.id, c.name, c.description, now()
+      FROM tenants t
+      CROSS JOIN (VALUES
+        ('Utilities',   'Electricity, water, internet'),
+        ('Rent',        'Office or branch rent'),
+        ('Maintenance', 'Bike and office maintenance'),
+        ('Salaries',    'Staff salaries and wages'),
+        ('Transport',   'Fuel, transport, logistics'),
+        ('Office',      'Stationery and office supplies'),
+        ('Marketing',   'Advertising and promotions'),
+        ('Other',       'Miscellaneous expenses')
+      ) AS c(name, description)
+      WHERE t.is_active = true
+      AND NOT EXISTS (
+        SELECT 1 FROM expense_categories ec
+        WHERE ec.tenant_id = t.id AND ec.name = c.name
+      )
     `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    // Remove seeded categories from all tenants — slug-based to avoid hardcoded ids
     await queryRunner.query(`
       DELETE FROM expense_categories
-       WHERE tenant_id = 1
-         AND name IN ('Utilities','Rent','Maintenance','Salaries',
+       WHERE name IN ('Utilities','Rent','Maintenance','Salaries',
                       'Transport','Office','Marketing','Other')
+         AND tenant_id IN (SELECT id FROM tenants WHERE is_active = true)
     `);
   }
 }

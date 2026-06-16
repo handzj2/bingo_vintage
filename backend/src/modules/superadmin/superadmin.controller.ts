@@ -61,6 +61,34 @@ export class SuperAdminController {
     return this.svc.impersonate(dto, req.user.id);
   }
 
+  @Get('tenants/:id/branches')
+  @ApiOperation({ summary: 'List branches for a tenant' })
+  listBranches(@Param('id', ParseIntPipe) id: number) {
+    return this.svc.listTenantBranches(id);
+  }
+
+  @Post('tenants/:id/branches')
+  @ApiOperation({ summary: 'Create a branch for a tenant' })
+  createBranch(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() data: { name: string; location?: string; managerName?: string; contactPhone?: string },
+    @Request() req: AuthRequest,
+  ) {
+    return this.svc.createBranch(id, data, req.user.id);
+  }
+
+  @Patch('branches/:id/activate')
+  @ApiOperation({ summary: 'Activate a branch' })
+  activateBranch(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
+    return this.svc.toggleBranch(id, true, req.user.id);
+  }
+
+  @Patch('branches/:id/deactivate')
+  @ApiOperation({ summary: 'Deactivate a branch' })
+  deactivateBranch(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
+    return this.svc.toggleBranch(id, false, req.user.id);
+  }
+
   @Get('audit-logs')
   @ApiOperation({ summary: 'View all audit logs' })
   auditLogs(

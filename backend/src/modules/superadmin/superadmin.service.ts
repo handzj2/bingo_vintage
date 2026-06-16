@@ -78,7 +78,26 @@ export class SuperAdminService {
         roleIds[name] = res[0].id;
       }
 
-      // 3. Create tenant admin user
+      // 3. Seed default Main Branch
+      const branchResult = await em.query(
+        `INSERT INTO branches (tenant_id, name, location, is_active, created_at, updated_at)
+         VALUES ($1, $2, $3, true, NOW(), NOW()) RETURNING id`,
+        [savedTenant.id, dto.branchName || 'Main Branch', dto.branchLocation || ''],
+      );
+      const branchId = branchResult[0].id;
+
+      // Seed additional branches if provided
+      if (dto.additionalBranches && dto.additionalBranches.length > 0) {
+        for (const b of dto.additionalBranches) {
+          await em.query(
+            `INSERT INTO branches (tenant_id, name, location, is_active, created_at, updated_at)
+             VALUES ($1, $2, $3, true, NOW(), NOW())`,
+            [savedTenant.id, b.name, b.location || ''],
+          );
+        }
+      }
+
+      // 4. Create tenant admin user
       const hash = await bcrypt.hash(dto.adminPassword, 10);
       await em.query(
         `INSERT INTO users
@@ -165,6 +184,43 @@ export class SuperAdminService {
     }));
 
     return { token, username: user.username, expiresIn: '15m' };
+  }
+
+  // ── Branch management ────────────────────────────────────────────────────
+  async listTenantBranches(tenantId: number) {
+    return this.dataSource.query(`
+      SELECT id, name, location, is_active, manager_name, contact_phone, created_at
+      FROM branches WHERE tenant_id = $1 ORDER BY name ASC
+    `, [tenantId]);
+  }
+
+  async createBranch(tenantId: number, data: {
+    name: string; location?: string; managerName?: string; contactPhone?: string;
+  }, superAdminId: number) {
+    const res = await this.dataSource.query(
+      `INSERT INTO branches (tenant_id, name, location, manager_name, contact_phone, is_active, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,true,NOW(),NOW()) RETURNING *`,
+      [tenantId, data.name, data.location ?? '', data.managerName ?? '', data.contactPhone ?? ''],
+    );
+    await this.auditRepo.save(this.auditRepo.create({
+      action: 'SUPERADMIN_CREATE_BRANCH', tableName: 'branches',
+      recordId: res[0].id, user: String(superAdminId),
+      description: `Branch "${data.name}" created for tenant ${tenantId}`,
+    }));
+    return res[0];
+  }
+
+  async toggleBranch(branchId: number, isActive: boolean, superAdminId: number) {
+    await this.dataSource.query(
+      `UPDATE branches SET is_active=$1, updated_at=NOW() WHERE id=$2`,
+      [isActive, branchId],
+    );
+    await this.auditRepo.save(this.auditRepo.create({
+      action: isActive ? 'SUPERADMIN_ACTIVATE_BRANCH' : 'SUPERADMIN_DEACTIVATE_BRANCH',
+      tableName: 'branches', recordId: branchId, user: String(superAdminId),
+      description: `Branch ${branchId} ${isActive ? 'activated' : 'deactivated'}`,
+    }));
+    return { success: true, isActive };
   }
 
   // ── Audit log viewer ──────────────────────────────────────────────────────

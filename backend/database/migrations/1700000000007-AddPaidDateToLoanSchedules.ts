@@ -1,6 +1,8 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class AddPaidDateToLoanSchedules1700000000007 implements MigrationInterface {
+  name = 'AddPaidDateToLoanSchedules1700000000007';
+
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       ALTER TABLE "loan_schedules"
