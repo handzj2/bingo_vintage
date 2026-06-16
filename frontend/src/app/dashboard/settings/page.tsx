@@ -22,7 +22,11 @@ const api = {
   async post(p: string, b: any)  { const r = await fetch(`${API_URL}${p}`, { method:'POST',   headers: this.h(), body: JSON.stringify(b) }); return r.json(); },
   async patch(p: string, b: any) { const r = await fetch(`${API_URL}${p}`, { method:'PATCH',  headers: this.h(), body: JSON.stringify(b) }); return r.json(); },
   async put(p: string, b: any)   { const r = await fetch(`${API_URL}${p}`, { method:'PUT',    headers: this.h(), body: JSON.stringify(b) }); return r.json(); },
-  async del(p: string)           { const r = await fetch(`${API_URL}${p}`, { method:'DELETE', headers: this.h() }); return r.json(); },
+  async del(p: string)           {
+    const r = await fetch(`${API_URL}${p}`, { method:'DELETE', headers: this.h() });
+    if (r.status === 204 || r.headers.get('content-length') === '0') return { success: true };
+    try { return await r.json(); } catch { return { success: r.ok }; }
+  },
 };
 
 // Role names — IDs are loaded dynamically from /api/roles to avoid hardcoded ID assumptions
@@ -169,7 +173,7 @@ function UserFormModal({ user, onClose, onSaved }: any) {
     username:  user?.username || '',
     email:     user?.email || '',
     full_name: user?.fullName || user?.full_name || '',
-    role:      getRole(user) || 'cashier',
+    role:      (user ? getRole(user) : 'cashier'),
     branch_id: user?.branchId || user?.branch_id || '',
     password:  '',
   });
@@ -352,7 +356,7 @@ function PermissionsModal({ user, onClose, onSaved }: any) {
   };
 
   const customised = PERMISSION_GROUPS.flatMap(g => g.permissions).filter(p => {
-    const isDefault = p.defaults.includes(user.role);
+    const isDefault = p.defaults.includes(getRole(user));
     return perms[p.key] !== isDefault;
   });
 
@@ -456,14 +460,20 @@ function UsersTab() {
 
   const load = async () => {
     setLoading(true);
-    try { const r = await api.get('/users'); setUsers(Array.isArray(r) ? r : r.data || []); }
+    try {
+      const r = await api.get('/users');
+      const data = Array.isArray(r) ? r : (r?.data ?? []);
+      setUsers(Array.isArray(data) ? data : []);
+    } catch { setUsers([]); }
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
 
   const toggleActive = async (u: any) => {
-    await (u.isActive ? api.patch(`/users/${u.id}/deactivate`, {}) : api.patch(`/users/${u.id}/activate`, {}));
-    load();
+    try {
+      await (u.isActive ? api.patch(`/users/${u.id}/deactivate`, {}) : api.patch(`/users/${u.id}/activate`, {}));
+      load();
+    } catch (e: any) { alert(e?.message ?? 'Failed to update user status'); }
   };
   const deleteUser = async (u: any) => {
     try {
@@ -494,7 +504,9 @@ function UsersTab() {
       ) : (
         <div className="space-y-3">
           {users.map(u => {
-            const customCount = Object.keys(u.permissions || {}).length;
+            const rawPerms = u.permissions;
+            const customCount = (rawPerms && typeof rawPerms === 'object' && !Array.isArray(rawPerms))
+              ? Object.keys(rawPerms).length : 0;
             return (
               <div key={u.id}
                 className={`bg-white border rounded-xl p-4 flex items-center gap-4 transition-all ${!u.isActive ? 'opacity-55 border-gray-100' : 'border-gray-100 hover:shadow-sm'}`}>
@@ -504,7 +516,7 @@ function UsersTab() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-gray-900 text-sm">{u.fullName || u.username}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${ROLE_COLORS[u.role] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>{u.role}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${ROLE_COLORS[getRole(u)] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>{getRole(u)}</span>
                     {!u.isActive && <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 border border-gray-200">Inactive</span>}
                     {customCount > 0 && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 flex items-center gap-1">
