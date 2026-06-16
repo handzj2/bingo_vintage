@@ -1,3 +1,4 @@
+// patch 2026-06-16: superadmin redirected to /superadmin after login
 // fix: read roleName from /me response — admin access restored 2026-06-14
 // build-fix: AuthContext — types corrected 2026-06-14
 // RBAC patch 2026-06-15: can() supports string[] and Record<string,boolean>; permissions normalized
@@ -240,7 +241,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Pass true so any 401 (e.g. cashier missing branchId) surfaces as a login error
       await refreshUser(true);
 
-      router.push(mappedUser.mustChangePassword ? '/auth/set-new-password' : '/dashboard');
+      // Superadmin goes to the platform portal, all other roles go to tenant dashboard
+      const dest = mappedUser.mustChangePassword
+        ? '/auth/set-new-password'
+        : mappedUser.role === 'superadmin' ? '/superadmin' : '/dashboard';
+      router.push(dest);
     },
     [persistUser, refreshUser, router],
   );
