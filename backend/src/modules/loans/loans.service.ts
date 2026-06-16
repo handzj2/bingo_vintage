@@ -128,8 +128,12 @@ export class LoansService {
       const client = await em.findOne(Client, { where: { id: clientId } });
       if (!client) throw new NotFoundException('Client not found');
 
-      const annualRate    = interestRate ?? await this.settingsService.getNumber('LOAN_INTEREST_RATE', 0.15);
-      const processingFee = await this.settingsService.getNumber('loan.processing_fee', 0);
+      // Option A: use tenant-specific rate with global fallback
+      const loanTenantId  = user?.tenantId ?? client.tenantId;
+      const annualRate    = interestRate ??
+        await this.settingsService.getNumberForTenant('LOAN_INTEREST_RATE', loanTenantId, 0.15);
+      const processingFee =
+        await this.settingsService.getNumberForTenant('loan.processing_fee', loanTenantId, 0);
       const loanTerm      = months;
 
       const { totalPayable } = this.calculateFlatInterest(amount, loanTerm, annualRate);

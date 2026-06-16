@@ -2,6 +2,7 @@ import {
   Injectable, NotFoundException, ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { SettingsService } from '../settings/settings.service';
 import { Repository, DataSource } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -14,6 +15,7 @@ import { ImpersonateDto }  from './dto/impersonate.dto';
 @Injectable()
 export class SuperAdminService {
   constructor(
+    private readonly settingsService: SettingsService,
     @InjectRepository(Tenant) private tenantRepo: Repository<Tenant>,
     @InjectRepository(User)   private userRepo:   Repository<User>,
     @InjectRepository(Audit)  private auditRepo:  Repository<Audit>,
@@ -97,7 +99,10 @@ export class SuperAdminService {
         }
       }
 
-      // 4. Create tenant admin user
+      // 4. Seed default settings for this tenant
+      await this.settingsService.seedForTenant(savedTenant.id);
+
+      // 5. Create tenant admin user
       const hash = await bcrypt.hash(dto.adminPassword, 10);
       await em.query(
         `INSERT INTO users

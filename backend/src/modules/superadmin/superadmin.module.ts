@@ -10,9 +10,11 @@ import { Audit }   from '../audit/entities/audit-log.entity';
 
 @Module({
   imports: [
+    SettingsModule,
     TypeOrmModule.forFeature([Tenant, User, Audit]),
     JwtModule.registerAsync({
-      imports: [ConfigModule],
+      imports: [
+    SettingsModule,ConfigModule],
       inject:  [ConfigService],
       useFactory: (cs: ConfigService) => ({
         secret:      cs.get('JWT_SECRET'),

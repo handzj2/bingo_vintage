@@ -1,9 +1,12 @@
-import { Controller, Get, Patch, Body, Param, UseGuards } from '@nestjs/common';
+// Option A: tenant-scoped settings controller
+// 2026-06-16: GET and PATCH scoped to requesting user's tenant
+import { Controller, Get, Patch, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { JwtAuthGuard }  from '../auth/guards/jwt-auth.guard';
+import { RolesGuard }    from '../auth/guards/roles.guard';
+import { Roles }         from '../auth/decorators/roles.decorator';
 import { SettingsService } from './settings.service';
+import { AuthRequest }   from '../auth/strategies/jwt.strategy';
 
 @ApiTags('System Settings')
 @ApiBearerAuth('JWT-auth')
@@ -13,15 +16,24 @@ export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Retrieve all system-wide settings' })
-  async getAll() {
-    return await this.settingsService.getAllSettings();
+  @ApiOperation({ summary: 'Get all settings for the requesting user tenant' })
+  async getAll(@Request() req: AuthRequest) {
+    const tenantId = req.user?.tenantId;
+    // Superadmin (tenantId=null) sees global settings
+    // All other users see their tenant's merged settings
+    if (!tenantId) return this.settingsService.getAllForTenant(null);
+    return this.settingsService.getAllForTenant(tenantId);
   }
 
   @Patch(':key')
-  @Roles('admin') // 🔐 Only Admin can modify global rates [cite: 2026-01-10]
-  @ApiOperation({ summary: 'Admin-only: Update a specific system setting' })
-  async update(@Param('key') key: string, @Body('value') value: string) {
-    return await this.settingsService.updateSetting(key, value);
+  @Roles('admin', 'superadmin')
+  @ApiOperation({ summary: 'Update a setting for the requesting user tenant' })
+  async update(
+    @Param('key') key: string,
+    @Body('value') value: string,
+    @Request() req: AuthRequest,
+  ) {
+    const tenantId = req.user?.tenantId ?? null;
+    return this.settingsService.updateSetting(key, value, tenantId ?? undefined);
   }
 }

@@ -141,7 +141,23 @@ export class AppSettingsTenantSupport1700000000021 implements MigrationInterface
       END $$;
     `);
 
-    // ── STEP 6: Backfill defaults for tenants that have no settings ───────────
+    // ── STEP 6a: Seed global NULL rows as platform-level fallbacks ─────────────
+    // These are the getSetting() fallback used by SMS and any code that
+    // calls the legacy global API. Must exist even if no tenants do.
+    await queryRunner.query(`
+      INSERT INTO app_settings (key, value, tenant_id, created_at, updated_at)
+      VALUES
+        ('LOAN_INTEREST_RATE',       '0.15', NULL, now(), now()),
+        ('LATE_FEE_DAILY',           '1000', NULL, now(), now()),
+        ('loan.processing_fee',      '0',    NULL, now(), now()),
+        ('loan.default_term_months', '12',   NULL, now(), now()),
+        ('LOAN_LATE_FEE_RATE',       '0.05', NULL, now(), now()),
+        ('ENABLE_SMS',               'false',NULL, now(), now()),
+        ('SMS_PROVIDER',             'africas_talking', NULL, now(), now())
+      ON CONFLICT (key, tenant_id) DO NOTHING;
+    `);
+
+    // ── STEP 6b: Backfill per-tenant defaults for existing active tenants ───────
     await queryRunner.query(`
       INSERT INTO app_settings (key, value, tenant_id, created_at, updated_at)
       SELECT s.key, s.value, t.id, now(), now()
