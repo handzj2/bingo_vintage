@@ -28,9 +28,10 @@ export default function AddBikePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Redirect non-admin users
-  if (!authLoading && (!user || user.role !== 'admin')) {
-    router.replace('/dashboard');
+  // Guard: only admin and manager can add bikes
+  const role3 = (user?.role ?? '').toLowerCase();
+  if (!authLoading && user && !['admin','superadmin','manager'].includes(role3)) {
+    router.replace('/dashboard/inventory');
     return null;
   }
 

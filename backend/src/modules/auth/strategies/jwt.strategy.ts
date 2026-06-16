@@ -59,14 +59,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
          u.branch_id             AS "branchId",
          u.must_change_password  AS "mustChangePassword",
          r.name                  AS "roleName",
-         STRING_AGG(rp.permission_code, ',' ORDER BY rp.permission_code) AS "permCodes"
+         STRING_AGG(rp.permission_code, ',' ORDER BY rp.permission_code) AS "permCodes",
+         u.permissions                                                     AS "permOverrides"
        FROM   users u
        LEFT   JOIN roles r             ON r.id  = u.role_id
        LEFT   JOIN role_permissions rp ON rp.role_id = u.role_id
        WHERE  u.id = $1
        GROUP  BY u.id, u.username, u.email, u.is_active,
                  u.role_id, u.tenant_id, u.branch_id,
-                 u.must_change_password, r.name`,
+                 u.must_change_password, r.name, u.permissions`,
       [payload.sub],
     );
 
@@ -101,9 +102,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       );
     }
 
-    const permissionSet = new Set<string>(
-      row.permCodes ? row.permCodes.split(',').filter(Boolean) : [],
-    );
+    // Start with role-based permissions from role_permissions table
+    const baseCodes = row.permCodes ? row.permCodes.split(',').filter(Boolean) : [];
+    // Merge JSONB per-user overrides: { 'loan.approve': true } grants extra,
+    // { 'client.view': false } revokes from the role default
+    const overrides: Record<string, boolean> = row.permOverrides ?? {};
+    const mergedCodes = new Set<string>(baseCodes);
+    for (const [code, granted] of Object.entries(overrides)) {
+      if (granted) mergedCodes.add(code);
+      else         mergedCodes.delete(code);
+    }
+    const permissionSet = mergedCodes;
 
     return {
       id:       row.id,

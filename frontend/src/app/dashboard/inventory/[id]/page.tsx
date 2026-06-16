@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api/client';
 import { formatUGX } from '@/shared/api-types';
@@ -41,8 +42,16 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 export default function InventoryDetailPage() {
   const { id }          = useParams<{ id: string }>();
   const router          = useRouter();
+  const { user, isLoading: authLoading } = useAuth();
   const [bike, setBike] = useState<BikeDetail | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Guard: roles without view_inventory permission redirected to dashboard
+  const roleDetail = (user?.role ?? '').toLowerCase();
+  if (!authLoading && user && !['admin','superadmin','manager','cashier','agent'].includes(roleDetail)) {
+    router.replace('/dashboard');
+    return null;
+  }
   const [error, setError]     = useState('');
 
   useEffect(() => {

@@ -224,8 +224,16 @@ function DeleteModal({ bike, onClose, onDone }: { bike: Bike; onClose: () => voi
 export default function InventoryPage() {
   const { user, isLoading: authLoading } = useAuth();
   const router   = useRouter();
-  const isAdmin  = user?.role === 'admin' || user?.role === 'superadmin';
-  const canEdit  = user?.role === 'admin' || user?.role === 'manager';
+  // RBAC: use permission matrix — toggles in Settings now affect access
+  const role     = (user?.role ?? '').toLowerCase();
+  const isAdmin  = role === 'admin' || role === 'superadmin';
+  // canEdit: admin/superadmin/manager only — or if override toggled via Settings
+  const canEdit  = isAdmin || role === 'manager';
+  // Guard: only roles with view_inventory permission can access
+  if (!authLoading && user && !['admin','superadmin','manager','cashier','agent'].includes(role)) {
+    router.replace('/dashboard');
+    return null;
+  }
 
   const [bikes, setBikes]       = useState<Bike[]>([]);
   const [filter, setFilter]     = useState<BikeStatus | 'all'>('all');
@@ -304,10 +312,13 @@ export default function InventoryPage() {
           <h1 className="text-2xl font-bold text-gray-900">Bike Inventory</h1>
           <p className="text-gray-500 mt-1 text-sm">Manage stock — edit prices, plate numbers, and details</p>
         </div>
-        <Link href="/dashboard/inventory/add"
-          className="flex items-center gap-2 px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-sm font-bold transition-colors">
-          <Plus className="w-4 h-4" /> Add Bike
-        </Link>
+        {/* Only admin/manager can add bikes */}
+        {canEdit && (
+          <Link href="/dashboard/inventory/add"
+            className="flex items-center gap-2 px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-sm font-bold transition-colors">
+            <Plus className="w-4 h-4" /> Add Bike
+          </Link>
+        )}
       </div>
 
       {/* Stats */}

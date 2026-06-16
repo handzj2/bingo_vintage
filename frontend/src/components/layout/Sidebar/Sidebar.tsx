@@ -41,14 +41,23 @@ const ALL_NAV = [
 ];
 
 // Map sidebar nav keys to backend permission codes
+// Maps sidebar nav permKey → backend permission code
+// Used when user.permissions is string[] (from /auth/me after JWT merge)
 const NAV_TO_BACKEND: Record<string, string> = {
-  'view_clients':   'client.view',
-  'view_loans':     'loan.view',
-  'view_payments':  'payment.view',
-  'view_reports':   'report.view',
-  'view_expenses':  'expense.create',
-  'expense.approve':'expense.approve',
-  'drawer.manage':  'drawer.manage',
+  'view_dashboard':  'view_dashboard',   // no backend code — role default only
+  'view_clients':    'client.view',
+  'view_loans':      'loan.view',
+  'view_payments':   'payment.view',
+  'view_inventory':  'view_inventory',   // no backend code — role default only
+  'view_expenses':   'expense.create',
+  'expense.approve': 'expense.approve',
+  'view_finance':    'drawer.manage',
+  'view_schedules':  'view_schedules',   // no backend code — role default only
+  'view_reports':    'report.view',
+  'view_audit':      'view_audit',       // no backend code — role default only
+  'view_reversals':  'payment.reverse',
+  'view_settings':   'settings.manage',
+  'drawer.manage':   'drawer.manage',
 };
 
 function canView(user: any, permKey: string, defaultRoles: string[]): boolean {
@@ -58,9 +67,11 @@ function canView(user: any, permKey: string, defaultRoles: string[]): boolean {
   if (role === 'superadmin' || role === 'admin') return true;
   const perms = user.permissions;
   if (!perms) return defaultRoles.includes(role);
-  // string[] — permissions from /auth/me (backend codes like 'loan.view')
+  // string[] — permissions from /auth/me (backend codes merged with JSONB overrides)
   if (Array.isArray(perms)) {
-    const backendCode = NAV_TO_BACKEND[permKey] ?? permKey;
+    const backendCode = NAV_TO_BACKEND[permKey];
+    // If no backend code exists for this nav item, fall back to role default
+    if (!backendCode || backendCode === permKey) return defaultRoles.includes(role);
     return perms.includes(backendCode);
   }
   // Record<string,boolean> — custom JSONB overrides from Settings page
