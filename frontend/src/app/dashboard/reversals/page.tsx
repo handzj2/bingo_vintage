@@ -283,8 +283,9 @@ function AdminReviewModal({ payment, onClose, onSuccess }: { payment: any; onClo
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function ReversalsPage() {
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'admin' || user?.role === 'manager';
+  const { user, can } = useAuth();
+  const role    = (user?.role ?? '').toLowerCase();
+  const isAdmin = role === 'admin' || role === 'manager' || role === 'superadmin' || can('payment.reverse');
 
   const [payments,   setPayments]   = useState<any[]>([]);
   const [nextCursor, setNextCursor] = useState<number | null>(null);

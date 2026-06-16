@@ -921,11 +921,16 @@ const TABS = [
 ];
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const [activeTab, setActiveTab] = useState('users');
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
-  if (!isAdmin) {
+  // Access: admin/superadmin always allowed.
+  // Manager (or any role) allowed if settings.manage toggle was granted via Settings.
+  const role     = (user?.role ?? '').toLowerCase();
+  const isAdmin  = role === 'admin' || role === 'superadmin';
+  const hasAccess = isAdmin || can('settings.manage');
+
+  if (!hasAccess) {
     return (
       <div className="p-8 flex items-center justify-center min-h-[60vh]">
         <div className="text-center">

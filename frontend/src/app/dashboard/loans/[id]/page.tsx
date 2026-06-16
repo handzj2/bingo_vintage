@@ -40,10 +40,13 @@ const SCHED_STATUS: Record<string, { cls: string; dot: string }> = {
 export default function LoanDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router  = useRouter();
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
-  const isManager = user?.role === 'manager';
-  const canApprove = isAdmin;
+  const { user, can } = useAuth();
+  const role       = (user?.role ?? '').toLowerCase();
+  const isAdmin    = role === 'admin' || role === 'superadmin';
+  // Permission-based access — respects Settings toggles for any role
+  const canApprove = isAdmin || role === 'manager' || can('loan.approve');
+  const canEdit    = isAdmin || role === 'manager' || can('loan.create');
+  const canReverse = isAdmin || can('payment.reverse');
 
   const [loan, setLoan]               = useState<any>(null);
   const [sched, setSched]             = useState<any>(null);

@@ -26,7 +26,8 @@ export default function ExpenseApprovalPage() {
   const [processing, setProcessing] = useState<number | null>(null);
   const [message, setMessage]   = useState('');
 
-  const canApprove = can('expense.approve') || user?.role === 'admin' || user?.role === 'manager' || user?.role === 'superadmin';
+  const role2      = (user?.role ?? '').toLowerCase();
+  const canApprove = ['admin','manager','superadmin'].includes(role2) || can('expense.approve');
 
   useEffect(() => { loadPending(); }, []);
 

@@ -620,9 +620,14 @@ function ReverseModal({ payment, onClose, onSaved, isAdmin }: {
 
 // ── Main Page ─────────────────────────────────────────────────
 function PaymentsPageInner() {
-  const { user } = useAuth();
-  // FIX 6: determine admin status to pass to ReverseModal
-  const isAdmin = user?.role === 'admin' || user?.role === 'manager';
+  const { user, can } = useAuth();
+  const role      = (user?.role ?? '').toLowerCase();
+  // canReverse: direct reversal (admin route). canRecord: create payment.
+  // Both respond to Settings toggles for any role.
+  const canRecord  = ['admin','manager','cashier','superadmin'].includes(role) || can('payment.create');
+  const canReverse = role === 'admin' || role === 'superadmin' || can('payment.reverse');
+  // isAdmin passed to ReverseModal — true = direct reverse, false = request review
+  const isAdmin    = canReverse;
 
   const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

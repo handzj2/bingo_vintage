@@ -185,9 +185,15 @@ function DeleteModal({ loan, onClose, onDone }: { loan: any; onClose: () => void
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function LoansPage() {
-  const { user } = useAuth();
-  const isAdmin     = user?.role === 'admin' || user?.role === 'manager';
-  const isAdminOnly = user?.role === 'admin' || user?.role === 'superadmin';
+  const { user, can } = useAuth();
+  const role        = (user?.role ?? '').toLowerCase();
+  const isAdmin     = role === 'admin' || role === 'superadmin';
+  // Permission checks — any role can be granted these via Settings toggles
+  const canCreate   = isAdmin || role === 'manager' || can('loan.create');
+  const canApprove  = isAdmin || role === 'manager' || can('loan.approve');
+  const canView     = canCreate || can('loan.view');
+  // Legacy aliases used in JSX below
+  const isAdminOnly = canApprove;
   const searchParams   = useSearchParams();
   const router         = useRouter();
   const loanTypeFilter = searchParams.get('type') || 'all';
@@ -429,9 +435,9 @@ export default function LoansPage() {
                       <div className="flex items-center gap-2">
                         {isPending(loan.status) && (
                           <button onClick={() => setApproving(loan)}
-                            className={`flex items-center gap-1 px-3 py-1.5 text-white rounded-lg text-xs font-bold transition-colors ${isAdmin ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-400 cursor-not-allowed'}`}
-                            title={isAdmin ? 'Review loan' : 'Admin access required'}
-                            disabled={!isAdmin}>
+                            className={`flex items-center gap-1 px-3 py-1.5 text-white rounded-lg text-xs font-bold transition-colors ${canCreate ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-400 cursor-not-allowed'}`}
+                            title={canCreate ? 'Review loan' : 'Permission required'}
+                            disabled={!canCreate}>
                             <ThumbsUp className="w-3 h-3" /> {isAdmin ? 'Review' : 'Admin Only'}
                           </button>
                         )}

@@ -222,13 +222,13 @@ function DeleteModal({ bike, onClose, onDone }: { bike: Bike; onClose: () => voi
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function InventoryPage() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, can } = useAuth();
   const router   = useRouter();
   // RBAC: use permission matrix — toggles in Settings now affect access
   const role     = (user?.role ?? '').toLowerCase();
   const isAdmin  = role === 'admin' || role === 'superadmin';
-  // canEdit: admin/superadmin/manager only — or if override toggled via Settings
-  const canEdit  = isAdmin || role === 'manager';
+  // canEdit: admin/superadmin/manager, or any role granted client.edit via Settings toggle
+  const canEdit  = isAdmin || role === 'manager' || can('client.edit');
   // Guard: only roles with view_inventory permission can access
   if (!authLoading && user && !['admin','superadmin','manager','cashier','agent'].includes(role)) {
     router.replace('/dashboard');

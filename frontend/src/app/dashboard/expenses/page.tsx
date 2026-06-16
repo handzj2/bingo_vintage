@@ -7,7 +7,7 @@ import { Plus } from 'lucide-react';
 import ExpenseTable from '@/components/expenses/ExpenseTable';
 
 export default function ExpensesPage() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const [expenses, setExpenses] = useState<any[]>([]); // FIX: typed as any[] not bare []
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
@@ -27,7 +27,8 @@ export default function ExpensesPage() {
   };
 
   const filteredExpenses = expenses.filter(e => filter === 'all' || e.status === filter);
-  const canCreate = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'cashier' || user?.role === 'superadmin';
+  const role      = (user?.role ?? '').toLowerCase();
+  const canCreate = ['admin','manager','cashier','superadmin'].includes(role) || can('expense.create');
 
   return (
     <div className="p-6 max-w-7xl mx-auto">

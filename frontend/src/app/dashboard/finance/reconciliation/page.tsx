@@ -15,10 +15,11 @@ import { Loader2, ShieldAlert } from 'lucide-react';
  * - Renders the ReconciliationDashboard component
  */
 export default function ReconciliationPage() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, can } = useAuth();
   const router              = useRouter();
 
-  const canAccess = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'superadmin';
+  const role      = (user?.role ?? '').toLowerCase();
+  const canAccess = role === 'admin' || role === 'manager' || role === 'superadmin' || can('drawer.manage');
 
   useEffect(() => {
     if (!isLoading && !user) {
