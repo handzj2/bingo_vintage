@@ -1,3 +1,4 @@
+// patch 2026-06-16: removed ::schedule_status_enum and ::loan_status_enum casts
 /**
  * OverdueScheduleJob  —  Overdue Detection Engine
  *
@@ -61,9 +62,9 @@ export class OverdueScheduleJob {
       // ── Step 1: Flip PENDING → OVERDUE ──────────────────────────────────
       const flipped: FlippedRow[] = await this.scheduleRepo.manager.query(
         `UPDATE loan_schedules
-            SET status     = 'OVERDUE'::schedule_status_enum,
+            SET status     = 'OVERDUE',
                 updated_at = NOW()
-          WHERE status   = 'PENDING'::schedule_status_enum
+          WHERE status   = 'PENDING'
             AND due_date  < $1::date
           RETURNING id, loan_id`,
         [today],
@@ -81,10 +82,10 @@ export class OverdueScheduleJob {
 
       await this.scheduleRepo.manager.query(
         `UPDATE loans
-            SET status     = 'DELINQUENT'::loan_status_enum,
+            SET status     = 'DELINQUENT',
                 updated_at = NOW()
           WHERE id         = ANY($1)
-            AND status     = 'ACTIVE'::loan_status_enum`,
+            AND status     = 'ACTIVE'`,
         [loanIds],
       );
 

@@ -1,3 +1,4 @@
+// patch 2026-06-16: removed ::schedule_status_enum casts — production enum is loan_schedules_status_enum
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -153,9 +154,9 @@ export class SchedulesService {
     // 1. Flip PENDING → OVERDUE
     const updated = await this.scheduleRepo.manager.query(
       `UPDATE loan_schedules
-          SET status     = 'OVERDUE'::schedule_status_enum,
+          SET status     = 'OVERDUE',
               updated_at = now()
-        WHERE status   = 'PENDING'::schedule_status_enum
+        WHERE status   = 'PENDING'
           AND due_date < $1
         RETURNING id, loan_id, due_date, amount_due, amount_paid`,
       [cutoffStr],
@@ -164,9 +165,9 @@ export class SchedulesService {
     // 2. Flip PARTIAL that is also past due to OVERDUE (still owes money)
     await this.scheduleRepo.manager.query(
       `UPDATE loan_schedules
-          SET status     = 'OVERDUE'::schedule_status_enum,
+          SET status     = 'OVERDUE',
               updated_at = now()
-        WHERE status   = 'PARTIAL'::schedule_status_enum
+        WHERE status   = 'PARTIAL'
           AND due_date < $1
           AND amount_paid < amount_due`,
       [cutoffStr],
@@ -181,7 +182,7 @@ export class SchedulesService {
           AND EXISTS (
             SELECT 1 FROM loan_schedules ls
              WHERE ls.loan_id = l.id
-               AND ls.status  = 'OVERDUE'::schedule_status_enum
+               AND ls.status  = 'OVERDUE'
           )`,
     );
 
@@ -217,7 +218,7 @@ export class SchedulesService {
       `SELECT ls.id, ls.loan_id, ls.amount_due, ls.amount_paid
          FROM loan_schedules ls
         WHERE ls.due_date = $1
-          AND ls.status IN ('PENDING'::schedule_status_enum,'PARTIAL'::schedule_status_enum)`,
+          AND ls.status IN ('PENDING','PARTIAL')`,
       [todayStr],
     );
     for (const row of dueToday) {

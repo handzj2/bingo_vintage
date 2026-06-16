@@ -100,26 +100,26 @@ export class PenaltyCalculationJob {
 
         // ── Step 3: Batch through this tenant's overdue schedules ─────────────
         while (true) {
-          const rows: PenaltyRow[] = await this.scheduleRepo.manager.query(
-            `SELECT
-                ls.id,
-                ls.loan_id,
-                l.client_id,
-                ls.due_date::text,
-                ls.penalty_amount,
-                ls.last_penalty_applied::text
-               FROM loan_schedules ls
-               JOIN loans l ON l.id = ls.loan_id
-              WHERE ls.status = 'OVERDUE'
-                AND l.tenant_id ${tenantId != null ? '= $1' : 'IS NULL'}
-                AND (ls.last_penalty_applied IS NULL
-                     OR ls.last_penalty_applied < ${tenantId != null ? '$2' : '$1'}::date)
-              ORDER BY ls.id ASC
-              LIMIT ${tenantId != null ? '$3' : '$2'} OFFSET ${tenantId != null ? '$4' : '$3'}`,
-            tenantId != null
-              ? [tenantId, todayStr, BATCH_SIZE, offset]
-              : [todayStr, BATCH_SIZE, offset],
-          );
+          // Two clean parameterised queries — avoids fragile string interpolation
+          const rows: PenaltyRow[] = tenantId != null
+            ? await this.scheduleRepo.manager.query(
+                `SELECT ls.id, ls.loan_id, l.client_id, ls.due_date::text,
+                        ls.penalty_amount, ls.last_penalty_applied::text
+                   FROM loan_schedules ls JOIN loans l ON l.id = ls.loan_id
+                  WHERE ls.status = 'OVERDUE' AND l.tenant_id = $1
+                    AND (ls.last_penalty_applied IS NULL OR ls.last_penalty_applied < $2::date)
+                  ORDER BY ls.id ASC LIMIT $3 OFFSET $4`,
+                [tenantId, todayStr, BATCH_SIZE, offset],
+              )
+            : await this.scheduleRepo.manager.query(
+                `SELECT ls.id, ls.loan_id, l.client_id, ls.due_date::text,
+                        ls.penalty_amount, ls.last_penalty_applied::text
+                   FROM loan_schedules ls JOIN loans l ON l.id = ls.loan_id
+                  WHERE ls.status = 'OVERDUE' AND l.tenant_id IS NULL
+                    AND (ls.last_penalty_applied IS NULL OR ls.last_penalty_applied < $1::date)
+                  ORDER BY ls.id ASC LIMIT $2 OFFSET $3`,
+                [todayStr, BATCH_SIZE, offset],
+              );
 
           if (rows.length === 0) break;
 

@@ -17,6 +17,7 @@ export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
   @Get()
+  @Roles('admin', 'manager', 'superadmin')  // restrict — cashiers/agents don't need settings
   @ApiOperation({ summary: 'Get all settings for the requesting user tenant' })
   async getAll(@Request() req: AuthRequest) {
     const tenantId = req.user?.tenantId;

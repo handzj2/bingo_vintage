@@ -114,16 +114,34 @@ export class SettingsService implements OnModuleInit {
 
   // ── Read for controller ───────────────────────────────────────────────────────
   async getAllForTenant(tenantId: number | null): Promise<AppSetting[]> {
-    // Returns tenant-specific rows merged with global defaults
-    const [tenantRows, globalRows] = await Promise.all([
-      tenantId != null ? this.repo.find({ where: { tenantId } }) : Promise.resolve([]),
-      this.repo.find({ where: { tenantId: IsNull() } }),
-    ]);
-    // Tenant rows override global rows by key
-    const map = new Map<string, AppSetting>();
-    for (const r of globalRows)  map.set(r.key, r);
-    for (const r of tenantRows)  map.set(r.key, r);  // overrides
-    return Array.from(map.values());
+    // Guard: if tenant_id column doesn't exist yet (pre-migration 021),
+    // fall back to plain key/value list to avoid crashing GET /settings
+    try {
+      const colCheck: any[] = await this.repo.manager.query(`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'app_settings' AND column_name = 'tenant_id'
+        ) AS exists
+      `);
+      const hasTenantId = colCheck[0]?.exists === true || colCheck[0]?.exists === 'true';
+
+      if (!hasTenantId) {
+        // Pre-migration: return all rows as global settings
+        return await this.repo.manager.query('SELECT id, key, value, description, created_at, updated_at FROM app_settings');
+      }
+
+      // Full tenant-aware merge
+      const [tenantRows, globalRows] = await Promise.all([
+        tenantId != null ? this.repo.find({ where: { tenantId } }) : Promise.resolve([]),
+        this.repo.find({ where: { tenantId: IsNull() } }),
+      ]);
+      const map = new Map<string, AppSetting>();
+      for (const r of globalRows)  map.set(r.key, r);
+      for (const r of tenantRows)  map.set(r.key, r);
+      return Array.from(map.values());
+    } catch {
+      return [];
+    }
   }
 
   // ── Write API ─────────────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+// patch 2026-06-16: removed ::schedule_status_enum casts — production enum is loan_schedules_status_enum
 import {
   Injectable, NotFoundException, ForbiddenException,
   BadRequestException, ConflictException, Logger,
@@ -60,9 +61,9 @@ export class PaymentsService {
 
     const flipped: any[] = await this.scheduleRepo.manager.query(
       `UPDATE loan_schedules
-          SET status     = 'OVERDUE'::schedule_status_enum,
+          SET status     = 'OVERDUE',
               updated_at = NOW()
-        WHERE status   = 'PENDING'::schedule_status_enum
+        WHERE status   = 'PENDING'
           AND due_date < $1
         RETURNING id, loan_id`,
       [cutoffStr],
@@ -89,9 +90,9 @@ export class PaymentsService {
     const rows: any[] = await this.scheduleRepo.manager.query(
       `SELECT id FROM loan_schedules
         WHERE loan_id = $1
-          AND status IN ('PENDING'::schedule_status_enum,
-                         'OVERDUE'::schedule_status_enum,
-                         'PARTIAL'::schedule_status_enum)
+          AND status IN ('PENDING',
+                         'OVERDUE',
+                         'PARTIAL')
         ORDER BY installment_number ASC LIMIT 1`,
       [loanId],
     );
@@ -120,7 +121,7 @@ export class PaymentsService {
     await this.scheduleRepo.manager.query(
       `UPDATE loan_schedules
           SET amount_paid    = $1,
-              status         = $2::schedule_status_enum,
+              status         = $2,
               receipt_number = $3,
               payment_method = $4,
               paid_date      = $5,
@@ -410,8 +411,8 @@ export class PaymentsService {
               SET amount_paid    = GREATEST(0, amount_paid - $1),
                   status         = CASE
                                      WHEN due_date < NOW()::date
-                                       THEN 'OVERDUE'::schedule_status_enum
-                                     ELSE 'PENDING'::schedule_status_enum
+                                       THEN 'OVERDUE'
+                                     ELSE 'PENDING'
                                    END,
                   receipt_number = NULL,
                   paid_date      = NULL,
