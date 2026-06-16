@@ -32,7 +32,8 @@ export class SettingsService implements OnModuleInit {
       // Check if tenant_id column exists before issuing the full query.
       // Migration 021 adds this column — if it hasn't run yet, fall back
       // to a simple key/value load without the tenantId field.
-      const colCheck: {exists: boolean}[] = await this.repo.manager.query(`
+      // PostgreSQL returns EXISTS as string 'true'/'false' — use any[] to avoid TS overlap error
+      const colCheck: any[] = await this.repo.manager.query(`
         SELECT EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_name = 'app_settings' AND column_name = 'tenant_id'
