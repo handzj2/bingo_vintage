@@ -1,5 +1,5 @@
 // RBAC patch 2026-06-15: canView() superadmin/admin bypass; handles both permission formats
-// RBAC patch 2026-06-15: canView() admin/superadmin bypass; handles both permission formats
+// patch 2026-06-16: superadmin panel link added in sidebar footer
 'use client';
 
 import React, { useState, useEffect } from 'react';
