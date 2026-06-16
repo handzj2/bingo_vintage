@@ -78,4 +78,9 @@ class ApiClient {
   }
 }
 
-export const api = new ApiClient();
+// Auto-hydrate token from localStorage on module load
+// This ensures superadmin and other pages that load before AuthContext
+// can set the token still send the Authorization header correctly
+const api = new ApiClient();
+if (typeof window !== 'undefined') api.hydrateToken();
+export { api };

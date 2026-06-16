@@ -3,6 +3,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { superadminApi } from '@/lib/api/superadmin';
+import { api } from '@/lib/api/client';
 
 interface Stats { tenants: number; users: number; totalLoans: number; activeLoans: number; }
 
@@ -12,6 +13,8 @@ export default function SuperAdminDashboard() {
   const [error, setError]   = useState('');
 
   useEffect(() => {
+    // Hydrate token in case page loaded before AuthContext set it
+    api.hydrateToken();
     superadminApi.getStats()
       .then((d: any) => { setStats(d.data ?? d); setLoading(false); })
       .catch((e: any) => { setError(e?.message ?? 'Failed to load stats'); setLoading(false); });
