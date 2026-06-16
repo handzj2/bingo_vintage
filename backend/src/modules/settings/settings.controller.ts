@@ -1,3 +1,4 @@
+// patch 2026-06-16: fix AuthRequest import path + tenant-aware GET/PATCH
 // Option A: tenant-scoped settings controller
 // 2026-06-16: GET and PATCH scoped to requesting user's tenant
 import { Controller, Get, Patch, Body, Param, UseGuards, Request } from '@nestjs/common';
@@ -6,7 +7,7 @@ import { JwtAuthGuard }  from '../auth/guards/jwt-auth.guard';
 import { RolesGuard }    from '../auth/guards/roles.guard';
 import { Roles }         from '../auth/decorators/roles.decorator';
 import { SettingsService } from './settings.service';
-import { AuthRequest }   from '../auth/strategies/jwt.strategy';
+import { AuthRequest }   from '../../common/helpers/role-helper';
 
 @ApiTags('System Settings')
 @ApiBearerAuth('JWT-auth')

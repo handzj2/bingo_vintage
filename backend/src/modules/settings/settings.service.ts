@@ -1,3 +1,4 @@
+// patch 2026-06-16
 // Option A: fully tenant-aware settings service
 // 2026-06-16: tenantId threaded through all read/write paths
 import { Injectable, OnModuleInit, NotFoundException } from '@nestjs/common';

@@ -1,3 +1,4 @@
+// patch 2026-06-16
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class SeedDefaultData1700000000004 implements MigrationInterface {
