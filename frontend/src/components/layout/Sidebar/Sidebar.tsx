@@ -170,7 +170,14 @@ export default function Sidebar() {
           ))}
         </nav>
 
-        <div className="mt-auto p-4 border-t border-gray-200">
+        <div className="mt-auto p-4 border-t border-gray-200 space-y-2">
+          {/* Superadmin: quick link back to platform portal */}
+          {user?.role === 'superadmin' && (
+            <a href="/superadmin"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 transition">
+              ⚡ Super Admin Panel
+            </a>
+          )}
           <button
             onClick={logout}
             className="w-full flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
