@@ -121,7 +121,11 @@ const apiClientToClient = (dbClient: DBClient): Client => {
 
 export default function ClientsPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, can } = useAuth();
+  const role      = (user?.role ?? '').toLowerCase();
+  const isAdmin   = role === 'admin' || role === 'superadmin';
+  const canEdit   = isAdmin || role === 'manager' || can('client.edit');
+  const canDelete = isAdmin; // client deletion is admin/superadmin only
   const [clients, setClients] = useState<Client[]>([]);
   const [filteredClients, setFilteredClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -612,6 +616,7 @@ export default function ClientsPage() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
+                          {canEdit && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -620,6 +625,7 @@ export default function ClientsPage() {
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
+                          )}
                           {!isClientKYCComplete(client) && (
                             <Button
                               variant="ghost"
@@ -630,6 +636,7 @@ export default function ClientsPage() {
                               <Shield className="h-4 w-4" />
                             </Button>
                           )}
+                          {canDelete && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -639,6 +646,7 @@ export default function ClientsPage() {
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
