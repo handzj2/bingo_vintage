@@ -100,10 +100,7 @@ export class SuperAdminService {
         }
       }
 
-      // 4. Seed default settings for this tenant
-      await this.settingsService.seedForTenant(savedTenant.id);
-
-      // 5. Create tenant admin user
+      // 4. Create tenant admin user (settings seeded after transaction commits)
       const hash = await bcrypt.hash(dto.adminPassword, 10);
       await em.query(
         `INSERT INTO users
@@ -115,20 +112,39 @@ export class SuperAdminService {
       );
 
       // 4. Audit log
-      await em.save(Audit, em.create(Audit, {
-        action:      'SUPERADMIN_CREATE_TENANT',
-        tableName:   'tenants',
-        recordId:    savedTenant.id,
-        user:        String(superAdminId),
-        description: `Superadmin created tenant: ${dto.name}`,
-        newValues:   JSON.stringify({ name: dto.name, slug: dto.slug }),
-      }));
+      await em.query(
+        `INSERT INTO audit (action, table_name, record_id, description, new_values, "user", created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        ['SUPERADMIN_CREATE_TENANT', 'tenants', savedTenant.id,
+         `Superadmin created tenant: ${dto.name}`,
+         JSON.stringify({ name: dto.name, slug: dto.slug }),
+         String(superAdminId)],
+      );
 
-      return {
-        tenant: savedTenant,
-        message: `Tenant created. Admin user "${dto.adminUsername}" must change password on first login.`,
-      };
+      // 5. Seed default settings inside transaction so FK is guaranteed
+      const settingDefaults = [
+        ['LOAN_INTEREST_RATE',       '0.15',  'Annual interest rate'],
+        ['LATE_FEE_DAILY',           '1000',  'Daily penalty amount in UGX'],
+        ['loan.processing_fee',      '0',     'Loan processing fee'],
+        ['loan.default_term_months', '12',    'Default loan term in months'],
+        ['LOAN_LATE_FEE_RATE',       '0.05',  'Annual late fee rate'],
+      ];
+      for (const [key, value, description] of settingDefaults) {
+        await em.query(
+          `INSERT INTO app_settings (key, value, description, tenant_id, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, NOW(), NOW())
+           ON CONFLICT (key, tenant_id) DO NOTHING`,
+          [key, value, description, savedTenant.id],
+        );
+      }
+
+      return savedTenant;
     });
+  }
+
+  // Called by superadmin controller after createTenant transaction commits
+  async finaliseTenantCreation(tenantId: number, adminUsername: string): Promise<void> {
+    await this.settingsService.seedForTenant(tenantId);
   }
 
   // ── Toggle tenant active status ───────────────────────────────────────────

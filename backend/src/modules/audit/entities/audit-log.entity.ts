@@ -34,6 +34,9 @@ export class Audit { // ✅ Ensure this is 'Audit'
   @Column({ type: 'text', nullable: true }) // 👈 ADDED THIS LINE
   metadata: string; // Stores reversal reasons and governance data
 
+  @Column({ name: 'tenant_id', nullable: true, type: 'integer' })
+  tenantId: number | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

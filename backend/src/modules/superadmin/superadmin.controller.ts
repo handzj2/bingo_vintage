@@ -33,8 +33,13 @@ export class SuperAdminController {
 
   @Post('tenants')
   @ApiOperation({ summary: 'Create tenant + seed roles + admin user' })
-  createTenant(@Body() dto: CreateTenantDto, @Request() req: AuthRequest) {
-    return this.svc.createTenant(dto, req.user.id);
+  async createTenant(@Body() dto: CreateTenantDto, @Request() req: AuthRequest) {
+    const tenant = await this.svc.createTenant(dto, req.user.id);
+    await this.svc.finaliseTenantCreation(tenant.id, dto.adminUsername);
+    return {
+      tenant,
+      message: `Tenant created. Admin "${dto.adminUsername}" must change password on first login.`,
+    };
   }
 
   @Patch('tenants/:id/activate')
