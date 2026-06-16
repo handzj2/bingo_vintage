@@ -18,20 +18,51 @@ export class SettingsService implements OnModuleInit {
   ) {}
 
   // ── Boot ────────────────────────────────────────────────────────────────────
-  // onModuleInit no longer seeds defaults — migration 021 handles that.
-  // We still warm the cache so the first request is fast.
+  // migrationsRun=false — migration 021 may not have run yet on boot.
+  // loadCache() checks whether tenant_id column exists before querying it.
+  // If the column is missing the app starts with an empty cache (safe —
+  // every getSetting call falls through to the hardcoded defaultValue).
+  // Run: npm run migration:run:prod  then redeploy to fully activate.
   async onModuleInit() {
     await this.loadCache();
   }
 
   private async loadCache() {
-    const all = await this.repo.find();
-    this.cache.clear();
-    for (const s of all) {
-      const k = s.tenantId != null ? `${s.tenantId}:${s.key}` : `global:${s.key}`;
-      this.cache.set(k, s.value);
+    try {
+      // Check if tenant_id column exists before issuing the full query.
+      // Migration 021 adds this column — if it hasn't run yet, fall back
+      // to a simple key/value load without the tenantId field.
+      const colCheck: {exists: boolean}[] = await this.repo.manager.query(`
+        SELECT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'app_settings' AND column_name = 'tenant_id'
+        ) AS exists
+      `);
+
+      const hasTenantId = colCheck[0]?.exists === true || colCheck[0]?.exists === 'true';
+
+      if (hasTenantId) {
+        // Full tenant-aware load
+        const all = await this.repo.find();
+        this.cache.clear();
+        for (const s of all) {
+          const k = s.tenantId != null ? `${s.tenantId}:${s.key}` : `global:${s.key}`;
+          this.cache.set(k, s.value);
+        }
+      } else {
+        // Migration 021 not yet run — load as global key/value only
+        const rows: { key: string; value: string }[] =
+          await this.repo.manager.query('SELECT key, value FROM app_settings');
+        this.cache.clear();
+        for (const r of rows) this.cache.set(`global:${r.key}`, r.value);
+      }
+
+      this.cacheLoaded = true;
+    } catch (err) {
+      // Never crash the app on cache warm — log and continue with empty cache
+      console.warn('[SettingsService] loadCache failed — starting with empty cache:', err);
+      this.cacheLoaded = true;
     }
-    this.cacheLoaded = true;
   }
 
   private cacheKey(key: string, tenantId?: number | null): string {
