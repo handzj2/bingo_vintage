@@ -1,4 +1,5 @@
 'use client';
+import { api } from '@/lib/api/client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -93,9 +94,9 @@ function ClientSelector({ onSelect, preselectedId }: { onSelect: (c: Client) => 
   const [selected, setSelected] = useState<Client | null>(null);
 
   useEffect(() => {
-    apiFetch('/clients')
+    api.get('/clients')
       .then(r => {
-        const list: Client[] = Array.isArray(r) ? r : r.data || r.clients || [];
+        const list: Client[] = Array.isArray(r) ? r : ((r as any).data || (r as any).clients || []);
         setClients(list);
         // Auto-select if clientId was passed via URL
         if (preselectedId) {
@@ -727,9 +728,9 @@ export default function CreateLoanPage() {
   useEffect(() => {
     if (loanType === 'bike' && bikes.length === 0) {
       setLoadingBikes(true);
-      apiFetch('/bikes/available')
+      api.get('/bikes/available')
         .then(r => {
-          const all = Array.isArray(r) ? r : r.data || r.bikes || [];
+          const all = Array.isArray(r) ? r : (r as any).data || (r as any).bikes || [];
           // Extra client-side guard: only AVAILABLE status, not LOANED/SOLD
           const avail = all.filter((b: any) =>
             !b.status || b.status.toUpperCase() === 'AVAILABLE'
@@ -738,9 +739,9 @@ export default function CreateLoanPage() {
         })
         .catch(() => {
           // Fallback: fetch all and filter
-          apiFetch('/bikes')
+          api.get('/bikes')
             .then(r => {
-              const all = Array.isArray(r) ? r : r.data || r.bikes || [];
+              const all = Array.isArray(r) ? r : (r as any).data || (r as any).bikes || [];
               setBikes(all.filter((b: any) => !b.status || b.status.toUpperCase() === 'AVAILABLE'));
             })
             .catch(() => setBikes([]));
@@ -820,9 +821,7 @@ export default function CreateLoanPage() {
           setSubmitting(false);
           return;
         }
-        await apiFetch('/loans/apply', {
-          method: 'POST',
-          body: JSON.stringify({
+        await api.post('/loans/apply', {
             clientId:     client.id,
             amount:       principal,
             months,
@@ -830,7 +829,6 @@ export default function CreateLoanPage() {
             loanType:     'cash',
             start_date:   form.start_date,
             notes:        form.notes || undefined,
-          }),
         });
 
       } else {
@@ -852,18 +850,15 @@ export default function CreateLoanPage() {
           throw new Error('Enter either a weekly instalment amount or a repayment period');
         }
 
-        await apiFetch('/loans/create-bike-loan', {
-          method: 'POST',
-          body: JSON.stringify({
+        await api.post('/loans/create-bike-loan', {
             client_id:          client.id,
             bike_id:             form.bike_id || undefined,
-            principal_amount:   bikePrice,          // full bike price — used when bike_id absent
+            principal_amount:   bikePrice,
             deposit,
             term_weeks:          weeks,
             interest_rate:       0,
             notes:               form.notes || undefined,
             weekly_installment:  instalment,
-          }),
         });
       }
 

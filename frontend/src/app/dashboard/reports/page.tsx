@@ -1,4 +1,5 @@
 'use client';
+import { api } from '@/lib/api/client';
 
 import RouteGuard from '@/components/ui/RouteGuard';
 import { useState, useEffect, useCallback } from 'react';
@@ -10,23 +11,10 @@ import {
   CheckCircle, XCircle, Activity,
 } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-const getH = () => {
-  const t = typeof window !== 'undefined' ? localStorage.getItem('access_token') : '';
-  return { 'Content-Type': 'application/json', ...(t ? { Authorization: `Bearer ${t}` } : {}) };
-};
-const apiFetch = async (path: string) => {
-  const r = await fetch(`${API_URL}${path}`, { headers: getH() });
-  const txt = await r.text(); return txt ? JSON.parse(txt) : {};
-};
-const fmt  = (n: any) => `UGX ${Number(n || 0).toLocaleString()}`;
-const fmtM = (n: any) => {
-  const v = Number(n || 0);
-  if (v >= 1_000_000) return `UGX ${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000)     return `UGX ${(v / 1_000).toFixed(0)}K`;
-  return fmt(v);
-};
-const fmtD = (d: any) => d ? new Date(d).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+// Uses shared api client from @/lib/api/client
+import { formatUGX } from '@/shared/api-types';
+const fmt  = (n: number) => formatUGX(n);
+const fmtM = (n: number) => formatUGX(n);
 
 const METHODS: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   CASH:          { label: 'Cash',  color: 'text-emerald-700', bg: 'bg-emerald-50', icon: Wallet },
@@ -85,6 +73,7 @@ function AgingBar({ bucket, loanCount, atRisk, maxRisk }: any) {
 }
 
 // ── CSV download helper ───────────────────────────────────────────────────────
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '') + '/api';
 async function downloadCsv(path: string, filename: string) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : '';
   const res = await fetch(`${API_URL}${path}`, {
@@ -112,11 +101,11 @@ export default function ReportsPage() {
     setLoading(true);
     try {
       const [port, wk, arr, ag, day] = await Promise.all([
-        apiFetch('/reports/summary').catch(() => ({})),
-        apiFetch('/reports/weekly-collections').catch(() => []),
-        apiFetch('/reports/arrears').catch(() => []),
-        apiFetch('/reports/portfolio-aging').catch(() => []),
-        apiFetch('/reports/daily-summary').catch(() => ({})),
+        api.get('/reports/summary').catch(() => ({})),
+        api.get('/reports/weekly-collections').catch(() => []),
+        api.get('/reports/arrears').catch(() => []),
+        api.get('/reports/portfolio-aging').catch(() => []),
+        api.get('/reports/daily-summary').catch(() => ({})),
       ]);
       setPortfolio(port);
       setWeekly(Array.isArray(wk) ? wk : []);
