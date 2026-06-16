@@ -458,7 +458,8 @@ export class ClientsController {
   @Get()
   @ApiOperation({ summary: 'Get all clients/riders' })
   async findAll() {
-    return await this.clientsService.getAllRiders();
+    const data = await this.clientsService.getAllRiders();
+    return { success: true, data };
   }
 
   @Get(':id')
@@ -471,8 +472,10 @@ export class ClientsController {
   @Patch(':id')
   @ApiOperation({ summary: 'Update a client by ID' })
   @ApiParam({ name: 'id', type: Number, description: 'Client ID' })
-  async update(@Param('id', ParseIntPipe) id: number, @Body() updateData: Partial<RegisterFullClientDto>) {
-    const transformedData = this.transformClientData(updateData);
+  async update(@Param('id', ParseIntPipe) id: number, @Body() updateData: any) {
+    // transformFormClientData handles first_name/last_name snake_case
+    // prevents null constraint errors same root cause as POST / bug
+    const transformedData = this.transformFormClientData(updateData);
     return await this.clientsService.update(id, transformedData);
   }
 
