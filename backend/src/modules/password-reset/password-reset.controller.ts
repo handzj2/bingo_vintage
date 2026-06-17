@@ -44,6 +44,18 @@ export class PasswordResetAuthController {
   async setNewPassword(@Body() dto: SetNewPasswordDto) {
     return this.service.setNewPassword(dto.token, dto.newPassword);
   }
+
+  @Post('set-new-password-authenticated')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Set new password for first-login flow (authenticated, no resetToken)' })
+  async setNewPasswordAuthenticated(
+    @Body('newPassword') newPassword: string,
+    @Request() req: AuthRequest,
+  ) {
+    return this.service.setNewPasswordAuthenticated(req.user.userId ?? req.user.id, newPassword);
+  }
 }
 
 /**

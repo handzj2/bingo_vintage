@@ -69,10 +69,10 @@ function SetNewPasswordInner() {
         localStorage.removeItem('user');
         setTimeout(() => { window.location.href = '/auth/login?passwordChanged=1'; }, 2000);
       } else {
-        // ── LEGACY FLOW: OTP login-based, uses JWT ──────────────
-        // POST /auth/password-reset/set-new (requires Bearer JWT)
+        // ── FIRST-LOGIN FLOW: must-change-password, uses JWT ────
+        // POST /auth/set-new-password-authenticated (requires Bearer JWT, no resetToken)
         const jwtToken = localStorage.getItem('access_token');
-        const res = await fetch(`${API}/auth/password-reset/set-new-password`, {
+        const res = await fetch(`${API}/auth/set-new-password-authenticated`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwtToken}` },
           body: JSON.stringify({ newPassword: newPass }),

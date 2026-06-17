@@ -264,6 +264,29 @@ export class PasswordResetService {
     return { action: 'RESET_PASSWORD', resetToken };
   }
 
+  // ── Authenticated first-login password change (JWT, no resetToken) ─────────
+  // Used when mustChangePassword=true after admin/superadmin creates a user.
+  // Distinct from the public OTP-based flow above which uses a resetToken.
+  async setNewPasswordAuthenticated(
+    userId: number,
+    newPassword: string,
+  ): Promise<{ message: string }> {
+    if (!newPassword || newPassword.length < 8) {
+      throw new BadRequestException('Password must be at least 8 characters long');
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 12);
+
+    await this.userRepo.update(userId, {
+      password_hash: hashed,
+      mustChangePassword: false,
+      tempPasswordHash: null,
+      tempPasswordExpiresAt: null,
+    } as any);
+
+    return { message: 'Password updated successfully' };
+  }
+
   // ── Step 3: User sets new password using resetToken ──────────────────────
 
   async setNewPassword(
