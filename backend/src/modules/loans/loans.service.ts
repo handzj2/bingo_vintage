@@ -6,7 +6,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository }       from 'typeorm';
 import { Loan, LoanStatus } from './entities/loan.entity';
 import { Client }           from '../clients/entities/client.entity';
-import { LoanSchedule }     from '../schedules/entities/schedule.entity';
+import { LoanSchedule, ScheduleStatus } from '../schedules/entities/schedule.entity';
 import { Bike, BikeStatus } from '../bikes/entities/bike.entity';
 import { SettingsService }  from '../settings/settings.service';
 import { sanitiseDto }      from '../../common/utils/sanitise';
@@ -377,5 +377,107 @@ export class LoansService {
     });
 
     return this.loansRepo.save(loan);
+  }
+
+  // ── Historical loan import ───────────────────────────────────────────────
+  // Implements POST /loans/historical-import — previously had no backend
+  // route, causing the import page to 404 on every submission.
+  async historicalImport(
+    records: any[],
+    tenantId: number | undefined,
+    branchId: number | undefined,
+  ): Promise<{ success: number; skipped: number; errors: { client: string; error: string }[] }> {
+    let success = 0;
+    let skipped = 0;
+    const errors: { client: string; error: string }[] = [];
+
+    for (const rec of records) {
+      try {
+        if (!rec.clientName || !rec.phone) {
+          skipped++;
+          errors.push({ client: rec.clientName || 'unknown', error: 'Missing client name or phone' });
+          continue;
+        }
+
+        await this.loansRepo.manager.transaction(async (em) => {
+          const nameParts = rec.clientName.trim().split(' ');
+          const firstName = nameParts[0];
+          const lastName  = nameParts.slice(1).join(' ') || nameParts[0];
+
+          let client = await em.findOne(Client, { where: { phone: rec.phone } });
+          if (!client) {
+            client = em.create(Client, {
+              firstName,
+              lastName,
+              phone:      rec.phone,
+              nin:        rec.nin || undefined,
+              address:    rec.address || undefined,
+              tenantId:   tenantId ?? undefined,
+            } as any);
+            client = await em.save(Client, client);
+          }
+
+          const year = new Date().getFullYear();
+          const rows: any[] = await em.query(`SELECT COALESCE(MAX(id), 0) AS max FROM loans`);
+          const loanNumber = `LN-IMPORT-${year}-${(Number(rows[0].max) + 1).toString().padStart(4, '0')}`;
+
+          const principal  = Number(rec.principalAmount) || Number(rec.totalAmount) || 0;
+          const weeks      = Number(rec.termWeeks) || 0;
+          const termMonths = weeks > 0 ? Math.ceil(weeks / 4) : 12;
+          const loanStatus = rec.status === 'COMPLETED' ? LoanStatus.COMPLETED : LoanStatus.ACTIVE;
+
+          const loan = em.create(Loan, {
+            loanNumber,
+            loanType:        'historical_import',
+            clientId:        client.id,
+            tenantId:        tenantId ?? undefined,
+            branchId:        branchId ?? undefined,
+            principalAmount: principal,
+            interestRate:    0,
+            totalAmount:     Number(rec.totalAmount) || principal,
+            termMonths,
+            termWeeks:       weeks || null,
+            weeklyAmount:    Number(rec.weeklyAmount) || null,
+            deposit:         Number(rec.deposit) || 0,
+            startDate:       rec.startDate || new Date().toISOString().slice(0, 10),
+            status:          loanStatus,
+            notes:           `Imported from historical ledger. Guarantors: ${(rec.guarantors || []).join(', ') || 'none'}`,
+          } as any);
+          const savedLoan = await em.save(Loan, loan);
+
+          const payments = Array.isArray(rec.payments) ? rec.payments : [];
+          let installmentNumber = 1;
+          for (const p of payments) {
+            const amountDue  = Number(p.weeklyDue) || 0;
+            const amountPaid = Number(p.amountPaid) || 0;
+            const scheduleStatus = amountPaid >= amountDue && amountDue > 0
+              ? ScheduleStatus.PAID
+              : amountPaid > 0
+                ? ScheduleStatus.PARTIAL
+                : ScheduleStatus.PENDING;
+
+            await em.query(
+              `INSERT INTO loan_schedules
+                 (loan_id, installment_number, due_date, amount_due, principal_due,
+                  interest_due, amount_paid, status, paid_date, payment_notes, created_at, updated_at)
+               VALUES ($1,$2,$3,$4,$5,0,$6,$7,$8,'Historical import',NOW(),NOW())`,
+              [
+                savedLoan.id, installmentNumber, p.date,
+                amountDue, amountDue, amountPaid, scheduleStatus,
+                amountPaid > 0 ? p.date : null,
+              ],
+            );
+            installmentNumber++;
+          }
+        });
+
+        success++;
+      } catch (err: any) {
+        skipped++;
+        errors.push({ client: rec.clientName || 'unknown', error: err.message || 'Unknown error' });
+      }
+    }
+
+    return { success, skipped, errors };
   }
 }

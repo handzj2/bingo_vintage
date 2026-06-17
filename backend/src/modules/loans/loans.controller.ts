@@ -32,6 +32,7 @@ import { BikeLoanCalculateDto } from './dto/bike-loan-calculate.dto';
 import { CreateLoanDto } from './dto/create-loan.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { BikesService } from '../bikes/bikes.service';
 import { assertAdmin, assertRole, AuthRequest } from '../../common/helpers/role-helper';
 import { ApplyLoanDto } from './dto/apply-loan.dto';
@@ -333,6 +334,27 @@ export class LoansController {
   }
 
   // ==================== SPECIALIZED LOAN CREATION ====================
+
+  @Post('historical-import')
+  @Roles('admin', 'superadmin')
+  @ApiOperation({
+    summary: 'Bulk import historical loans from parsed Excel ledger',
+    description: 'Accepts pre-parsed records from the legacy Bingo Vintage Excel format. ' +
+                 'Creates clients (find-or-create by phone), loans, and schedule rows per record.',
+  })
+  async historicalImport(
+    @Body('records') records: any[],
+    @Request() req: AuthRequest,
+  ) {
+    if (!Array.isArray(records) || records.length === 0) {
+      return { success: 0, skipped: 0, errors: [{ client: 'all', error: 'No records provided' }] };
+    }
+    return this.loansService.historicalImport(
+      records,
+      req.user?.tenantId,
+      req.user?.branchId,
+    );
+  }
 
   @Post('create-bike-loan')
   @ApiOperation({
