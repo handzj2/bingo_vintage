@@ -25,6 +25,7 @@ import {
   Upload,
   Receipt,   // <-- for Expenses
   Wallet,    // <-- for Finance (Reconciliation)
+  Clock,     // <-- for Pending Approvals
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -45,6 +46,7 @@ const navigationGroups = [
       { name: 'Create Loan',       href: '/dashboard/loans/create',    icon: Plus      },
       { name: 'Schedules',         href: '/dashboard/schedules',       icon: Calendar  },
       { name: 'Historical Import', href: '/dashboard/import',          icon: Upload    },
+      { name: 'My Drawer',         href: '/dashboard/my-drawer',       icon: Wallet    },
     ],
   },
   {
@@ -55,6 +57,7 @@ const navigationGroups = [
       { name: 'Alerts',    href: '/dashboard/alerts',    icon: Bell     },
       { name: 'Inventory', href: '/dashboard/inventory', icon: Package  },
       { name: 'Expenses',  href: '/dashboard/expenses',  icon: Receipt  },   // <-- NEW
+      { name: 'Pending Approvals', href: '/dashboard/expenses/approval', icon: Clock },
     ],
   },
   {
