@@ -34,7 +34,12 @@ function ApprovalModal({ loan, onClose, onDone }: { loan: any; onClose: () => vo
       const res = await fetch(`${API_URL}/loans/${loan.id}/approve`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ status: action, comments: comments || undefined, policyReference: '2026-01-10' }),
+        // Map to AdminApprovalDto: action='approve'|'reject', reason?
+        // (matches the mapping already used on the loan detail page)
+        body: JSON.stringify({
+          action: action === 'approved' ? 'approve' : 'reject',
+          ...(comments ? { reason: comments } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Approval failed');
