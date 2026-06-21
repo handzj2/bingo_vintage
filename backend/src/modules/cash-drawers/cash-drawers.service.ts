@@ -185,6 +185,7 @@ export class CashDrawerService {
       .where('p.cashDrawerId = :drawerId', { drawerId })
       .andWhere('p.status != :rev', { rev: 'REVERSED' })
       .select('COALESCE(SUM(p.amount),0)', 'total')
+      .addSelect('COUNT(*)', 'count')
       .getRawOne();
 
     const expRow = await this.expenseRepo
@@ -192,12 +193,30 @@ export class CashDrawerService {
       .where('e.cashDrawerId = :drawerId', { drawerId })
       .andWhere('e.status = :approved', { approved: 'approved' })
       .select('COALESCE(SUM(e.amount),0)', 'total')
+      .addSelect('COUNT(*)', 'count')
       .getRawOne();
 
     const totalPayments   = Number(payRow?.total ?? 0);
     const totalExpenses   = Number(expRow?.total ?? 0);
+    const paymentCount    = Number(payRow?.count ?? 0);
+    const expenseCount    = Number(expRow?.count ?? 0);
     const expectedBalance = Number(drawer.openingBalance) + totalPayments - totalExpenses;
 
-    return { drawer, totalPayments, totalExpenses, expectedBalance, currentBalance: Number(drawer.currentBalance) };
+    return {
+      drawer, totalPayments, totalExpenses, expectedBalance,
+      currentBalance: Number(drawer.currentBalance),
+      paymentCount, expenseCount,
+      transactionCount: paymentCount + expenseCount,
+    };
+  }
+
+  // ── Bulk summary for all open drawers at a branch ───────────────────────────
+  // Used by the branch drawer-overview page: one row per cashier, side by side,
+  // showing today's transaction count and running balance for accountability.
+  async getOpenDrawerSummaries(tenantId: number, branchId?: number) {
+    const drawers = await this.findAll(tenantId, 'open', branchId);
+    return Promise.all(
+      drawers.map(d => this.getSummary(d.id, tenantId)),
+    );
   }
 }

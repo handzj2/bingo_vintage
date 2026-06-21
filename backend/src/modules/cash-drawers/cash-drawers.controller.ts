@@ -31,18 +31,36 @@ export class CashDrawerController {
     return this.drawerService.getCurrent(req.user.id, req.user.tenantId);
   }
 
-  // FIX: Missing GET / endpoint.
-  // ExpenseForm and ReconciliationDashboard call GET /cash-drawers to populate
-  // the drawer dropdown.  Without this the select stays empty and cash_drawer_id
-  // is never submitted, causing every approved expense to skip the drawer deduction.
   @Get()
   @RequirePermission('drawer.view')
   @ApiOperation({ summary: 'List all drawers for this tenant (open + closed)' })
   async findAll(
     @Request() req,
-    @Query('status') status?: string,
+    @Query('status')   status?:   string,
+    @Query('branchId') branchId?: string,
+    @Query('userId')   userId?:   string,
   ) {
-    return this.drawerService.findAll(req.user.tenantId, status);
+    return this.drawerService.findAll(
+      req.user.tenantId,
+      status,
+      branchId ? +branchId : undefined,
+      userId   ? +userId   : undefined,
+    );
+  }
+
+  // Bulk version of getSummary — avoids N+1 calls when a manager views
+  // all open drawers at a branch side by side (one cashier per drawer).
+  @Get('summaries')
+  @RequirePermission('drawer.view')
+  @ApiOperation({ summary: 'Today\'s transaction totals + balance for every open drawer at a branch' })
+  async getSummaries(
+    @Request() req,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.drawerService.getOpenDrawerSummaries(
+      req.user.tenantId,
+      branchId ? +branchId : req.user.branchId,
+    );
   }
 
   // FIX: GET :id — also called by ReconciliationDashboard to show drawer details.

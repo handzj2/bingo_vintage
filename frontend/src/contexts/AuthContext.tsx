@@ -17,6 +17,7 @@ export interface User {
   full_name:           string;
   role:                string;
   tenantId?:           number;
+  branchId?:           number;
   // permissions can arrive as string[] (backend RBAC codes) or
   // Record<string,boolean> (custom UI overrides saved to user.permissions JSONB).
   // can() handles both forms transparently.
@@ -139,6 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         full_name:          d.full_name ?? d.username,
         role:               d.role_name ?? d.roleName ?? d.role ?? 'unknown',
         tenantId:           d.tenantId ?? d.tenant_id ?? undefined,
+        branchId:           d.branchId ?? d.branch_id ?? undefined,
         // Normalize permissions: /me returns string[] (serialized Set), 
         // but we also support Record<string,boolean> for custom overrides.
         permissions:        Array.isArray(d.permissions)
