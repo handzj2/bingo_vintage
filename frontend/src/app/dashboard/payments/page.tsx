@@ -126,7 +126,19 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
     receipt_number: '',   // ← blank by default; optional
     collected_by: '',
     notes: '',
+    cash_drawer_id: '',   // required — business rule: every payment needs an open drawer
   });
+
+  const [drawers, setDrawers] = useState<any[]>([]);
+
+  useEffect(() => {
+    apiFetch('/cash-drawers?status=open')
+      .then(r => {
+        const list = Array.isArray(r) ? r : (Array.isArray(r?.data) ? r.data : []);
+        setDrawers(list);
+      })
+      .catch(() => setDrawers([]));
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -190,6 +202,7 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
   const handleSubmit = async () => {
     if (!selectedLoan) return setError('Please select a loan');
     if (!form.amount || Number(form.amount) <= 0) return setError('Enter a valid amount');
+    if (!form.cash_drawer_id) return setError('Please select a cash drawer');
     // FIX 2: receipt_number is optional — no longer validated as required
     setError(''); setSubmitting(true);
     try {
@@ -205,6 +218,7 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
           collected_by: form.collected_by || undefined,
           notes: form.notes || undefined,
           schedule_id: nextDue?.id ?? undefined,
+          cash_drawer_id: Number(form.cash_drawer_id),
         }),
       });
       setSuccess(result);
@@ -413,6 +427,29 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
             </div>
           </div>
 
+          {/* Cash drawer — required for every payment method (business rule) */}
+          <div>
+            <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Cash Drawer *</label>
+            <select
+              value={form.cash_drawer_id}
+              onChange={e => setForm({ ...form, cash_drawer_id: e.target.value })}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium"
+            >
+              <option value="">Select an open drawer…</option>
+              {drawers.map((d: any) => (
+                <option key={d.id} value={d.id}>
+                  Drawer #{d.id}
+                  {d.user?.username ? ` — ${d.user.username}` : ''}
+                </option>
+              ))}
+            </select>
+            {drawers.length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">
+                No open drawers found. Open a drawer first before recording this payment.
+              </p>
+            )}
+          </div>
+
           {/* Date + Time */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -466,7 +503,7 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
           <div className="flex gap-3 pt-1">
             <button onClick={() => { setStep(1); setSelectedLoan(null); setLoanSchedule(null); }}
               className="flex-1 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50">← Back</button>
-            <button onClick={handleSubmit} disabled={submitting || !selectedLoan || !form.amount || Number(form.amount) <= 0}
+            <button onClick={handleSubmit} disabled={submitting || !selectedLoan || !form.amount || Number(form.amount) <= 0 || !form.cash_drawer_id}
               className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl text-sm font-black flex items-center justify-center gap-2 transition-colors shadow-lg shadow-blue-200">
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
               {submitting ? 'Recording...' : 'Record Payment'}
@@ -647,8 +684,13 @@ function PaymentsPageInner() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await apiFetch('/payments');
-      const list: any[] = Array.isArray(data) ? data : data.data || data.payments || [];
+      // Backend is cursor-paginated: { items, nextCursor, count }.
+      // Default limit is 50 — request the hard-cap max (100) so the
+      // page reflects real volume instead of silently truncating.
+      // (Previously this read data.data / data.payments, which don't
+      // exist on this response shape — list was always [], page showed 0.)
+      const data = await apiFetch('/payments?limit=100');
+      const list: any[] = Array.isArray(data) ? data : (Array.isArray(data.items) ? data.items : []);
       list.sort((a, b) =>
         new Date(b.paymentDate || b.payment_date || b.createdAt || 0).getTime() -
         new Date(a.paymentDate || a.payment_date || a.createdAt || 0).getTime()
