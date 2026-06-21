@@ -146,8 +146,10 @@ export default function ClientsPage() {
     try {
       setLoading(true);
       const response = await api.get('/clients') as { success: boolean; data?: DBClient[]; message?: string };
-      
-      if (response.success && response.data) {
+
+      // Backend now returns a plain array (matches every other list endpoint).
+      // api.get() wraps it once in {success, data} — response.data is the array directly.
+      if (response.success && Array.isArray(response.data)) {
         const formattedClients = response.data.map(apiClientToClient);
         setClients(formattedClients);
         setFilteredClients(formattedClients);

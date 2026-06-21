@@ -97,7 +97,7 @@ function ClientSelector({ onSelect, preselectedId }: { onSelect: (c: Client) => 
   useEffect(() => {
     api.get('/clients')
       .then(r => {
-        const list: Client[] = Array.isArray(r) ? r : ((r as any).data || (r as any).clients || []);
+        const list: Client[] = Array.isArray(r) ? r : (Array.isArray((r as any)?.data) ? (r as any).data : (Array.isArray((r as any)?.clients) ? (r as any).clients : []));
         setClients(list);
         // Auto-select if clientId was passed via URL
         if (preselectedId) {
@@ -731,7 +731,7 @@ export default function CreateLoanPage() {
       setLoadingBikes(true);
       api.get('/bikes/available')
         .then(r => {
-          const all = Array.isArray(r) ? r : (r as any).data || (r as any).bikes || [];
+          const all = Array.isArray(r) ? r : (Array.isArray((r as any)?.data) ? (r as any).data : (Array.isArray((r as any)?.bikes) ? (r as any).bikes : []));
           // Extra client-side guard: only AVAILABLE status, not LOANED/SOLD
           const avail = all.filter((b: any) =>
             !b.status || b.status.toUpperCase() === 'AVAILABLE'
@@ -742,7 +742,7 @@ export default function CreateLoanPage() {
           // Fallback: fetch all and filter
           api.get('/bikes')
             .then(r => {
-              const all = Array.isArray(r) ? r : (r as any).data || (r as any).bikes || [];
+              const all = Array.isArray(r) ? r : (Array.isArray((r as any)?.data) ? (r as any).data : (Array.isArray((r as any)?.bikes) ? (r as any).bikes : []));
               setBikes(all.filter((b: any) => !b.status || b.status.toUpperCase() === 'AVAILABLE'));
             })
             .catch(() => setBikes([]));

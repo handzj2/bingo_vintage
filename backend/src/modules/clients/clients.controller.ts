@@ -459,8 +459,11 @@ export class ClientsController {
   @Get()
   @ApiOperation({ summary: 'Get all clients/riders' })
   async findAll() {
-    const data = await this.clientsService.getAllRiders();
-    return { success: true, data };
+    // Returns the raw array directly — matches every other list endpoint
+    // (loans, bikes, etc). The frontend's shared api client already wraps
+    // responses in {success, data}; wrapping again here double-nests the
+    // payload and breaks `.filter()`/`.map()` calls on the client list.
+    return await this.clientsService.getAllRiders();
   }
 
   @Get(':id')
