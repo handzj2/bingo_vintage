@@ -21,7 +21,7 @@ export class CashDrawerController {
   constructor(private readonly drawerService: CashDrawerService) {}
 
   @Post('open')
-  @RequirePermission('drawer.open')
+  @RequirePermission('drawer.manage')
   @ApiOperation({ summary: 'Open a new cash drawer' })
   async open(@Body() dto: OpenDrawerDto, @Request() req) {
     return this.drawerService.open(req.user, dto.openingBalance);
@@ -66,6 +66,15 @@ export class CashDrawerController {
     );
   }
 
+  // Single-drawer version of getSummary — used by the "My Drawer" self-service
+  // page so a cashier can see their own live balance + today's totals.
+  @Get(':id/summary')
+  @RequirePermission('drawer.view')
+  @ApiOperation({ summary: 'Today\'s transaction totals + balance for one drawer' })
+  async getDrawerSummary(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    return this.drawerService.getSummary(id, req.user.tenantId);
+  }
+
   // FIX: GET :id — also called by ReconciliationDashboard to show drawer details.
   @Get(':id')
   @RequirePermission('drawer.view')
@@ -75,7 +84,7 @@ export class CashDrawerController {
   }
 
   @Post('close/:id')
-  @RequirePermission('drawer.close')
+  @RequirePermission('drawer.manage')
   @ApiOperation({ summary: 'Close a drawer' })
   async close(
     @Param('id', ParseIntPipe) id: number,
@@ -86,7 +95,7 @@ export class CashDrawerController {
   }
 
   @Get('history')
-  @RequirePermission('drawer.reconcile')
+  @RequirePermission('drawer.manage')
   @ApiOperation({ summary: 'Get drawer history' })
   async getHistory(
     @Request() req,

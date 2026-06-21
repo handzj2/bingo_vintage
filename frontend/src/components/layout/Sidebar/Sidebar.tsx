@@ -30,6 +30,7 @@ const ALL_NAV = [
   { name: 'Clients',    href: '/dashboard/clients',   icon: Users,     permKey: 'view_clients',   defaultRoles: ['admin','manager','agent'] },
   { name: 'Loans',      href: '/dashboard/loans',     icon: DollarSign,permKey: 'view_loans',     defaultRoles: ['admin','manager','agent'] },
   { name: 'Payments',   href: '/dashboard/payments',  icon: CreditCard,permKey: 'view_payments',  defaultRoles: ['admin','manager','cashier'] },
+  { name: 'My Drawer',  href: '/dashboard/my-drawer', icon: Wallet,    permKey: 'drawer.manage',  defaultRoles: ['admin','manager','cashier'] },
   { name: 'Inventory',  href: '/dashboard/inventory', icon: Package,   permKey: 'view_inventory', defaultRoles: ['admin','manager','cashier'] },
   { name: 'Expenses',   href: '/dashboard/expenses',  icon: Receipt,   permKey: 'view_expenses',  defaultRoles: ['admin','manager','cashier'] },
   { name: 'Pending Approvals', href: '/dashboard/expenses/approval', icon: Clock, permKey: 'expense.approve', defaultRoles: ['admin','manager'] },
