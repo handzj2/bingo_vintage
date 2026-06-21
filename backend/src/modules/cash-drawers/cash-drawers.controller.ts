@@ -1,3 +1,6 @@
+// patch 2026-06-21: GET / now accepts branchId/userId filters (previously
+// only GET /history did); added GET /summaries — bulk per-drawer totals
+// for the branch drawer-overview page (one card per cashier)
 import {
   Controller, Post, Get, Body, Param, Query,
   UseGuards, Request, ParseIntPipe,

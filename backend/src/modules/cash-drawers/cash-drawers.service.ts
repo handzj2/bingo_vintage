@@ -1,3 +1,5 @@
+// patch 2026-06-21: getSummary() now also returns paymentCount/expenseCount;
+// added getOpenDrawerSummaries() for the branch drawer-overview page
 import {
   Injectable, NotFoundException, BadRequestException, ForbiddenException,
 } from '@nestjs/common';

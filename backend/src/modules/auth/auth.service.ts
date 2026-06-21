@@ -1,4 +1,7 @@
 // RBAC patch 2026-06-15: login response includes tenantId field
+// patch 2026-06-21: login response also includes branchId — needed by
+// branch-scoped pages (e.g. drawer overview) immediately after login,
+// not just after the follow-up /auth/me refresh
 import {
   Injectable, UnauthorizedException, ConflictException,
   Logger, BadRequestException, NotFoundException,
@@ -138,6 +141,7 @@ export class AuthService {
         isActive:           user.isActive,
         fullName:           user.fullName,
         tenantId:           user.tenantId ?? null,   // needed by AuthContext on first login
+        branchId:           user.branchId ?? null,   // needed by branch-scoped pages (e.g. drawer overview) on first login
         mustChangePassword: mustChange,
       },
     };

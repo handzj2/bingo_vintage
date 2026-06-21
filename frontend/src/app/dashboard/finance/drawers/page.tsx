@@ -1,3 +1,4 @@
+// new file — added 2026-06-21 — page wrapper for the branch drawer-overview
 'use client';
 
 import { useEffect } from 'react';

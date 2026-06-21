@@ -2,6 +2,8 @@
 // fix: read roleName from /me response — admin access restored 2026-06-14
 // build-fix: AuthContext — types corrected 2026-06-14
 // RBAC patch 2026-06-15: can() supports string[] and Record<string,boolean>; permissions normalized
+// patch 2026-06-21: branchId added to User/MeResponse/LoginUserPayload —
+// was missing entirely, needed by branch-scoped pages (drawer overview)
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
@@ -49,6 +51,7 @@ interface LoginUserPayload {
   fullName:           string;
   roleName:           string;
   tenantId?:          number;
+  branchId?:          number;
   mustChangePassword: boolean;
 }
 
@@ -68,6 +71,8 @@ interface MeResponse {
   role?:                string;
   tenantId?:            number;
   tenant_id?:           number;
+  branchId?:            number;
+  branch_id?:           number;
   must_change_password: boolean;
   permissions?:         string[];  // ← populated by controller from req.user
 }
@@ -232,6 +237,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         full_name:          d.fullName ?? d.username,
         role:               d.roleName ?? 'unknown',
         tenantId:           d.tenantId ?? undefined,
+        branchId:           d.branchId ?? undefined,
         permissions:        [],  // populated below via refreshUser()
         mustChangePassword: d.mustChangePassword ?? false,
       };

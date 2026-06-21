@@ -1,3 +1,4 @@
+// new file — added 2026-06-21 — branch drawer-overview component
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
