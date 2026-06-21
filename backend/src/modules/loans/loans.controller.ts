@@ -253,9 +253,10 @@ export class LoansController {
     @Query('type')      type?:      string,
     @Query('startDate') startDate?: string,
     @Query('endDate')   endDate?:   string,
+    @Query('clientId')  clientId?:  string,
   ) {
     try {
-      return await this.loansService.findAll({ status, type, startDate, endDate, tenantId: req.user?.tenantId });
+      return await this.loansService.findAll({ status, type, startDate, endDate, clientId: clientId ? +clientId : undefined, tenantId: req.user?.tenantId });
     } catch (error) {
       throw new BadRequestException(error.message || 'Failed to fetch loans');
     }

@@ -201,7 +201,7 @@ export class LoansService {
   // to prevent cross-tenant data leaks.
   async findAll(filters: {
     status?: string; type?: string; startDate?: string; endDate?: string;
-    tenantId?: number;
+    tenantId?: number; clientId?: number;
   }) {
     const qb = this.loansRepo.createQueryBuilder('loan')
       .leftJoinAndSelect('loan.client', 'client')
@@ -214,6 +214,7 @@ export class LoansService {
     if (filters.type)      qb.andWhere('loan.loanType  = :type',   { type:   filters.type   });
     if (filters.startDate) qb.andWhere('loan.startDate >= :sd',    { sd:     filters.startDate });
     if (filters.endDate)   qb.andWhere('loan.endDate   <= :ed',    { ed:     filters.endDate   });
+    if (filters.clientId)  qb.andWhere('loan.clientId  = :clientId', { clientId: filters.clientId });
 
     return qb.getMany();
   }
