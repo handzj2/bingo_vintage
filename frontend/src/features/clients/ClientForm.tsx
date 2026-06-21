@@ -72,6 +72,16 @@ export default function ClientForm({ initialData, isEdit, clientId, onSuccess }:
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    // Step 0's required fields are unmounted when viewing other steps,
+    // so the browser's native `required` validation never sees them.
+    // Validate explicitly here regardless of which step is showing.
+    if (!form.first_name.trim() || !form.last_name.trim() || !form.phone.trim()) {
+      setError('First name, last name, and phone are required (Personal step).');
+      setStep(0);
+      return;
+    }
+
     setLoading(true);
 
     const payload = {
@@ -92,12 +102,32 @@ export default function ClientForm({ initialData, isEdit, clientId, onSuccess }:
     }
   };
 
+  // Enter/Tab inside an <input> submits the form natively when only one
+  // type="submit" button exists in the DOM — which is exactly what happens
+  // on the last step (Bank), since the Next button is swapped out for Submit.
+  // Block Enter everywhere except when the focused element IS the submit button.
+  const blockEnterSubmit = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    if (e.key !== 'Enter') return;
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'TEXTAREA') return; // allow newlines in textareas
+    if (target.getAttribute('type') === 'submit') return; // allow real submit clicks
+    e.preventDefault();
+  };
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} onKeyDown={blockEnterSubmit} className="space-y-6">
       {/* Step tabs */}
       <div className="flex gap-2 overflow-x-auto">
         {steps.map((s, i) => (
-          <button key={s} type="button" onClick={() => setStep(i)}
+          <button key={s} type="button" onClick={() => {
+            if (i > 0 && (!form.first_name.trim() || !form.last_name.trim() || !form.phone.trim())) {
+              setError('First name, last name, and phone are required before continuing.');
+              setStep(0);
+              return;
+            }
+            setError('');
+            setStep(i);
+          }}
             className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
               step === i ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}>
@@ -185,7 +215,14 @@ export default function ClientForm({ initialData, isEdit, clientId, onSuccess }:
           Previous
         </button>
         {step < steps.length - 1 ? (
-          <button type="button" onClick={() => setStep(s => s + 1)}
+          <button type="button" onClick={() => {
+            if (step === 0 && (!form.first_name.trim() || !form.last_name.trim() || !form.phone.trim())) {
+              setError('First name, last name, and phone are required before continuing.');
+              return;
+            }
+            setError('');
+            setStep(s => s + 1);
+          }}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
             Next
           </button>
