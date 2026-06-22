@@ -14,7 +14,11 @@ export class AuditController {
   @Get()
   @ApiOperation({ summary: 'Retrieve all system audit logs (Admin only)' })
   async findAll(@Request() req: AuthRequest) {
-    assertRole(req.user, ['admin', 'manager'], 'Admin or manager access required for audit logs');
-    return await this.auditService.findAll();
+    assertRole(req.user, ['admin', 'manager', 'superadmin'], 'Admin or manager access required for audit logs');
+    // Superadmin (tenantId null/undefined) sees every tenant's activity.
+    // Regular tenant admin/manager only sees their own tenant's logs.
+    const role = (req.user as any)?.roleName?.toLowerCase?.() || (req.user as any)?.role?.toLowerCase?.() || '';
+    const tenantId = role === 'superadmin' ? undefined : req.user.tenantId;
+    return await this.auditService.findAll(tenantId);
   }
 }

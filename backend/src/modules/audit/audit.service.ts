@@ -23,8 +23,14 @@ export class AuditService {
   ) {}
 
   // ✅ ADD THIS METHOD to fix the error
-  async findAll() {
+  async findAll(tenantId?: number) {
+    // Audit logs were never tenant-scoped — any logged-in admin could see
+    // every tenant's activity (including platform-level SUPERADMIN_* actions
+    // with tenant_id = NULL). tenantId is now required for regular tenant
+    // admins; passing undefined (superadmin) returns everything, matching
+    // their platform-wide view.
     return await this.auditRepo.find({
+      where: tenantId ? { tenantId } : {},
       order: { createdAt: 'DESC' }, // Show newest logs first
     });
   }
