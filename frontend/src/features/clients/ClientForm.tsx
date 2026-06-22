@@ -84,8 +84,14 @@ export default function ClientForm({ initialData, isEdit, clientId, onSuccess }:
 
     setLoading(true);
 
+    // Strip id from the body — it's already in the URL (/clients/:id).
+    // Sending it in the payload too caused the backend to misidentify
+    // this as a new entity and INSERT instead of UPDATE.
+    // (id isn't on ClientFormData, but initialData can carry it through
+    // the {...EMPTY, ...initialData} spread above, so cast before omitting.)
+    const { id: _omitId, ...formWithoutId } = form as ClientFormData & { id?: unknown };
     const payload = {
-      ...form,
+      ...formWithoutId,
       monthly_income: Number(form.monthly_income) || 0,
     };
 

@@ -78,6 +78,19 @@ export class ClientsService {
 
   async update(id: number, rawUpdateData: any) {
     const updateData = sanitiseDto(rawUpdateData);
+
+    // Strip fields that must never be merged onto the entity:
+    // - id: if the payload carries 'id' (often as a string, e.g. "60" from
+    //   a form), Object.assign() below overwrites the entity's numeric
+    //   primary key with that string. TypeORM then fails to recognize
+    //   the entity as already persisted and runs an INSERT instead of an
+    //   UPDATE — which is why edits were silently creating duplicate rows
+    //   and tripping the unique constraint on email/phone/nin.
+    // - created_at/updated_at: timestamps should never be client-supplied.
+    delete updateData.id;
+    delete updateData.created_at;
+    delete updateData.updated_at;
+
     // 1. Check if client exists
     const client = await this.findOne(id);
     
