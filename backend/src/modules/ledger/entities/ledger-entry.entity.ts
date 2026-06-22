@@ -22,6 +22,7 @@ import {
   CreateDateColumn,
   Index,
 } from 'typeorm';
+import { ColumnNumericTransformer } from '../../../common/utils/numeric.transformer';
 
 export enum LedgerTransactionType {
   LOAN_DISBURSEMENT = 'LOAN_DISBURSEMENT',
@@ -57,14 +58,14 @@ export class LedgerEntry {
   transactionType: LedgerTransactionType;
 
   // ── Amounts (never both non-zero in the same row) ──────────────────────
-  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 , transformer: new ColumnNumericTransformer() })
   debit: number;    // money flowing OUT of our pocket (disbursement / reversal)
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 , transformer: new ColumnNumericTransformer() })
   credit: number;   // money flowing IN (payment received / penalty reversed)
 
   /** Snapshot of loan.balance immediately AFTER this event */
-  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0, name: 'balance_after' })
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0, name: 'balance_after' , transformer: new ColumnNumericTransformer() })
   balanceAfter: number;
 
   // ── Narrative ──────────────────────────────────────────────────────────

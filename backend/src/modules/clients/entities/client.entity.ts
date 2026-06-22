@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from 'typeorm';
 import { Loan } from '../../loans/entities/loan.entity';
+import { ColumnNumericTransformer } from '../../../common/utils/numeric.transformer';
 
 @Entity('clients')
 export class Client {
@@ -40,7 +41,7 @@ export class Client {
   @Column({ name: 'employment_status', nullable: true })
   employmentStatus: string;
 
-  @Column({ name: 'monthly_income', type: 'decimal', precision: 12, scale: 2, default: 0 })
+  @Column({ name: 'monthly_income', type: 'decimal', precision: 12, scale: 2, default: 0 , transformer: new ColumnNumericTransformer() })
   monthlyIncome: number;
 
   @Column({ name: 'bank_name', nullable: true })
@@ -97,13 +98,13 @@ export class Client {
   @Column({ name: 'tax_id', nullable: true })
   taxID: string;
 
-  @Column({ name: 'credit_score', type: 'decimal', precision: 5, scale: 2, nullable: true })
+  @Column({ name: 'credit_score', type: 'decimal', precision: 5, scale: 2, nullable: true , transformer: new ColumnNumericTransformer() })
   creditScore: number;
 
-  @Column({ name: 'loan_limit', type: 'decimal', precision: 12, scale: 2, nullable: true })
+  @Column({ name: 'loan_limit', type: 'decimal', precision: 12, scale: 2, nullable: true , transformer: new ColumnNumericTransformer() })
   loanLimit: number;
 
-  @Column({ name: 'account_balance', type: 'decimal', precision: 12, scale: 2, default: 0 })
+  @Column({ name: 'account_balance', type: 'decimal', precision: 12, scale: 2, default: 0 , transformer: new ColumnNumericTransformer() })
   accountBalance: number;
 
   @Column({ nullable: true })

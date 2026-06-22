@@ -6,6 +6,7 @@ import {
 import { User }       from '../../users/entities/user.entity';
 import { CashDrawer } from '../../cash-drawers/entities/cash-drawer.entity';
 import { Loan }       from '../../loans/entities/loan.entity';
+import { ColumnNumericTransformer } from '../../../common/utils/numeric.transformer';
 
 /**
  * Payment entity — aligned with the payments table in init.sql.
@@ -60,13 +61,13 @@ export class Payment {
 
   // ── Core amounts ──────────────────────────────────────────────────────────
 
-  @Column({ name: 'amount', type: 'decimal', precision: 12, scale: 2 })
+  @Column({ name: 'amount', type: 'decimal', precision: 12, scale: 2 , transformer: new ColumnNumericTransformer() })
   amount: number;
 
-  @Column({ name: 'principal_amount', type: 'decimal', precision: 12, scale: 2, default: 0 })
+  @Column({ name: 'principal_amount', type: 'decimal', precision: 12, scale: 2, default: 0 , transformer: new ColumnNumericTransformer() })
   principalAmount: number;
 
-  @Column({ name: 'interest_amount', type: 'decimal', precision: 12, scale: 2, default: 0 })
+  @Column({ name: 'interest_amount', type: 'decimal', precision: 12, scale: 2, default: 0 , transformer: new ColumnNumericTransformer() })
   interestAmount: number;
 
   // ── Payment details ───────────────────────────────────────────────────────

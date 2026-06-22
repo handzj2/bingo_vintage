@@ -4,6 +4,7 @@ import {
   CreateDateColumn, UpdateDateColumn,
 } from 'typeorm';
 import { Tenant } from '../../tenants/entities/tenant.entity';
+import { ColumnNumericTransformer } from '../../../common/utils/numeric.transformer';
 
 export enum LoanProductType {
   CASH = 'cash',
@@ -33,7 +34,7 @@ export class LoanProduct {
   })
   productType: LoanProductType;
 
-  @Column({ type: 'decimal', precision: 5, scale: 4, name: 'interest_rate', default: 0.15 })
+  @Column({ type: 'decimal', precision: 5, scale: 4, name: 'interest_rate', default: 0.15 , transformer: new ColumnNumericTransformer() })
   interestRate: number;
 
   @Column({ name: 'min_term_months', default: 1 })
@@ -42,16 +43,16 @@ export class LoanProduct {
   @Column({ name: 'max_term_months', default: 60 })
   maxTermMonths: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'min_amount', default: 0 })
+  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'min_amount', default: 0 , transformer: new ColumnNumericTransformer() })
   minAmount: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'max_amount', nullable: true })
+  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'max_amount', nullable: true , transformer: new ColumnNumericTransformer() })
   maxAmount: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'processing_fee', default: 0 })
+  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'processing_fee', default: 0 , transformer: new ColumnNumericTransformer() })
   processingFee: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'late_fee_daily', default: 1000 })
+  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'late_fee_daily', default: 1000 , transformer: new ColumnNumericTransformer() })
   lateFeeDaily: number;
 
   @Column({ name: 'is_active', default: true })

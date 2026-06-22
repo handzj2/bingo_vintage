@@ -6,6 +6,7 @@ import { Tenant }     from '../../tenants/entities/tenant.entity';
 import { Branch }     from '../../branches/entities/branch.entity';
 import { CashDrawer } from '../../cash-drawers/entities/cash-drawer.entity';
 import { User }       from '../../users/entities/user.entity';
+import { ColumnNumericTransformer } from '../../../common/utils/numeric.transformer';
 
 /**
  * PHASE 1 (Revised) — Reconciliation entity
@@ -48,14 +49,14 @@ export class Reconciliation {
   @JoinColumn({ name: 'created_by_id' })
   createdBy: User;
 
-  @Column({ name: 'expected_cash', type: 'decimal', precision: 15, scale: 2 })
+  @Column({ name: 'expected_cash', type: 'decimal', precision: 15, scale: 2 , transformer: new ColumnNumericTransformer() })
   expectedCash: number;
 
-  @Column({ name: 'actual_cash', type: 'decimal', precision: 15, scale: 2 })
+  @Column({ name: 'actual_cash', type: 'decimal', precision: 15, scale: 2 , transformer: new ColumnNumericTransformer() })
   actualCash: number;
 
   /** Written by service: actual_cash - expected_cash */
-  @Column({ name: 'difference', type: 'decimal', precision: 15, scale: 2 })
+  @Column({ name: 'difference', type: 'decimal', precision: 15, scale: 2 , transformer: new ColumnNumericTransformer() })
   difference: number;
 
   @Column({ name: 'reconciled_at' })

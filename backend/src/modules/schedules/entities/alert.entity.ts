@@ -5,6 +5,7 @@ import {
 } from 'typeorm';
 import { Loan } from '../../loans/entities/loan.entity';
 import { LoanSchedule } from './schedule.entity';
+import { ColumnNumericTransformer } from '../../../common/utils/numeric.transformer';
 
 @Entity('loan_alerts')
 export class LoanAlert {
@@ -42,7 +43,7 @@ export class LoanAlert {
   @Column({ name: 'days_overdue', default: 0 })
   daysOverdue: number;
 
-  @Column({ name: 'amount_due', type: 'decimal', precision: 12, scale: 2, default: 0 })
+  @Column({ name: 'amount_due', type: 'decimal', precision: 12, scale: 2, default: 0 , transformer: new ColumnNumericTransformer() })
   amountDue: number;
 
   @Column({ name: 'is_read', default: false })

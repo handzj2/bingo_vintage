@@ -13,6 +13,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Loan } from '../../loans/entities/loan.entity';
+import { ColumnNumericTransformer } from '../../../common/utils/numeric.transformer';
 
 export enum ScheduleStatus {
   PENDING   = 'PENDING',
@@ -51,7 +52,7 @@ export class LoanSchedule {
   set due_date(v: Date) { this.dueDate = v; }
 
   // ── Core amounts ────────────────────────────────────────────
-  @Column({ name: 'amount_due', type: 'decimal', precision: 12, scale: 2 })
+  @Column({ name: 'amount_due', type: 'decimal', precision: 12, scale: 2 , transformer: new ColumnNumericTransformer() })
   amountDue: number;
 
   get amount_due(): number { return this.amountDue; }
@@ -60,19 +61,19 @@ export class LoanSchedule {
   /** Backward-compat alias used by Loan.getOverdueAmount() */
   get totalDue(): number { return this.amountDue; }
 
-  @Column({ name: 'principal_due', type: 'decimal', precision: 12, scale: 2 })
+  @Column({ name: 'principal_due', type: 'decimal', precision: 12, scale: 2 , transformer: new ColumnNumericTransformer() })
   principalDue: number;
 
   get principal_due(): number { return this.principalDue; }
   set principal_due(v: number) { this.principalDue = v; }
 
-  @Column({ name: 'interest_due', type: 'decimal', precision: 12, scale: 2 })
+  @Column({ name: 'interest_due', type: 'decimal', precision: 12, scale: 2 , transformer: new ColumnNumericTransformer() })
   interestDue: number;
 
   get interest_due(): number { return this.interestDue; }
   set interest_due(v: number) { this.interestDue = v; }
 
-  @Column({ name: 'amount_paid', type: 'decimal', precision: 12, scale: 2, default: 0 })
+  @Column({ name: 'amount_paid', type: 'decimal', precision: 12, scale: 2, default: 0 , transformer: new ColumnNumericTransformer() })
   amountPaid: number;
 
   get amount_paid(): number { return this.amountPaid; }
@@ -103,10 +104,10 @@ export class LoanSchedule {
 
   get days_overdue(): number { return this.overdueDays; }
 
-  @Column({ name: 'late_fee_amount', type: 'decimal', precision: 12, scale: 2, default: 0 })
+  @Column({ name: 'late_fee_amount', type: 'decimal', precision: 12, scale: 2, default: 0 , transformer: new ColumnNumericTransformer() })
   lateFeeAmount: number;
 
-  @Column({ name: 'penalty_amount', type: 'decimal', precision: 12, scale: 2, default: 0 })
+  @Column({ name: 'penalty_amount', type: 'decimal', precision: 12, scale: 2, default: 0 , transformer: new ColumnNumericTransformer() })
   penaltyAmount: number;
 
   // ── PenaltyCalculationJob column ────────────────────────────

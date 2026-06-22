@@ -4,6 +4,7 @@ import { Branch } from '../../branches/entities/branch.entity';
 import { User } from '../../users/entities/user.entity';
 import { CashDrawer } from '../../cash-drawers/entities/cash-drawer.entity';
 import { ExpenseCategory } from './expense-category.entity';
+import { ColumnNumericTransformer } from '../../../common/utils/numeric.transformer';
 
 export enum ExpenseStatus {
   PENDING = 'pending',
@@ -37,7 +38,7 @@ export class Expense {
   @JoinColumn({ name: 'category_id' })
   category: ExpenseCategory;
 
-  @Column({ name: 'amount', type: 'decimal', precision: 15, scale: 2 })
+  @Column({ name: 'amount', type: 'decimal', precision: 15, scale: 2 , transformer: new ColumnNumericTransformer() })
   amount: number;
 
   @Column({ type: 'text' })

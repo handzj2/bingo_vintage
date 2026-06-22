@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { Client } from '../../clients/entities/client.entity';
 import { Loan } from '../../loans/entities/loan.entity';
+import { ColumnNumericTransformer } from '../../../common/utils/numeric.transformer';
 
 export enum BikeStatus {
   AVAILABLE = 'AVAILABLE',
@@ -35,10 +36,10 @@ export class Bike {
   @Column({ unique: true, nullable: true })
   registration_number: string;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 , transformer: new ColumnNumericTransformer() })
   sale_price: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 , transformer: new ColumnNumericTransformer() })
   purchase_price: number;
 
   @Column({ 

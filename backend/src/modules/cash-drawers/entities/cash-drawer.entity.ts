@@ -4,6 +4,7 @@ import { Branch } from '../../branches/entities/branch.entity';
 import { User } from '../../users/entities/user.entity';
 import { Payment } from '../../payments/entities/payment.entity';
 import { Expense } from '../../expenses/entities/expense.entity';
+import { ColumnNumericTransformer } from '../../../common/utils/numeric.transformer';
 
 @Entity('cash_drawers')
 export class CashDrawer {
@@ -34,19 +35,19 @@ export class CashDrawer {
   @Column({ name: 'drawer_date', type: 'date' })
   drawerDate: Date;
 
-  @Column({ name: 'opening_balance', type: 'decimal', precision: 15, scale: 2, default: 0 })
+  @Column({ name: 'opening_balance', type: 'decimal', precision: 15, scale: 2, default: 0 , transformer: new ColumnNumericTransformer() })
   openingBalance: number;
 
-  @Column({ name: 'current_balance', type: 'decimal', precision: 15, scale: 2, default: 0 })
+  @Column({ name: 'current_balance', type: 'decimal', precision: 15, scale: 2, default: 0 , transformer: new ColumnNumericTransformer() })
   currentBalance: number;
 
-  @Column({ name: 'closing_balance', type: 'decimal', precision: 15, scale: 2, nullable: true })
+  @Column({ name: 'closing_balance', type: 'decimal', precision: 15, scale: 2, nullable: true , transformer: new ColumnNumericTransformer() })
   closingBalance: number;
 
-  @Column({ name: 'expected_balance', type: 'decimal', precision: 15, scale: 2, nullable: true })
+  @Column({ name: 'expected_balance', type: 'decimal', precision: 15, scale: 2, nullable: true , transformer: new ColumnNumericTransformer() })
   expectedBalance: number;
 
-  @Column({ name: 'difference', type: 'decimal', precision: 15, scale: 2, nullable: true })
+  @Column({ name: 'difference', type: 'decimal', precision: 15, scale: 2, nullable: true , transformer: new ColumnNumericTransformer() })
   difference: number;
 
   @Column({ length: 20, default: 'open' })

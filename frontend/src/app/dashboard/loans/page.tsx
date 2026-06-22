@@ -259,7 +259,12 @@ export default function LoansPage() {
     bike:        loans.filter(l => (l.loan_type || l.loanType || '').toUpperCase() === 'BIKE').length,
     active:      loans.filter(l => (l.status || '').toLowerCase() === 'active').length,
     overdue:     loans.filter(l => (l.status || '').toLowerCase() === 'overdue').length,
-    outstanding: loans.reduce((s, l) => s + (l.balance ?? l.outstanding_balance ?? l.remainingBalance ?? 0), 0),
+    // Number() wrap is defense-in-depth: decimal columns from Postgres can
+    // arrive as strings if a transformer is ever missing on an entity —
+    // without this, 0 + "50000.00" does string concatenation, eventually
+    // producing NaN once enough loans are summed (root cause fixed at the
+    // entity level via ColumnNumericTransformer, this is the backup).
+    outstanding: loans.reduce((s, l) => s + Number(l.balance ?? l.outstanding_balance ?? l.remainingBalance ?? 0), 0),
   };
 
   const statusBadge = (status: string) => {

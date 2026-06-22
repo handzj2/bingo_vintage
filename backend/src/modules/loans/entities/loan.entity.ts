@@ -13,6 +13,7 @@ import { Client } from '../../clients/entities/client.entity';
 import { Bike } from '../../bikes/entities/bike.entity';
 import { Payment } from '../../payments/entities/payment.entity';
 import { LoanSchedule } from '../../schedules/entities/schedule.entity';
+import { ColumnNumericTransformer } from '../../../common/utils/numeric.transformer';
 
 // Loan status enumeration
 export enum LoanStatus {
@@ -52,24 +53,24 @@ export class Loan {
   @Column({ name: 'client_id' })
   clientId: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'principal_amount' })
+  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'principal_amount' , transformer: new ColumnNumericTransformer() })
   principalAmount: number;
 
   // ✅ DUAL RECOGNITION Alias
   get principal_amount(): number { return this.principalAmount; }
   set principal_amount(value: number) { this.principalAmount = value; }
 
-  @Column({ type: 'decimal', precision: 5, scale: 2, name: 'interest_rate' })
+  @Column({ type: 'decimal', precision: 5, scale: 2, name: 'interest_rate' , transformer: new ColumnNumericTransformer() })
   interestRate: number;
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'total_amount' })
+  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'total_amount' , transformer: new ColumnNumericTransformer() })
   totalAmount: number;
 
   // ✅ DUAL RECOGNITION for SyncService (total_amount)
   get total_amount(): number { return this.totalAmount; }
   set total_amount(value: number) { this.totalAmount = value; }
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 })
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0 , transformer: new ColumnNumericTransformer() })
   balance: number;
 
   @Column({ name: 'term_months' })
@@ -86,13 +87,13 @@ export class Loan {
   get term_weeks(): number | null { return this.termWeeks; }
   set term_weeks(value: number | null) { this.termWeeks = value; }
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'weekly_amount', nullable: true })
+  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'weekly_amount', nullable: true , transformer: new ColumnNumericTransformer() })
   weeklyAmount: number | null;
 
   get weekly_amount(): number | null { return this.weeklyAmount; }
   set weekly_amount(value: number | null) { this.weeklyAmount = value; }
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'deposit', nullable: true, default: 0 })
+  @Column({ type: 'decimal', precision: 12, scale: 2, name: 'deposit', nullable: true, default: 0 , transformer: new ColumnNumericTransformer() })
   deposit: number | null;
   // ───────────────────────────────────────────────────────────
 
@@ -168,7 +169,7 @@ export class Loan {
   get created_by(): number | null { return this.createdBy; }
   set created_by(value: number | null) { this.createdBy = value; }
 
-  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0, name: 'processing_fee' })
+  @Column({ type: 'decimal', precision: 12, scale: 2, default: 0, name: 'processing_fee' , transformer: new ColumnNumericTransformer() })
   processingFee: number;
 
   // ✅ DUAL RECOGNITION for processing_fee
@@ -198,7 +199,7 @@ export class Loan {
   // ─────────────────────────────────────────────────────────────
 
   // ── Arrears tracking (written by ArrearsCalculationJob) ──────
-  @Column({ name: 'total_arrears', type: 'decimal', precision: 12, scale: 2, default: 0, nullable: true })
+  @Column({ name: 'total_arrears', type: 'decimal', precision: 12, scale: 2, default: 0, nullable: true , transformer: new ColumnNumericTransformer() })
   totalArrears: number;
 
   @Column({ name: 'days_in_arrears', default: 0, nullable: true })
