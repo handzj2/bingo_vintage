@@ -4,7 +4,6 @@ import { Branch } from '../../branches/entities/branch.entity';
 import { User } from '../../users/entities/user.entity';
 import { Payment } from '../../payments/entities/payment.entity';
 import { Expense } from '../../expenses/entities/expense.entity';
-import { ColumnNumericTransformer } from '../../../common/utils/numeric.transformer';
 
 @Entity('cash_drawers')
 export class CashDrawer {
@@ -26,28 +25,35 @@ export class CashDrawer {
   branch: Branch;
 
   @Column({ name: 'user_id' })
-  userId: number;
+  userId: number; // who OPENED this drawer (audit trail — drawer itself is branch-shared)
 
   @ManyToOne(() => User)
   @JoinColumn({ name: 'user_id' })
   user: User;
 
+  @Column({ name: 'closed_by_id', nullable: true })
+  closedById: number; // who CLOSED it — may differ from userId on a shift handover
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'closed_by_id' })
+  closedBy: User;
+
   @Column({ name: 'drawer_date', type: 'date' })
   drawerDate: Date;
 
-  @Column({ name: 'opening_balance', type: 'decimal', precision: 15, scale: 2, default: 0 , transformer: new ColumnNumericTransformer() })
+  @Column({ name: 'opening_balance', type: 'decimal', precision: 15, scale: 2, default: 0 })
   openingBalance: number;
 
-  @Column({ name: 'current_balance', type: 'decimal', precision: 15, scale: 2, default: 0 , transformer: new ColumnNumericTransformer() })
+  @Column({ name: 'current_balance', type: 'decimal', precision: 15, scale: 2, default: 0 })
   currentBalance: number;
 
-  @Column({ name: 'closing_balance', type: 'decimal', precision: 15, scale: 2, nullable: true , transformer: new ColumnNumericTransformer() })
+  @Column({ name: 'closing_balance', type: 'decimal', precision: 15, scale: 2, nullable: true })
   closingBalance: number;
 
-  @Column({ name: 'expected_balance', type: 'decimal', precision: 15, scale: 2, nullable: true , transformer: new ColumnNumericTransformer() })
+  @Column({ name: 'expected_balance', type: 'decimal', precision: 15, scale: 2, nullable: true })
   expectedBalance: number;
 
-  @Column({ name: 'difference', type: 'decimal', precision: 15, scale: 2, nullable: true , transformer: new ColumnNumericTransformer() })
+  @Column({ name: 'difference', type: 'decimal', precision: 15, scale: 2, nullable: true })
   difference: number;
 
   @Column({ length: 20, default: 'open' })

@@ -129,7 +129,7 @@ export default function MyDrawerPage() {
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Cashiers Only</h2>
             <p className="text-sm text-gray-500 mt-1">
-              Only cashiers open and manage their own drawer. As {role || 'a non-cashier'}, you can
+              Only cashiers open and use the branch drawer. As {role || 'a non-cashier'}, you can
               monitor every open drawer at the branch level instead.
             </p>
           </div>
@@ -147,9 +147,10 @@ export default function MyDrawerPage() {
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
       <div className="border-b border-gray-200 pb-4">
-        <h1 className="text-2xl font-bold text-gray-900">My Drawer</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Branch Drawer</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Open your drawer at the start of your shift, then select it when recording payments and expenses.
+          Shared with every cashier at your branch. Open it at the start of the day —
+          any of you can use it until someone closes it at end of day.
         </p>
       </div>
 
@@ -168,7 +169,7 @@ export default function MyDrawerPage() {
               <Lock className="w-5 h-5 text-amber-600" />
             </div>
             <div>
-              <p className="font-semibold text-gray-900">No drawer open</p>
+              <p className="font-semibold text-gray-900">No open drawer at this branch</p>
               <p className="text-sm text-gray-500">Open one now to start recording cash transactions.</p>
             </div>
           </div>

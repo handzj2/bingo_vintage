@@ -32,6 +32,12 @@ export class CashDrawerService {
   ) {}
 
   // ── Open drawer ─────────────────────────────────────────────────────────────
+  // Branch-shared model: one open drawer per BRANCH, not per cashier.
+  // Any cashier at that branch can transact against it once it's open —
+  // no close-then-reopen handover needed between shift changes. userId
+  // records who opened it (audit trail); individual transaction
+  // accountability lives on payments.created_by_id / expenses.created_by_id,
+  // independent of who the drawer itself belongs to.
   async open(user: RequestUser, openingBalance: number): Promise<CashDrawer> {
     if (!user.tenantId) throw new ForbiddenException('No tenant assigned to your account');
 
@@ -42,19 +48,22 @@ export class CashDrawerService {
       throw new ForbiddenException('Only cashiers can open a cash drawer');
     }
 
-    // PHASE 4.1: financial writes require branch assignment
-    // Phase 3.4: admin/super_admin operate tenant-wide — branchId not required
-    const isAdmin = ['admin', 'super_admin'].includes(roleName);
-    if (!isAdmin && !user.branchId) {
+    if (!user.branchId) {
       throw new ForbiddenException(
         'Branch assignment required for financial operations.',
       );
     }
 
+    // One open drawer per BRANCH (not per user) — if a colleague at this
+    // branch already has one open, join it instead of opening a duplicate.
     const existing = await this.drawerRepo.findOne({
-      where: { userId: getUserId(user), tenantId: user.tenantId, status: 'open' },
+      where: { branchId: user.branchId, tenantId: user.tenantId, status: 'open' },
     });
-    if (existing) throw new BadRequestException('You already have an open drawer');
+    if (existing) {
+      throw new BadRequestException(
+        'This branch already has an open drawer. Use the existing one instead of opening a new one.',
+      );
+    }
 
     const drawer = this.drawerRepo.create({
       tenantId:       user.tenantId,
@@ -68,11 +77,13 @@ export class CashDrawerService {
     return this.drawerRepo.save(drawer);
   }
 
-  // ── Get current open drawer for user ────────────────────────────────────────
-  async getCurrent(userId: number, tenantId: number): Promise<CashDrawer> {
-    if (!tenantId) throw new ForbiddenException('No tenant assigned');
+  // ── Get current open drawer for this user's branch ──────────────────────────
+  // Branch-shared: returns the branch's open drawer, regardless of who opened it.
+  async getCurrent(user: RequestUser): Promise<CashDrawer> {
+    if (!user.tenantId) throw new ForbiddenException('No tenant assigned');
+    if (!user.branchId) throw new NotFoundException('No open drawer found');
     const drawer = await this.drawerRepo.findOne({
-      where: { userId, tenantId, status: 'open' },
+      where: { branchId: user.branchId, tenantId: user.tenantId, status: 'open' },
       relations: ['user', 'branch'],
     });
     if (!drawer) throw new NotFoundException('No open drawer found');
@@ -110,13 +121,13 @@ export class CashDrawerService {
   }
 
   // ── Close drawer ─────────────────────────────────────────────────────────────
+  // Branch-shared: any cashier at the SAME branch as the drawer can close it
+  // (not just whoever opened it — shifts rotate). closedById records who
+  // actually closed it, since that may differ from userId (who opened it).
   async close(drawerId: number, user: RequestUser, actualCash: number): Promise<CashDrawer> {
     if (!user.tenantId) throw new ForbiddenException('No tenant assigned');
 
-    // PHASE 4.1: financial writes require branch assignment
-    // Phase 3.4: admin/super_admin operate tenant-wide — branchId not required
-    const isAdmin = ['admin', 'super_admin'].includes((user as any).roleName?.toLowerCase() || '');
-    if (!isAdmin && !user.branchId) {
+    if (!user.branchId) {
       throw new ForbiddenException(
         'Branch assignment required for financial operations.',
       );
@@ -131,8 +142,8 @@ export class CashDrawerService {
     if (drawer.status !== 'open') {
       throw new BadRequestException(`Drawer is already ${drawer.status}. Cannot close.`);
     }
-    if (drawer.userId !== getUserId(user)) {
-      throw new ForbiddenException('You can only close your own drawer');
+    if (drawer.branchId !== user.branchId) {
+      throw new ForbiddenException('You can only close a drawer at your own branch');
     }
 
     // FIX-CD03: sum collections linked to this drawer
@@ -160,6 +171,7 @@ export class CashDrawerService {
     drawer.currentBalance  = actualCash;
     drawer.status          = 'closed';
     drawer.closedAt        = new Date();
+    drawer.closedById      = getUserId(user);
 
     return this.drawerRepo.save(drawer);
   }

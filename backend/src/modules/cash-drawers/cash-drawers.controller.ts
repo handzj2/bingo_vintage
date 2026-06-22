@@ -31,7 +31,7 @@ export class CashDrawerController {
   @RequirePermission('drawer.view')
   @ApiOperation({ summary: "Get current open drawer for logged-in user" })
   async getCurrent(@Request() req) {
-    return this.drawerService.getCurrent(req.user.id, req.user.tenantId);
+    return this.drawerService.getCurrent(req.user);
   }
 
   @Get()
