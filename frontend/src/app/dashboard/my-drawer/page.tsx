@@ -9,7 +9,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api/client';
 import { formatUGX } from '@/shared/api-types';
-import { Wallet, Lock, Unlock, TrendingUp, TrendingDown, AlertCircle, Loader2 } from 'lucide-react';
+import { Wallet, Lock, Unlock, TrendingUp, TrendingDown, AlertCircle, Loader2, ShieldAlert } from 'lucide-react';
 
 type DrawerSummary = {
   drawer: {
@@ -111,6 +111,35 @@ export default function MyDrawerPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px] text-gray-400">
         <Loader2 className="w-8 h-8 animate-spin" />
+      </div>
+    );
+  }
+
+  // Business rule: only cashiers open/use a drawer. Admin and manager
+  // monitor drawers via the branch overview page (/dashboard/finance/drawers)
+  // but do not open one themselves.
+  const role = (user?.role ?? '').toLowerCase();
+  if (role !== 'cashier') {
+    return (
+      <div className="p-6 max-w-2xl mx-auto">
+        <div className="flex flex-col items-center gap-4 text-center max-w-sm mx-auto py-16">
+          <div className="w-16 h-16 rounded-full bg-amber-50 flex items-center justify-center">
+            <ShieldAlert className="w-8 h-8 text-amber-500" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Cashiers Only</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Only cashiers open and manage their own drawer. As {role || 'a non-cashier'}, you can
+              monitor every open drawer at the branch level instead.
+            </p>
+          </div>
+          <a
+            href="/dashboard/finance/drawers"
+            className="px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800"
+          >
+            Go to Drawer Overview
+          </a>
+        </div>
       </div>
     );
   }

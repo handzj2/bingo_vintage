@@ -34,8 +34,15 @@ export default function ExpenseApprovalPage() {
   const loadPending = async () => {
     setLoading(true);
     try {
-      const res = await api.get<PendingExpense[]>('/expenses?status=pending');
-      if (res.success) setExpenses(res.data ?? []);
+      // Backend is cursor-paginated: { items, nextCursor }.
+      // (Previously read res.data directly, which is the whole envelope
+      // object, not an array — .filter()/.map() crashed the page.)
+      const res = await api.get<any>('/expenses?status=pending');
+      if (res.success) {
+        const data: any = res.data;
+        const items = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []);
+        setExpenses(items);
+      }
     } finally {
       setLoading(false);
     }

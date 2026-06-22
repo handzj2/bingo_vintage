@@ -9,6 +9,7 @@ import { UpdateExpenseDto } from './dto/update-expense.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
+import { Permissions } from '../auth/decorators/permissions.decorator';
 
 @ApiTags('expenses')
 @ApiBearerAuth()
@@ -23,7 +24,7 @@ export class ExpensesController {
   // → ParseIntPipe throws 400.  Fix: move static paths to the top.
 
   @Get('categories')
-  @RequirePermission('expense.read')
+  @Permissions('expense.create', 'expense.approve')
   @ApiOperation({ summary: 'Get all expense categories' })
   getCategories(@Request() req) {
     return this.expensesService.findCategories(req.user.tenantId);
@@ -37,7 +38,7 @@ export class ExpensesController {
   }
 
   @Patch('categories/:id')
-  @RequirePermission('expense.update')
+  @Permissions('expense.create', 'expense.approve')
   @ApiOperation({ summary: 'Update an expense category' })
   updateCategory(
     @Param('id', ParseIntPipe) id: number,
@@ -64,21 +65,21 @@ export class ExpensesController {
   }
 
   @Get()
-  @RequirePermission('expense.read')
+  @Permissions('expense.create', 'expense.approve')
   @ApiOperation({ summary: 'List expenses — optional ?status=pending|approved|rejected' })
   findAll(@Request() req, @Query('status') status?: string) {
     return this.expensesService.findAll(req.user.tenantId, status as any);
   }
 
   @Get(':id')
-  @RequirePermission('expense.read')
+  @Permissions('expense.create', 'expense.approve')
   @ApiOperation({ summary: 'Get expense details' })
   findOne(@Param('id', ParseIntPipe) id: number, @Request() req) {
     return this.expensesService.findOne(id, req.user.tenantId);
   }
 
   @Patch(':id')
-  @RequirePermission('expense.update')
+  @Permissions('expense.create', 'expense.approve')
   @ApiOperation({ summary: 'Update a pending expense' })
   update(
     @Param('id', ParseIntPipe) id: number,

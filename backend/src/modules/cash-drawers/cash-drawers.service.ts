@@ -1,5 +1,3 @@
-// patch 2026-06-21: getSummary() now also returns paymentCount/expenseCount;
-// added getOpenDrawerSummaries() for the branch drawer-overview page
 import {
   Injectable, NotFoundException, BadRequestException, ForbiddenException,
 } from '@nestjs/common';
@@ -34,9 +32,16 @@ export class CashDrawerService {
   async open(user: RequestUser, openingBalance: number): Promise<CashDrawer> {
     if (!user.tenantId) throw new ForbiddenException('No tenant assigned to your account');
 
+    // Business rule: only cashiers open/use a drawer. Admin/manager monitor
+    // drawers via the branch overview endpoint instead.
+    const roleName = (user as any).roleName?.toLowerCase() || '';
+    if (roleName !== 'cashier') {
+      throw new ForbiddenException('Only cashiers can open a cash drawer');
+    }
+
     // PHASE 4.1: financial writes require branch assignment
     // Phase 3.4: admin/super_admin operate tenant-wide — branchId not required
-    const isAdmin = ['admin', 'super_admin'].includes((user as any).roleName?.toLowerCase() || '');
+    const isAdmin = ['admin', 'super_admin'].includes(roleName);
     if (!isAdmin && !user.branchId) {
       throw new ForbiddenException(
         'Branch assignment required for financial operations.',
@@ -187,7 +192,6 @@ export class CashDrawerService {
       .where('p.cashDrawerId = :drawerId', { drawerId })
       .andWhere('p.status != :rev', { rev: 'REVERSED' })
       .select('COALESCE(SUM(p.amount),0)', 'total')
-      .addSelect('COUNT(*)', 'count')
       .getRawOne();
 
     const expRow = await this.expenseRepo
@@ -195,30 +199,12 @@ export class CashDrawerService {
       .where('e.cashDrawerId = :drawerId', { drawerId })
       .andWhere('e.status = :approved', { approved: 'approved' })
       .select('COALESCE(SUM(e.amount),0)', 'total')
-      .addSelect('COUNT(*)', 'count')
       .getRawOne();
 
     const totalPayments   = Number(payRow?.total ?? 0);
     const totalExpenses   = Number(expRow?.total ?? 0);
-    const paymentCount    = Number(payRow?.count ?? 0);
-    const expenseCount    = Number(expRow?.count ?? 0);
     const expectedBalance = Number(drawer.openingBalance) + totalPayments - totalExpenses;
 
-    return {
-      drawer, totalPayments, totalExpenses, expectedBalance,
-      currentBalance: Number(drawer.currentBalance),
-      paymentCount, expenseCount,
-      transactionCount: paymentCount + expenseCount,
-    };
-  }
-
-  // ── Bulk summary for all open drawers at a branch ───────────────────────────
-  // Used by the branch drawer-overview page: one row per cashier, side by side,
-  // showing today's transaction count and running balance for accountability.
-  async getOpenDrawerSummaries(tenantId: number, branchId?: number) {
-    const drawers = await this.findAll(tenantId, 'open', branchId);
-    return Promise.all(
-      drawers.map(d => this.getSummary(d.id, tenantId)),
-    );
+    return { drawer, totalPayments, totalExpenses, expectedBalance, currentBalance: Number(drawer.currentBalance) };
   }
 }
