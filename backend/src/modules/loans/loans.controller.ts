@@ -1,5 +1,5 @@
 // RBAC patch 2026-06-15: loan approval assertAdmin -> assertAdminOrManager
-import { IsNumber, IsPositive, IsOptional, IsString, IsIn } from 'class-validator';
+import { IsNumber, IsPositive, IsOptional, IsString } from 'class-validator';
 import { AdminApprovalDto } from './dto/admin-approval.dto';
 import {
   Controller,
@@ -111,39 +111,25 @@ export class CashLoanCalculateDto {
 }
 
 export class AdminReversalDto {
+  // LOAN-001: this DTO previously declared reversalType, amount, and changes
+  // fields. Repository trace confirmed: (1) the only real caller — the "Admin
+  // Policy Override" UI in ReversalModal.tsx — never collects or sends any of
+  // these three fields; (2) reverseOrAdjustLoan() never reads any of them.
+  // They were validated-but-dead weight on the contract. Removed to match the
+  // one real, shipped workflow: a direct administrative balance correction
+  // with a mandatory justification, distinct from PaymentsService.reversePayment()
+  // (which undoes a specific payment transaction and is a separate capability).
   @ApiProperty({
     example: 'Customer made advance payment, waiving late fee',
-    description: 'Reason for the reversal',
+    description: 'Mandatory justification for the administrative balance correction',
   })
   @IsString()
   reason: string;
 
-  @ApiProperty({ example: 5000000, description: 'New balance after reversal' })
+  @ApiProperty({ example: 5000000, description: 'Corrected loan balance' })
   @IsNumber()
   @IsOptional()
   newBalance?: number;
-
-  @ApiProperty({
-    example: 'late_fee_reversal',
-    description: 'Type of reversal',
-    enum: ['late_fee_reversal', 'interest_adjustment', 'term_extension', 'principal_reduction', 'other'],
-  })
-  @IsString()
-  @IsIn(['late_fee_reversal', 'interest_adjustment', 'term_extension', 'principal_reduction', 'other'])
-  reversalType: string;
-
-  @ApiProperty({ example: 5000, description: 'Amount to be reversed/adjusted' })
-  @IsNumber()
-  @IsOptional()
-  amount?: number;
-
-  @ApiProperty({
-    example: { old_status: 'delinquent', new_status: 'active' },
-    description: 'Detailed changes being made',
-    required: false,
-  })
-  @IsOptional()
-  changes?: Record<string, any>;
 }
 
 export class UpdateLoanDto {
@@ -364,7 +350,7 @@ export class LoansController {
   })
   @ApiResponse({ status: 201, description: 'Bike loan created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid bike or deposit amount' })
-  async createBikeLoan(@Body() bikeLoanDto: CreateBikeLoanDto) {
+  async createBikeLoan(@Body() bikeLoanDto: CreateBikeLoanDto, @Request() req: AuthRequest) {
     try {
       // bike_id is optional — user may enter price manually without selecting from inventory
       let bikePrice: number;
@@ -395,6 +381,8 @@ export class LoansController {
         principal_amount: principal,
         loan_type: 'bike',
         status: 'pending_approval',
+        tenant_id: req.user?.tenantId,
+        branch_id: req.user?.branchId,
       });
     } catch (error) {
       throw new BadRequestException(error.message || 'Bike loan creation failed');

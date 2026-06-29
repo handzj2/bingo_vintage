@@ -3,7 +3,6 @@
 
 import { useRouter } from 'next/navigation';
 import ClientForm from '@/features/clients/ClientForm';
-import { createClient } from '@/features/clients/client.api';
 import { toast } from 'sonner';
 
 export default function CreateClientPage() {

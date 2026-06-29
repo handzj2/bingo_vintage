@@ -1,9 +1,10 @@
-import { Controller, Post, UseGuards } from '@nestjs/common';
+import { Controller, Post, UseGuards, Request, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { SyncService } from './sync.service';
+import { AuthRequest } from '../../common/helpers/role-helper';
 
 @ApiTags('System Sync')
 @ApiBearerAuth('JWT-auth')
@@ -14,8 +15,11 @@ export class SyncController {
 
   @Post('reconcile')
   @Roles('admin')
-  @ApiOperation({ summary: 'Admin-only: Reconcile loan balances' })
-  async reconcile() {
-    return await this.syncService.reconcileBalances();
+  @ApiOperation({ summary: 'Admin-only: Reconcile loan balances for the caller\'s own tenant' })
+  async reconcile(@Request() req: AuthRequest) {
+    if (!req.user?.tenantId) {
+      throw new ForbiddenException('No tenant assigned — cannot run reconciliation');
+    }
+    return await this.syncService.reconcileBalances(req.user.tenantId);
   }
 }

@@ -48,10 +48,17 @@ export class LoansService {
     const totalInterest      = principal * annualRate * months;
     const totalPayable       = principal + totalInterest;
     const monthlyInstallment = totalPayable / months;
+    const principalPerMonth  = principal     / months;
+    const interestPerMonth   = totalInterest  / months;
     return {
       totalInterest:      Math.round(totalInterest      * 100) / 100,
       totalPayable:       Math.round(totalPayable       * 100) / 100,
       monthlyInstallment: Math.round(monthlyInstallment * 100) / 100,
+      principalPerMonth:  Math.round(principalPerMonth  * 100) / 100,
+      interestPerMonth:   Math.round(interestPerMonth   * 100) / 100,
+      // Unrounded values — for callers that must add further terms (e.g. a
+      // processing fee) before rounding, to avoid compounding rounding error.
+      _rawTotalPayable: totalPayable,
     };
   }
 
@@ -71,11 +78,15 @@ export class LoansService {
     // Delete any existing schedules for this loan (safe inside a transaction)
     await em.query(`DELETE FROM loan_schedules WHERE loan_id = $1`, [loan.id]);
 
-    const totalInterest = principal * annualRate * months;
-    const totalPayable  = principal + totalInterest + processingFee;
-    const installment   = Math.round((totalPayable / months) * 100) / 100;
-    const principalPer  = Math.round((principal    / months) * 100) / 100;
-    const interestPer   = Math.round((totalInterest/ months) * 100) / 100;
+    // Single canonical interest calculation (INT-001A) — same formula used by
+    // applyForLoan() and calculateCashLoan(). processingFee is added on top,
+    // exactly as applyForLoan() already does for the loan's totalAmount/balance,
+    // so existing fee-bearing loans produce identical installment figures.
+    const { _rawTotalPayable, principalPerMonth, interestPerMonth } =
+      this.calculateFlatInterest(principal, months, annualRate);
+    const installment  = Math.round(((_rawTotalPayable + processingFee) / months) * 100) / 100;
+    const principalPer = principalPerMonth;
+    const interestPer  = interestPerMonth;
 
     for (let i = 1; i <= months; i++) {
       const dueDate   = addMonths(new Date(loan.startDate), i);
@@ -277,7 +288,11 @@ export class LoansService {
   // ── reverseOrAdjustLoan ──────────────────────────────────────────────────────
   async reverseOrAdjustLoan(id: number, dto: any, user: RequestUser) {
     const loan = await this.findOne(id);
-    loan.addAuditNote('REVERSAL', `Admin ${user.userId}`, dto.reason ?? 'No reason');
+    const previousBalance = Number(loan.balance);
+    const detail = dto.newBalance !== undefined
+      ? `${dto.reason ?? 'No reason'} (balance corrected: ${previousBalance} -> ${Number(dto.newBalance)})`
+      : (dto.reason ?? 'No reason');
+    loan.addAuditNote('REVERSAL', `Admin ${user.userId}`, detail);
     if (dto.newBalance !== undefined) loan.balance = dto.newBalance;
     return this.loansRepo.save(loan);
   }
@@ -347,37 +362,57 @@ export class LoansService {
   // from the controller. Maps snake_case DTO fields to entity camelCase columns
   // and fills in all NOT NULL fields the DTO does not supply.
   async create(dto: any) {
-    const year    = new Date().getFullYear();
-    const rows: any[] = await this.loansRepo.manager.query(
-      `SELECT COALESCE(MAX(id), 0) AS max FROM loans`,
-    );
-    const loanNumber = `LN-${year}-${(Number(rows[0].max) + 1).toString().padStart(4, '0')}`;
+    // Wrapped in a transaction so the loan save and schedule generation
+    // commit or roll back together — previously this method created no
+    // schedule rows at all, leaving every bike loan with no loan_schedules
+    // for payment allocation, arrears reporting, or aging reports to act on.
+    return this.loansRepo.manager.transaction(async (em) => {
+      const year    = new Date().getFullYear();
+      const rows: any[] = await em.query(
+        `SELECT COALESCE(MAX(id), 0) AS max FROM loans`,
+      );
+      const loanNumber = `LN-${year}-${(Number(rows[0].max) + 1).toString().padStart(4, '0')}`;
 
-    const principal  = Number(dto.principal_amount);
-    const weeks      = Number(dto.term_weeks) || 0;
-    // Bike loans: zero-interest flat repayment over weeks converted to months
-    const termMonths = weeks > 0 ? Math.ceil(weeks / 4) : 12;
-    const totalAmount = principal; // zero interest — client repays principal only
+      const principal    = Number(dto.principal_amount);
+      const weeks        = Number(dto.term_weeks) || 0;
+      // Bike loans: zero-interest flat repayment over weeks converted to months
+      const termMonths   = weeks > 0 ? Math.ceil(weeks / 4) : 12;
+      const totalAmount  = principal; // zero interest — client repays principal only
+      const weeklyAmount = dto.weekly_installment ? Number(dto.weekly_installment) : null;
 
-    const loan = this.loansRepo.create({
-      loanNumber,
-      loanType:       dto.loan_type ?? 'bike',
-      clientId:       Number(dto.client_id),
-      bikeId:         dto.bike_id ? Number(dto.bike_id) : undefined,
-      principalAmount: principal,
-      interestRate:   Number(dto.interest_rate ?? 0),
-      totalAmount,
-      balance:        totalAmount,
-      termMonths,
-      termWeeks:      weeks || null,
-      weeklyAmount:   dto.weekly_installment ? Number(dto.weekly_installment) : null,
-      deposit:        dto.deposit ? Number(dto.deposit) : 0,
-      startDate:      new Date(),
-      notes:          dto.notes ?? null,
-      status:         LoanStatus.PENDING_APPROVAL,
+      const loan = em.create(Loan, {
+        loanNumber,
+        loanType:       dto.loan_type ?? 'bike',
+        clientId:       Number(dto.client_id),
+        bikeId:         dto.bike_id ? Number(dto.bike_id) : undefined,
+        principalAmount: principal,
+        interestRate:   Number(dto.interest_rate ?? 0),
+        totalAmount,
+        balance:        totalAmount,
+        termMonths,
+        termWeeks:      weeks || null,
+        weeklyAmount,
+        deposit:        dto.deposit ? Number(dto.deposit) : 0,
+        startDate:      new Date(),
+        notes:          dto.notes ?? null,
+        status:         LoanStatus.PENDING_APPROVAL,
+        tenantId:       dto.tenant_id ?? undefined,
+        branchId:       dto.branch_id ?? undefined,
+      } as any);
+
+      const savedLoan = await em.save(Loan, loan);
+
+      // Generate the weekly repayment schedule if weekly terms are known.
+      // If neither weeks nor a weekly amount were resolved, skip schedule
+      // generation rather than guessing — same caution as the rest of this
+      // method, which already validates principal/deposit upstream in the
+      // controller before reaching here.
+      if (weeks > 0 && weeklyAmount) {
+        await this.generateWeeklySchedule(em, savedLoan, weeks, weeklyAmount);
+      }
+
+      return savedLoan;
     });
-
-    return this.loansRepo.save(loan);
   }
 
   // ── Historical loan import ───────────────────────────────────────────────

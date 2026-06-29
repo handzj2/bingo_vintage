@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between } from 'typeorm';
+import { Repository, Between, Not } from 'typeorm';
 import { Payment } from '../payments/entities/payment.entity';
 import { Loan, LoanStatus } from '../loans/entities/loan.entity';
 import { LoanSchedule } from '../schedules/entities/schedule.entity';
@@ -20,7 +20,9 @@ export class ReportsService {
     const end   = endOfDay(date);
 
     const [payments, newLoans] = await Promise.all([
-      this.paymentRepo.find({ where: { tenantId, paymentDate: Between(start, end) } }),
+      this.paymentRepo.find({
+        where: { tenantId, paymentDate: Between(start, end), status: Not('REVERSED') as any },
+      }),
       this.loanRepo.count({ where: { tenantId, createdAt: Between(start, end), status: LoanStatus.ACTIVE } }),
     ]);
 
@@ -49,7 +51,9 @@ export class ReportsService {
       const d     = subDays(new Date(), i);
       const start = startOfDay(d);
       const end   = endOfDay(d);
-      const rows  = await this.paymentRepo.find({ where: { tenantId, paymentDate: Between(start, end) } });
+      const rows  = await this.paymentRepo.find({
+        where: { tenantId, paymentDate: Between(start, end), status: Not('REVERSED') as any },
+      });
       results.push({
         date:  d.toISOString().slice(0, 10),
         total: rows.reduce((s, p) => s + Number(p.amount), 0),
@@ -72,10 +76,11 @@ export class ReportsService {
        JOIN clients c ON c.id = l.client_id
        JOIN loan_schedules ls ON ls.loan_id = l.id
         AND ls.status = 'OVERDUE'
-       WHERE l.status IN ('ACTIVE','DELINQUENT')
+       WHERE l.status IN ('ACTIVE','DELINQUENT') AND l.tenant_id = $1
        GROUP BY l.id, l.loan_number, l.balance, l.loan_type,
                 c.first_name, c.last_name, c.phone
        ORDER BY total_overdue DESC`,
+      [tenantId],
     );
     return rows.map((r: any) => ({
       loanId:              r.id,
@@ -108,9 +113,10 @@ export class ReportsService {
          SUM(ls.amount_due - ls.amount_paid) AS at_risk
        FROM loans l
        JOIN loan_schedules ls ON ls.loan_id = l.id AND ls.status = 'OVERDUE'
-       WHERE l.status IN ('ACTIVE','DELINQUENT')
+       WHERE l.status IN ('ACTIVE','DELINQUENT') AND l.tenant_id = $1
        GROUP BY bucket
        ORDER BY bucket`,
+      [tenantId],
     );
     return rows.map((r: any) => ({
       bucket:    r.bucket,
@@ -131,16 +137,20 @@ export class ReportsService {
          SUM(principal_amount)                              AS total_principal,
          SUM(balance)                                       AS total_outstanding,
          SUM(balance) FILTER (WHERE status='DELINQUENT')   AS delinquent_balance
-       FROM loans WHERE deleted_at IS NULL`,
+       FROM loans WHERE deleted_at IS NULL AND tenant_id = $1`,
+      [tenantId],
     );
     const [payRow] = await this.loanRepo.manager.query(
-      `SELECT COALESCE(SUM(amount),0) AS total_collected FROM payments WHERE status='COMPLETED'`,
+      `SELECT COALESCE(SUM(amount),0) AS total_collected
+         FROM payments WHERE status='COMPLETED' AND tenant_id = $1`,
+      [tenantId],
     );
     const [bikeRow] = await this.loanRepo.manager.query(
       `SELECT COUNT(*) FILTER (WHERE status='AVAILABLE') AS available,
               COUNT(*) FILTER (WHERE status='LOANED')    AS loaned,
               COUNT(*) FILTER (WHERE status='SOLD')      AS sold
-         FROM bikes`,
+         FROM bikes WHERE tenant_id = $1`,
+      [tenantId],
     );
 
     return {
@@ -178,9 +188,9 @@ export class ReportsService {
          FROM payments p
          JOIN loans l   ON l.id = p.loan_id
          JOIN clients c ON c.id = l.client_id
-        WHERE p.created_at BETWEEN $1 AND $2
+        WHERE p.created_at BETWEEN $1 AND $2 AND p.tenant_id = $3
         ORDER BY p.created_at DESC`,
-      [start, end],
+      [start, end, tenantId],
     );
     const header = 'Receipt,Date,Amount,Method,Status,Collected By,Loan #,Type,Client,Phone\n';
     const lines  = rows.map((r: any) =>
@@ -201,8 +211,9 @@ export class ReportsService {
          FROM loans l
          JOIN clients c ON c.id = l.client_id
          LEFT JOIN bikes b ON b.id = l.bike_id
-        WHERE l.deleted_at IS NULL
+        WHERE l.deleted_at IS NULL AND l.tenant_id = $1
         ORDER BY l.created_at DESC`,
+      [tenantId],
     );
     const header = 'Loan #,Type,Status,Principal,Total,Balance,Rate,Months,Weeks,Weekly,Start,Created,Client,Phone,Bike Plate\n';
     const lines  = rows.map((r: any) =>
@@ -223,9 +234,11 @@ export class ReportsService {
               COALESCE(SUM(l.balance) FILTER (WHERE l.status IN ('ACTIVE','DELINQUENT')),0) AS outstanding
          FROM clients c
          LEFT JOIN loans l ON l.client_id = c.id AND l.deleted_at IS NULL
+        WHERE c.tenant_id = $1
         GROUP BY c.id, c.first_name, c.last_name, c.phone, c.nin,
                  c.occupation, c.monthly_income, c.status, c.verified, c.created_at
         ORDER BY c.created_at DESC`,
+      [tenantId],
     );
     const header = 'ID,Name,Phone,NIN,Occupation,Monthly Income,Status,Verified,Joined,Total Loans,Active Loans,Outstanding Balance\n';
     const lines  = rows.map((r: any) =>

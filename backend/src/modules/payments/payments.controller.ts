@@ -98,9 +98,9 @@ export class PaymentsController {
   }
 
   @Get('summary')
-  @ApiOperation({ summary: 'Get daily payment summary' })
-  getSummary() {
-    return this.paymentsService.getSummary();
+  @ApiOperation({ summary: 'Get daily payment summary, scoped to the caller\'s tenant' })
+  getSummary(@Request() req: AuthRequest) {
+    return this.paymentsService.getSummary(req.user?.tenantId);
   }
 
   @Get('search/range')

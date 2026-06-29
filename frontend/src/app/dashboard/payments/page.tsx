@@ -667,6 +667,10 @@ function PaymentsPageInner() {
   const isAdmin    = canReverse;
 
   const [payments, setPayments] = useState<any[]>([]);
+  // Canonical "Collected Today" figure — sourced from getSummary(), which
+  // correctly excludes REVERSED payments across the full dataset, not just
+  // whatever page of `payments` happens to be loaded. See PAY-003.
+  const [todaySummary, setTodaySummary] = useState<{ todayAmount: number; todayCount: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const searchParams = useSearchParams();
   const initialLoanId = searchParams.get('loanId') ? Number(searchParams.get('loanId')) : null;
@@ -696,6 +700,16 @@ function PaymentsPageInner() {
         new Date(a.paymentDate || a.payment_date || a.createdAt || 0).getTime()
       );
       setPayments(list);
+
+      // PAY-003: fetch the canonical, REVERSED-excluded today total from the
+      // backend rather than recomputing it client-side over a capped list.
+      try {
+        const summary = await apiFetch('/payments/summary');
+        setTodaySummary({
+          todayAmount: Number(summary?.todayAmount ?? 0),
+          todayCount:  Number(summary?.todayCount  ?? 0),
+        });
+      } catch (e) { console.error('Failed to load payment summary:', e); }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, []);
@@ -705,7 +719,10 @@ function PaymentsPageInner() {
   const todayStr = new Date().toDateString();
   const stats = {
     total:    payments.filter(p => p.status !== 'REVERSED').reduce((s, p) => s + Number(p.amount), 0),
-    today:    payments.filter(p => {
+    // PAY-003: sourced from getSummary() — the canonical, all-data,
+    // REVERSED-excluded figure — falling back to the old client-side
+    // computation only if the summary fetch hasn't resolved yet.
+    today:    todaySummary?.todayAmount ?? payments.filter(p => {
       if (p.status === 'REVERSED') return false;
       const d = p.paymentDate || p.payment_date || p.createdAt;
       return d && new Date(d).toDateString() === todayStr;

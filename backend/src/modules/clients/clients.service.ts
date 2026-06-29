@@ -52,9 +52,12 @@ export class ClientsService {
     return await this.clientRepo.save(newClient);
   }
 
-  async getAllRiders() {
+  async getAllRiders(tenantId?: number) {
     // Returns full KYC profiles for Admin review
-    return await this.clientRepo.find({ order: { id: 'DESC' } });
+    return await this.clientRepo.find({
+      where: tenantId ? { tenantId } as any : {},
+      order: { id: 'DESC' },
+    });
   }
 
   async findOne(id: number) {

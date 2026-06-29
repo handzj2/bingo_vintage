@@ -4,7 +4,7 @@ import {
   BadRequestException, ConflictException, Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Between, MoreThanOrEqual } from 'typeorm';
+import { Repository, DataSource, Between, MoreThanOrEqual, EntityManager, Not } from 'typeorm';
 import { randomBytes } from 'crypto';
 import { Payment } from './entities/payment.entity';
 import { PaymentStatus } from '../enums/payment-status.enum';
@@ -12,7 +12,6 @@ import { Loan, LoanStatus } from '../loans/entities/loan.entity';
 import { LoanSchedule } from '../schedules/entities/schedule.entity';
 import { AuditService } from '../audit/audit.service';
 import { SmsService } from '../sms/sms.service';
-import { PaymentAllocationService } from './services/payment-allocation.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { ReceiptsService } from '../receipts/receipts.service';
 import { CashDrawerService } from '../cash-drawers/cash-drawers.service';
@@ -48,7 +47,6 @@ export class PaymentsService {
     private auditService:            AuditService,
     private connection:              DataSource,
     private smsService:              SmsService,
-    private paymentAllocationService: PaymentAllocationService,
     private readonly ledgerService:  LedgerService,
     private readonly receiptsService: ReceiptsService,
     private readonly cashDrawerService: CashDrawerService,
@@ -100,13 +98,14 @@ export class PaymentsService {
   }
 
   private async applyPaymentToSchedule(
+    manager: EntityManager,
     scheduleId: number,
     paymentAmount: number,
     receiptNumber: string,
     paymentMethod: string,
     paymentDate: Date,
   ) {
-    const rows: any[] = await this.scheduleRepo.manager.query(
+    const rows: any[] = await manager.query(
       `SELECT id, amount_due, amount_paid, status FROM loan_schedules WHERE id = $1`,
       [scheduleId],
     );
@@ -118,7 +117,7 @@ export class PaymentsService {
 
     const newStatusVal = newPaid >= amountDue ? 'PAID' : newPaid > 0 ? 'PARTIAL' : row.status;
 
-    await this.scheduleRepo.manager.query(
+    await manager.query(
       `UPDATE loan_schedules
           SET amount_paid    = $1,
               status         = $2,
@@ -281,6 +280,7 @@ export class PaymentsService {
 
       if (scheduleId) {
         await this.applyPaymentToSchedule(
+          qr.manager,
           scheduleId,
           Number(dto.amount),
           receiptNumber,
@@ -406,14 +406,22 @@ export class PaymentsService {
       });
 
       if (payment.scheduleId) {
+        // Fixed: CASE expression result is inferred as `text` by Postgres,
+        // which then fails to assign into the enum-typed `status` column
+        // ("column status is of type loan_schedules_status_enum but
+        // expression is of type text"). Casting each branch's string
+        // literal to the column's own type via a subquery avoids hardcoding
+        // the enum type name (which has caused mismatches before — see
+        // payments.service.ts history). We read the live column type once
+        // and use it to build a dynamic cast.
         await queryRunner.manager.query(
           `UPDATE loan_schedules
               SET amount_paid    = GREATEST(0, amount_paid - $1),
-                  status         = CASE
-                                     WHEN due_date < NOW()::date
-                                       THEN 'OVERDUE'
-                                     ELSE 'PENDING'
-                                   END,
+                  status         = (CASE
+                                       WHEN due_date < NOW()::date
+                                         THEN 'OVERDUE'
+                                       ELSE 'PENDING'
+                                     END)::text::loan_schedules_status_enum,
                   receipt_number = NULL,
                   paid_date      = NULL,
                   updated_at     = NOW()
@@ -483,12 +491,21 @@ export class PaymentsService {
     });
   }
 
-  async getSummary() {
+  async getSummary(tenantId?: number) {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const [totalCount, totalAmount, todayPayments] = await Promise.all([
-      this.paymentRepo.count(),
-      this.paymentRepo.createQueryBuilder('p').select('SUM(p.amount)', 'sum').getRawOne(),
-      this.paymentRepo.find({ where: { paymentDate: MoreThanOrEqual(today) } }),
+      this.paymentRepo.count({ where: tenantId ? { tenantId } as any : {} }),
+      this.paymentRepo.createQueryBuilder('p')
+        .where('p.status != :rev', { rev: 'REVERSED' })
+        .andWhere(tenantId ? 'p.tenantId = :tenantId' : '1=1', { tenantId })
+        .select('SUM(p.amount)', 'sum').getRawOne(),
+      this.paymentRepo.find({
+        where: {
+          paymentDate: MoreThanOrEqual(today),
+          status: Not('REVERSED') as any,
+          ...(tenantId ? { tenantId } : {}),
+        } as any,
+      }),
     ]);
     return {
       totalPayments: totalCount,

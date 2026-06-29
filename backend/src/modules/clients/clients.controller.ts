@@ -448,22 +448,18 @@ export class ClientsController {
     return await this.clientsService.registerRider(transformedData);
   }
 
-  // New endpoint for ClientFormModel structure
-  @Post('register-form')
-  @ApiOperation({ summary: 'Register a new rider using form model structure' })
-  async createWithForm(@Body() clientData: ClientFormModelDto) {
-    const transformedData = this.transformFormClientData(clientData);
-    return await this.clientsService.registerRider(transformedData);
-  }
-
   @Get()
   @ApiOperation({ summary: 'Get all clients/riders' })
-  async findAll() {
+  async findAll(@Request() req: AuthRequest) {
     // Returns the raw array directly — matches every other list endpoint
     // (loans, bikes, etc). The frontend's shared api client already wraps
     // responses in {success, data}; wrapping again here double-nests the
     // payload and breaks `.filter()`/`.map()` calls on the client list.
-    return await this.clientsService.getAllRiders();
+    //
+    // CLI-001: scoped to the caller's own tenant. Superadmin (tenantId
+    // undefined/null) sees all clients — consistent with how superadmin
+    // access works elsewhere in this codebase (e.g. settings, reports).
+    return await this.clientsService.getAllRiders(req.user?.tenantId);
   }
 
   @Get(':id')

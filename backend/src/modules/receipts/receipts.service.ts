@@ -201,7 +201,7 @@ export class ReceiptsService {
           br.contact_phone        AS branch_phone,
 
           t.name                  AS company_name,
-          ''::text                AS company_phone      -- tenants table lacks contact_phone, use empty string
+          t.contact_phone         AS company_phone
 
         FROM  payments  p
         INNER JOIN loans    l  ON l.id = p.loan_id

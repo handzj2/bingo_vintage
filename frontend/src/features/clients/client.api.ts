@@ -70,12 +70,6 @@ export const getClientById = async (id: string | number): Promise<Client> => {
   return mapDbClientToClient(res.data);
 };
 
-export const createClient = async (payload: any): Promise<Client> => {
-  const res = await api.post<Client>('/clients/register-form', payload);
-  if (!res.success || !res.data) throw new Error(res.message ?? 'Failed to create client');
-  return res.data;
-};
-
 export const updateClient = async (
   id: string | number,
   payload: Partial<Client>,
@@ -89,5 +83,5 @@ export const deleteClient = async (id: string | number): Promise<void> => {
   await api.delete(`/clients/${id}`);
 };
 
-export const ClientAPI = { getClients, getClientById, createClient, updateClient, deleteClient };
+export const ClientAPI = { getClients, getClientById, updateClient, deleteClient };
 export const clientApi = ClientAPI;

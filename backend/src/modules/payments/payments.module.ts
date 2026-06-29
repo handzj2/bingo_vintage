@@ -9,7 +9,6 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
-import { PaymentAllocationService } from './services/payment-allocation.service';
 import { Payment } from './entities/payment.entity';
 import { Loan } from '../loans/entities/loan.entity';
 import { LoanSchedule } from '../schedules/entities/schedule.entity';
@@ -33,7 +32,6 @@ import { CashDrawersModule } from '../cash-drawers/cash-drawers.module'; // Phas
   controllers: [PaymentsController],
   providers: [
     PaymentsService,
-    PaymentAllocationService,
   ],
   exports: [PaymentsService],
 })

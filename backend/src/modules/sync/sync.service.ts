@@ -13,7 +13,7 @@ export class SyncService {
     @InjectRepository(Payment) private paymentRepo: Repository<Payment>,
   ) {}
 
-  async reconcileBalances() {
+  async reconcileBalances(tenantId: number) {
     // FIX: Original code loaded ALL loans with ALL their payments into Node.js memory:
     //   this.loanRepo.find({ relations: ['payments'] })
     // On 200 loans × 20 payments = 4,000 objects hydrated, then iterated in JS.
@@ -26,6 +26,10 @@ export class SyncService {
     //   4. We then issue one UPDATE per stale row — only fixes that need fixing
     //
     // Total: 1 round-trip instead of N+1. Works correctly at any scale.
+    //
+    // SYNC-001: scoped to a single tenant. The prior version had no tenant_id
+    // filter anywhere, meaning a reconciliation run for one tenant would read
+    // and potentially overwrite every tenant's loan balances.
 
     const staleLoans: Array<{ id: number; expected: string }> =
       await this.loanRepo.manager.query(
@@ -36,21 +40,30 @@ export class SyncService {
             ), 0)) AS expected
            FROM loans l
            LEFT JOIN payments p ON p.loan_id = l.id
+          WHERE l.tenant_id = $1
           GROUP BY l.id, l.total_amount, l.balance
          HAVING ABS(
            l.balance - (l.total_amount - COALESCE(SUM(
              CASE WHEN p.status = 'COMPLETED' THEN p.amount ELSE 0 END
            ), 0))
          ) > 0.01`,
+        [tenantId],
       );
 
     let fixedCount = 0;
-    for (const row of staleLoans) {
-      await this.loanRepo.update(row.id, { balance: Number(row.expected) });
-      fixedCount++;
+    if (staleLoans.length > 0) {
+      await this.loanRepo.manager.transaction(async (txManager) => {
+        for (const row of staleLoans) {
+          // tenantId re-asserted in the WHERE clause as a defence-in-depth check —
+          // row.id came from a tenant-scoped query above, but this guarantees the
+          // UPDATE itself can never cross a tenant boundary even if that changes.
+          await txManager.update(Loan, { id: row.id, tenantId } as any, { balance: Number(row.expected) });
+          fixedCount++;
+        }
+      });
     }
 
-    this.logger.log(`Reconciliation complete — ${fixedCount} loan(s) corrected`);
+    this.logger.log(`Reconciliation complete — tenant=${tenantId} — ${fixedCount} loan(s) corrected`);
 
     return {
       message:   'Reconciliation complete',
