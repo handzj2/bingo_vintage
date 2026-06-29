@@ -4,7 +4,8 @@ import { Repository, Between, Not } from 'typeorm';
 import { Payment } from '../payments/entities/payment.entity';
 import { Loan, LoanStatus } from '../loans/entities/loan.entity';
 import { LoanSchedule } from '../schedules/entities/schedule.entity';
-import { startOfDay, endOfDay, subDays } from 'date-fns';
+import { subDays } from 'date-fns';
+import { startOfKampalaDay, endOfKampalaDay } from '../../common/utils/kampala-time';
 
 @Injectable()
 export class ReportsService {
@@ -16,8 +17,10 @@ export class ReportsService {
 
   // ── Daily summary ─────────────────────────────────────────────────────────
   async getDailySummary(tenantId: number, date: Date = new Date()) {
-    const start = startOfDay(date);
-    const end   = endOfDay(date);
+    // See common/utils/kampala-time.ts — date-fns's startOfDay/endOfDay use
+    // the server's local timezone (UTC on Railway), not Kampala's.
+    const start = startOfKampalaDay(date);
+    const end   = endOfKampalaDay(date);
 
     const [payments, newLoans] = await Promise.all([
       this.paymentRepo.find({
@@ -49,8 +52,8 @@ export class ReportsService {
     const results = [];
     for (let i = 6; i >= 0; i--) {
       const d     = subDays(new Date(), i);
-      const start = startOfDay(d);
-      const end   = endOfDay(d);
+      const start = startOfKampalaDay(d);
+      const end   = endOfKampalaDay(d);
       const rows  = await this.paymentRepo.find({
         where: { tenantId, paymentDate: Between(start, end), status: Not('REVERSED') as any },
       });

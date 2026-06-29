@@ -89,13 +89,13 @@ function RequestReversalModal({ payment, onClose, onSuccess }: { payment: any; o
             <div>
               <p className="text-xs text-gray-400 mb-0.5">Client</p>
               <p className="font-bold text-gray-800 text-xs">
-                {payment.loan?.client?.first_name || payment.loan?.client?.first_name} {payment.loan?.client?.last_name || payment.loan?.client?.last_name}
+                {payment.loan?.client?.firstName || payment.loan?.client?.first_name} {payment.loan?.client?.lastName || payment.loan?.client?.last_name}
               </p>
             </div>
             <div>
               <p className="text-xs text-gray-400 mb-0.5">Date</p>
               <p className="text-xs text-gray-600">
-                {new Date(payment.payment_date || payment.created_at).toLocaleDateString()}
+                {new Date(payment.paymentDate || payment.payment_date || payment.createdAt || payment.created_at).toLocaleDateString()}
               </p>
             </div>
           </div>
@@ -203,7 +203,7 @@ function AdminReviewModal({ payment, onClose, onSuccess }: { payment: any; onClo
               </div>
               <div>
                 <p className="text-xs text-gray-400 mb-0.5">Client</p>
-                <p className="font-bold text-xs">{payment.loan?.client?.first_name || payment.loan?.client?.first_name} {payment.loan?.client?.last_name || payment.loan?.client?.last_name}</p>
+                <p className="font-bold text-xs">{payment.loan?.client?.firstName || payment.loan?.client?.first_name} {payment.loan?.client?.lastName || payment.loan?.client?.last_name}</p>
               </div>
               <div>
                 <p className="text-xs text-gray-400 mb-0.5">Requested By</p>
@@ -323,7 +323,7 @@ export default function ReversalsPage() {
 
   const filtered = payments.filter(p => {
     const q = search.toLowerCase();
-    const client = `${p.loan?.client?.first_name || p.loan?.client?.first_name || ''} ${p.loan?.client?.last_name || p.loan?.client?.last_name || ''}`.toLowerCase();
+    const client = `${p.loan?.client?.firstName || p.loan?.client?.first_name || ''} ${p.loan?.client?.lastName || p.loan?.client?.last_name || ''}`.toLowerCase();
     const matchSearch = !q || [p.receipt_number, client, String(p.id)].some(v => v?.toLowerCase().includes(q));
     const matchStatus = !filterStatus || p.status === filterStatus;
     return matchSearch && matchStatus;
@@ -399,11 +399,11 @@ export default function ReversalsPage() {
               <div key={p.id} className="bg-white rounded-xl border border-orange-100 px-4 py-3 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-9 h-9 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0 font-black text-orange-600">
-                    {(p.loan?.client?.first_name || p.loan?.client?.first_name || '?').charAt(0)}
+                    {(p.loan?.client?.firstName || p.loan?.client?.first_name || '?').charAt(0)}
                   </div>
                   <div className="min-w-0">
                     <p className="font-bold text-gray-800 text-sm">
-                      {p.loan?.client?.first_name} {p.loan?.client?.last_name}
+                      {p.loan?.client?.firstName || p.loan?.client?.first_name} {p.loan?.client?.lastName || p.loan?.client?.last_name}
                       <span className="ml-2 font-mono text-xs text-gray-400 font-normal">{p.receipt_number}</span>
                     </p>
                     <p className="text-xs text-gray-500 truncate mt-0.5">
@@ -518,10 +518,10 @@ export default function ReversalsPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-600 flex-shrink-0">
-                          {(p.loan?.client?.first_name || p.loan?.client?.first_name || '?').charAt(0)}
+                          {(p.loan?.client?.firstName || p.loan?.client?.first_name || '?').charAt(0)}
                         </div>
                         <span className="font-semibold text-gray-800 text-xs">
-                          {p.loan?.client?.first_name} {p.loan?.client?.last_name}
+                          {p.loan?.client?.firstName || p.loan?.client?.first_name} {p.loan?.client?.lastName || p.loan?.client?.last_name}
                         </span>
                       </div>
                     </td>
@@ -535,7 +535,7 @@ export default function ReversalsPage() {
                     <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
                       <div className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
-                        {new Date(p.payment_date || p.created_at).toLocaleDateString('en-UG', {
+                        {new Date(p.paymentDate || p.payment_date || p.createdAt || p.created_at).toLocaleDateString('en-UG', {
                           day: '2-digit', month: 'short', year: 'numeric'
                         })}
                       </div>

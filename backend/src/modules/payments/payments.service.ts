@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, Between, MoreThanOrEqual, EntityManager, Not } from 'typeorm';
+import { startOfKampalaDay } from '../../common/utils/kampala-time';
 import { randomBytes } from 'crypto';
 import { Payment } from './entities/payment.entity';
 import { PaymentStatus } from '../enums/payment-status.enum';
@@ -492,7 +493,11 @@ export class PaymentsService {
   }
 
   async getSummary(tenantId?: number) {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
+    // See common/utils/kampala-time.ts for why this can't use
+    // new Date(); .setHours(0,0,0,0) — that computes server-local midnight
+    // (UTC on Railway), not Kampala midnight.
+    const today = startOfKampalaDay();
+
     const [totalCount, totalAmount, todayPayments] = await Promise.all([
       this.paymentRepo.count({ where: tenantId ? { tenantId } as any : {} }),
       this.paymentRepo.createQueryBuilder('p')
@@ -569,6 +574,7 @@ export class PaymentsService {
     if (payment.reversalStatus === ReversalStatus.PENDING)
       throw new ConflictException('A reversal request is already pending for this payment');
     await this.paymentRepo.update(paymentId, {
+      status:          PaymentStatus.REVERSAL_REQUESTED,
       reversalReason:  reason,
       reversedBy:      requestedBy,
       reversalStatus:  ReversalStatus.PENDING,  // typed enum — not a string flag
@@ -592,6 +598,7 @@ export class PaymentsService {
 
   async rejectReversalRequest(paymentId: number, adminUser: any, reason?: string) {
     await this.paymentRepo.update(paymentId, {
+      status:          PaymentStatus.COMPLETED,
       reversalStatus:  ReversalStatus.REJECTED,
       reversalReason:  reason || 'Rejected by admin',
     } as any);

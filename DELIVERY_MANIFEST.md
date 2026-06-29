@@ -1,90 +1,110 @@
-# Bingo Vintage — Engineering Delivery Manifest
+# Bingo Vintage — Screenshot-Driven Fix Delivery (Round 2)
 
-This package contains **only the files changed or removed in this engineering
-session**, each backed by a delivery report (issue ID, root cause, fix,
-verification, regression risk) produced at the time the change was made.
-Every item below compiled/built clean as part of the work, and again in a
-final pass before this package was assembled.
+Fixes for three defects visible in three screenshots of the live deployed app
+(`bingo-vintage.vercel.app`): admin Reversals page, cashier Payments page,
+cashier Request Reversal modal.
 
-## Files included in this delivery (16 modified)
+## Files in this delivery (4 — 1 new, 3 modified)
 
-| File | Issue(s) |
+| File | Issue |
 |---|---|
-| `backend/src/modules/payments/payments.service.ts` | PAY-001, PAY-002, PAY-003, dead-code removal (PaymentAllocationService injection) |
-| `backend/src/modules/payments/payments.controller.ts` | PAY-002 |
-| `backend/src/modules/payments/payments.module.ts` | Dead-code removal (PaymentAllocationService provider) |
-| `backend/src/modules/loans/loans.service.ts` | INT-001A, LOAN-001, wiring fix (generateWeeklySchedule → create()) |
-| `backend/src/modules/loans/loans.controller.ts` | LOAN-001, wiring fix (tenant/branch threading into createBikeLoan) |
-| `backend/src/modules/clients/clients.service.ts` | CLI-001 |
-| `backend/src/modules/clients/clients.controller.ts` | CLI-001, dead-code removal (register-form route) |
-| `backend/src/modules/reports/reports.service.ts` | RPT-001, RPT-002, RPT-003, RPT-004, RPT-005 |
-| `backend/src/modules/sync/sync.service.ts` | SYNC-001 |
-| `backend/src/modules/sync/sync.controller.ts` | SYNC-001 |
-| `backend/src/modules/receipts/receipts.service.ts` | Receipt company_phone defect fix |
-| `backend/src/modules/tenants/tenants.module.ts` | Dead-code removal (TenantUsersController) |
-| `backend/src/modules/uploads/supabase.service.ts` | Documentation only — explicitly retained per instruction, no functional change |
-| `frontend/src/app/dashboard/payments/page.tsx` | PAY-003 (frontend half) |
-| `frontend/src/app/dashboard/clients/create/page.tsx` | Dead-code removal (unused import) |
-| `frontend/src/features/clients/client.api.ts` | Dead-code removal (createClient function) |
+| `backend/src/common/utils/kampala-time.ts` (new) | Canonical Kampala (UTC+3) day-boundary helper |
+| `backend/src/modules/payments/payments.service.ts` | Timezone fix on `getSummary()`; status-wiring fix on `requestReversal()`/`rejectReversalRequest()` |
+| `backend/src/modules/reports/reports.service.ts` | Same timezone fix applied to `getDailySummary()`/`getWeeklyCollections()` for consistency with the now-corrected canonical source |
+| `frontend/src/app/dashboard/reversals/page.tsx` | Self-referential field-name fallback bug (client name showed `?`, date showed "Invalid Date") |
 
-## Files deleted in this session (3 — not present in this package by definition)
+## Defect 1 — Client name `?` and "Invalid Date" (admin Reversals page)
 
-- `backend/src/modules/payments/services/payment-allocation.service.ts` — confirmed zero callers, contained a known-wrong enum cast, removed per dead-code cleanup
-- `backend/src/modules/payments/receipts.service.ts` — confirmed zero callers, dead duplicate of the live receipts service
-- `backend/src/modules/tenants/users.controller.ts` — confirmed unreachable duplicate of `TenantsController`'s routes
+**Root cause:** Code like `payment.loan?.client?.first_name || payment.loan?.client?.first_name`
+— the same field repeated as its own fallback, which is a guaranteed no-op.
+The API response uses camelCase (`firstName`, `paymentDate`) since
+`SnakeCaseInterceptor` is not globally registered in this backend (confirmed
+multiple times this session) — the snake_case field the original fallback was
+"falling back to" never existed in the response at all.
 
-**Action required on your end:** delete these three files from your working
-copy — they are not included here because a deletion can't be "packaged,"
-only instructed.
+**Fix:** Every occurrence corrected to a real two-field fallback chain
+(`firstName || first_name`, `paymentDate || payment_date || createdAt || created_at`),
+matching the already-correct pattern used in `client.api.ts`'s
+`mapDbClientToClient()` elsewhere in this codebase.
 
-## ⚠️ Explicitly NOT included — pre-existing changes I did not make
+## Defect 2 — "Collected Today: UGX 0" despite same-day payments visible
 
-When preparing this package, `git status` revealed the following files already
-modified in this working copy, against its own prior commit history, **before
-I began this session's work**. I have not reviewed, traced, or verified any of
-these changes, and none of them correspond to anything in this session's audit
-or fix queue:
+**Root cause:** `getSummary()` computed "today" via
+`new Date(); .setHours(0,0,0,0)`, which sets midnight in the **server's**
+timezone. Railway runs Node in UTC by default; the business operates in
+Kampala (East Africa Time, UTC+3, no DST). This silently shifted which
+payments counted as "today" depending on what time of day the query ran.
 
-- `backend/src/modules/audit/audit.controller.ts`
-- `backend/src/modules/audit/audit.service.ts`
-- `backend/src/modules/cash-drawers/cash-drawers.controller.ts`
-- `backend/src/modules/cash-drawers/cash-drawers.service.ts`
-- `backend/src/modules/cash-drawers/entities/cash-drawer.entity.ts`
-- `frontend/src/app/dashboard/my-drawer/page.tsx`
-- `deploy.bat`, `docker-compose.yml`, `railway.toml`, `structure.txt`
-- `frontend/package-lock.json`
-- A new, untracked migration: `backend/database/migrations/1700000000023-BranchSharedDrawers.ts`
+**Fix:** New canonical helper (`startOfKampalaDay`/`endOfKampalaDay`) computes
+the day boundary using a fixed UTC+3 offset explicitly, verified against 3
+concrete boundary-condition test cases (a payment just after Kampala midnight,
+a payment just before, and the screenshot's actual reported time). Applied to
+all three places in the codebase that compute a "today" boundary for payments
+(`payments.service.ts`'s `getSummary()`, `reports.service.ts`'s
+`getDailySummary()` and `getWeeklyCollections()`) — `date-fns`'s
+`startOfDay()`/`endOfDay()` have the identical defect (they also use the
+runtime's local timezone), so leaving the report methods on the old calls
+would have reintroduced exactly the inconsistency this session's PAY-003/
+RPT-002 work was meant to eliminate.
 
-That migration's own header comment describes a real, deliberate business-logic
-change (cash drawers becoming branch-owned rather than cashier-owned). It reads
-as legitimate engineering work — but it is **not something I produced or can
-vouch for**, since I have no trace, evidence, or delivery report for it the way
-every other change in this session has one.
+## Defect 3 — False "already pending" with no visible warning beforehand
 
-**Recommendation:** review that body of changes as its own separate unit of
-work, with its own audit trail, before merging it alongside this delivery.
-Do not assume it has been verified to the standard the rest of this session
-held — it has not been examined by me at all.
+**Root cause, confirmed by reading both ends of the state machine:**
+`requestReversal()` set `payment.reversalStatus = PENDING` but never set
+`payment.status = REVERSAL_REQUESTED`. The frontend's "Waiting for admin"
+indicator and the logic that hides the "Request Reversal" button both check
+`payment.status === 'REVERSAL_REQUESTED'` — a real enum value that nothing in
+the backend ever actually wrote. The backend's duplicate-request guard
+(checking `reversalStatus === PENDING`) was correct and not itself a bug — the
+gap was that the cashier had no way to see a request was already pending
+before clicking through and hitting the rejection.
 
-## Verification status at time of packaging
+**Fix:**
+- `requestReversal()` now also sets `status: PaymentStatus.REVERSAL_REQUESTED`.
+- `rejectReversalRequest()` now also sets `status: PaymentStatus.COMPLETED`
+  — without this, every rejected request would leave the payment permanently
+  stuck showing "Waiting for admin" with the button hidden forever, since
+  nothing would ever revert the status set by the fix above.
+- Confirmed `reversePayment()` (the approve path) already unconditionally
+  sets `status: REVERSED` regardless of prior status, and its only blocking
+  guard checks for `status === REVERSED`, not a required-`COMPLETED` precondition
+  — so the approve path needed no change and correctly handles a payment at
+  `REVERSAL_REQUESTED`.
 
-- Backend: `tsc --noEmit` — 0 errors (excluding 2 pre-existing TypeScript
-  config deprecation warnings present before this session began)
-- Frontend: `next build` — clean, all routes compiled including every page
-  touched this session
+## Verification
+
+- Backend: `tsc --noEmit` — 0 errors (excluding the 2 pre-existing TypeScript
+  config deprecation warnings present since before this session)
+- Frontend: `next build` — clean, all routes
+- Kampala-day-boundary math verified against 3 concrete UTC/EAT conversion
+  test cases via Node, confirming correct boundaries at both edges of the
+  midnight transition
+
+## ⚠️ Confirmed NOT included — pre-existing unrelated changes in this working copy
+
+While preparing this delivery, `git status` again surfaced the same
+unrelated, undocumented changes flagged in the previous delivery's manifest,
+plus one additional file from the same body of work discovered this round:
+
+- `backend/database/migrations/1700000000023-BranchSharedDrawers.ts` (previously flagged)
+- `backend/src/modules/audit/*`, `backend/src/modules/cash-drawers/*` (previously flagged)
+- **`frontend/src/app/dashboard/my-drawer/page.tsx` (newly confirmed this round)**
+  — diff shows copy changes consistent with the same "branch-shared drawer"
+  feature ("Open it at the start of the day — any of you can use it until
+  someone closes it"), confirming it's part of that same unaudited body of
+  work, not something I introduced.
+
+None of these are included here, for the same reason as before: I have no
+trace, evidence, or delivery report for them and cannot vouch for their
+correctness under this session's verification standard.
 
 ## Outstanding — not yet runtime-validated
 
-Per this session's own evidence-tier discipline, every fix above is Repository
-Verified / Static Verified. None have been executed against a running system
-with real multi-tenant data. Recommended before relying on this in production:
-
-1. Tenant-isolation fixes (CLI-001, PAY-002, RPT-001/003/004/005, SYNC-001) —
-   test with two real tenants, confirm no cross-tenant data appears
-2. PAY-001 — forced mid-transaction failure test, confirm `loan_schedules`
-   rolls back with everything else
-3. The bike-loan schedule wiring fix — zero runtime history before this
-   session; create one real bike loan and confirm `loan_schedules` rows
-   are generated correctly
-4. SYNC-001 — run reconciliation against a deliberately-corrupted test loan,
-   confirm it corrects only that tenant's data
+These fixes are Repository Verified / Static Verified per this session's
+evidence-tier standard. Recommended before fully trusting them in production:
+1. Submit a real reversal request as a cashier, confirm the button correctly
+   disappears and "Waiting for admin" appears immediately
+2. Have an admin reject it, confirm the cashier's UI correctly reverts and
+   allows a new request
+3. Make a payment in the early morning hours Kampala time and confirm it
+   correctly counts toward "today" rather than the prior day
