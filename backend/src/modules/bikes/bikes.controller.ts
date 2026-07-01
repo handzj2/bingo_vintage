@@ -23,8 +23,12 @@ export class BikesController {
 
   @Post()
   @Roles('admin', 'manager')
-  async create(@Body() data: any) {
-    return await this.bikesService.create(data);
+  async create(@Body() data: any, @Request() req: AuthRequest) {
+    return await this.bikesService.create({
+      ...data,
+      tenantId: req.user?.tenantId,
+      branchId: req.user?.branchId,
+    });
   }
 
   @Get()

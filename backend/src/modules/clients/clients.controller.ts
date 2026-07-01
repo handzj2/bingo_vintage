@@ -435,17 +435,25 @@ export class ClientsController {
   // so we use transformFormClientData which handles that correctly
   @Post()
   @ApiOperation({ summary: 'Create a new client — REST standard route' })
-  async createClient(@Body() clientData: any) {
+  async createClient(@Body() clientData: any, @Request() req: AuthRequest) {
     const transformedData = this.transformFormClientData(clientData);
-    return await this.clientsService.registerRider(transformedData);
+    return await this.clientsService.registerRider({
+      ...transformedData,
+      tenantId: req.user?.tenantId,
+      branchId: req.user?.branchId,
+    });
   }
 
   // Original endpoint
   @Post('register')
   @ApiOperation({ summary: 'Register a new rider with all KYC fields' })
-  async create(@Body() clientData: RegisterFullClientDto) {
+  async create(@Body() clientData: RegisterFullClientDto, @Request() req: AuthRequest) {
     const transformedData = this.transformClientData(clientData);
-    return await this.clientsService.registerRider(transformedData);
+    return await this.clientsService.registerRider({
+      ...transformedData,
+      tenantId: req.user?.tenantId,
+      branchId: req.user?.branchId,
+    });
   }
 
   @Get()
