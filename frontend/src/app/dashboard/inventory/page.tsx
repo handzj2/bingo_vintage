@@ -227,8 +227,13 @@ export default function InventoryPage() {
   // RBAC: use permission matrix — toggles in Settings now affect access
   const role     = (user?.role ?? '').toLowerCase();
   const isAdmin  = role === 'admin' || role === 'superadmin';
-  // canEdit: admin/superadmin/manager, or any role granted client.edit via Settings toggle
-  const canEdit  = isAdmin || role === 'manager' || can('client.edit');
+  // canEdit: only admin/superadmin/manager can edit bike inventory.
+  // Deliberately not using can('client.edit') here — that permission
+  // governs client record editing, not bike inventory. Mixing the two
+  // caused cashiers with client.edit enabled to see the edit button
+  // but receive a 403 from the backend (which correctly guards PATCH
+  // /bikes with admin/manager roles only).
+  const canEdit  = isAdmin || role === 'manager';
   // Guard: only roles with view_inventory permission can access
   if (!authLoading && user && !['admin','superadmin','manager','cashier','agent'].includes(role)) {
     router.replace('/dashboard');

@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, ParseIntPipe, Request, UseGuards } from '@nestjs/common';
+import { IsOptional, IsString, IsNumber } from 'class-validator';
 import { AuthRequest } from '../../common/helpers/role-helper';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { BikesService } from './bikes.service';
@@ -7,12 +8,14 @@ import { RolesGuard }   from '../auth/guards/roles.guard';
 import { Roles }        from '../auth/decorators/roles.decorator';
 
 class UpdateBikeDto {
-  model?: string;
-  frame_number?: string;
-  engine_number?: string;
-  registration_number?: string;
-  sale_price?: number;
-  purchase_price?: number;
+  @IsOptional() @IsString()  model?: string;
+  @IsOptional() @IsString()  frame_number?: string;
+  @IsOptional() @IsString()  engine_number?: string;
+  @IsOptional() @IsString()  registration_number?: string;
+  @IsOptional() @IsNumber()  sale_price?: number;
+  @IsOptional() @IsNumber()  purchase_price?: number;
+  @IsOptional() @IsString()  status?: string;
+  @IsOptional() @IsString()  notes?: string;
 }
 
 @ApiTags('Bikes')

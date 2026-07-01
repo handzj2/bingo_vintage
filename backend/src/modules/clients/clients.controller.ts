@@ -616,9 +616,22 @@ export class ClientsController {
     // Map policy fields
     if (data.justification) result.justification = data.justification;
     if (data.alt_phone) result.alternatePhone = data.alt_phone;
-    if (data.reference1_name) result.reference1Name = data.reference1_name;
+
+    // Flat next-of-kin fields from ClientForm (next_of_kin_name etc.)
+    // These are distinct from the nested data.kin object path handled above —
+    // ClientForm sends flat snake_case, so both paths must be covered.
+    if (data.next_of_kin_name)         result.nextOfKinName         = data.next_of_kin_name;
+    if (data.next_of_kin_phone)        result.nextOfKinPhone        = data.next_of_kin_phone;
+    if (data.next_of_kin_relationship) result.nextOfKinRelationship = data.next_of_kin_relationship;
+
+    // Flat business fields from ClientForm
+    if (data.business_name)    result.businessName    = data.business_name;
+    if (data.business_type)    result.businessType    = data.business_type;
+    if (data.business_address) result.businessAddress = data.business_address;
+
+    if (data.reference1_name)  result.reference1Name  = data.reference1_name;
     if (data.reference1_phone) result.reference1Phone = data.reference1_phone;
-    if (data.reference2_name) result.reference2Name = data.reference2_name;
+    if (data.reference2_name)  result.reference2Name  = data.reference2_name;
     if (data.reference2_phone) result.reference2Phone = data.reference2_phone;
 
     return result;
