@@ -548,7 +548,7 @@ export class ClientsController {
   /**
    * New transformation method for ClientFormModel structure
    */
-  private transformFormClientData(data: Partial<ClientFormModelDto>): any {
+  private transformFormClientData(data: any): any {
     const result: any = { ...data };
 
     // Handle name fields
