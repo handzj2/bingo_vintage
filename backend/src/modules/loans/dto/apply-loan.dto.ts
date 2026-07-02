@@ -22,6 +22,18 @@ export class ApplyLoanDto {
   @IsPositive()
   bikeId?: number;
 
+  // When supplied, the loan is created from this specific tenant-owned
+  // LoanProduct row — its interestRate/termMonths/processingFee/lateFeeDaily
+  // and calculationMethod become the authoritative source for this loan,
+  // not the loanType/interestRate fields below. Optional and backward
+  // compatible: omitting it falls through to the legacy loanType-driven
+  // path unchanged.
+  @ApiProperty({ example: 1, required: false, description: 'Tenant-owned LoanProduct id. When provided, this product is the authoritative source of loan behavior.' })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  loanProductId?: number;
+
   @ApiProperty({ enum: LoanType, example: LoanType.CASH })
   @IsEnum(LoanType)
   loanType: LoanType;

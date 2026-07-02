@@ -12,6 +12,7 @@ import { User }      from '../users/entities/user.entity';
 import { Audit }     from '../audit/entities/audit-log.entity';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { ImpersonateDto }  from './dto/impersonate.dto';
+import { LoanProductTemplateService } from '../loan-products/loan-product-template.service';
 
 @Injectable()
 export class SuperAdminService {
@@ -22,6 +23,7 @@ export class SuperAdminService {
     @InjectRepository(Audit)  private auditRepo:  Repository<Audit>,
     private readonly dataSource: DataSource,
     private readonly jwtService: JwtService,
+    private readonly loanProductTemplateService: LoanProductTemplateService,
   ) {}
 
   // ── List all tenants with user counts ────────────────────────────────────
@@ -138,13 +140,54 @@ export class SuperAdminService {
         );
       }
 
+      // 6. Loan products this tenant offers. Each product is tenant-owned
+      // (its own row, its own rate/limits) — this matches the existing
+      // LoanProduct entity design exactly, not a shared-catalog model.
+      // If the request omits loanProducts, the default set comes entirely
+      // from LoanProductTemplateService — no business values are embedded
+      // in this method.
+      const requestedProducts = (dto.loanProducts && dto.loanProducts.length > 0)
+        ? dto.loanProducts.map(p => this.loanProductTemplateService.normalizeProduct(p))
+        : this.loanProductTemplateService.getDefaultProducts();
+
+      for (const p of requestedProducts) {
+        await em.query(
+          `INSERT INTO loan_products
+             (tenant_id, code, name, category, product_type, interest_rate,
+              min_term_months, max_term_months, min_amount, max_amount,
+              processing_fee, late_fee_daily, is_active, description,
+              created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,true,$13,NOW(),NOW())`,
+          [
+            savedTenant.id,
+            p.productType,
+            p.name,
+            p.productType,
+            p.productType,
+            p.interestRate,
+            p.minTermMonths,
+            p.maxTermMonths,
+            p.minAmount,
+            p.maxAmount,
+            p.processingFee,
+            p.lateFeeDaily,
+            p.description,
+          ],
+        );
+      }
+
       return savedTenant;
     });
   }
 
-  // Called by superadmin controller after createTenant transaction commits
+  // Called by superadmin controller after createTenant transaction commits.
+  // NOTE: settings are already seeded inside createTenant()'s own transaction
+  // (see Step 5 above) — this method intentionally does nothing further.
+  // It is kept (rather than removed) because the controller still calls it
+  // unconditionally; removing the call site is a separate, smaller cleanup
+  // outside the scope of this feature.
   async finaliseTenantCreation(tenantId: number, adminUsername: string): Promise<void> {
-    await this.settingsService.seedForTenant(tenantId);
+    // Intentionally a no-op — see note above.
   }
 
   // ── Toggle tenant active status ───────────────────────────────────────────

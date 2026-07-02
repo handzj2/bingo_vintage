@@ -42,6 +42,13 @@ export class Loan {
   @Column({ name: 'loan_type', default: 'cash' })
   loanType: string;
 
+  // Nullable: loans created before this feature have no product
+  // association. When present, this loan's interestRate/term/fees were
+  // sourced from this LoanProduct row at creation time — see
+  // LoansService.applyForLoan().
+  @Column({ name: 'loan_product_id', nullable: true })
+  loanProductId: number | null;
+
   // ✅ DUAL RECOGNITION for loan_type
   get loan_type(): string { return this.loanType; }
   set loan_type(value: string) { this.loanType = value; }

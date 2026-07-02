@@ -165,7 +165,7 @@ export class PaymentsController {
   async getPendingReversalRequests(@Request() req: AuthRequest) {
     const user = req.user;
     assertRole(user, ['admin', 'manager'], 'Admin or manager access required');
-    return this.paymentsService.getPendingReversalRequests();
+    return this.paymentsService.getPendingReversalRequests(user?.tenantId);
   }
 
   // Cashier submits a reversal request

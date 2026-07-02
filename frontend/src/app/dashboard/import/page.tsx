@@ -118,16 +118,28 @@ function parseSheet(ws: any): any {
     const c1 = row[1];
     const c1str = str(c1).toLowerCase();
 
-    // Year row
-    const maybeYear = parseInt(c1str, 10);
-    if (maybeYear >= 2000 && maybeYear <= 2100 && !row[2]) {
-      currentYear = maybeYear;
+    // Year row — the real Excel format places the year in column D (index 3),
+    // not column B (index 1). Check both positions to handle format variations.
+    const maybeYearC1 = parseInt(c1str, 10);
+    const maybeYearC3 = parseInt(str(row[3]), 10);
+    if (maybeYearC1 >= 2000 && maybeYearC1 <= 2100 && !row[2]) {
+      currentYear = maybeYearC1;
+      continue;
+    }
+    if (maybeYearC3 >= 2000 && maybeYearC3 <= 2100 && !row[1] && !row[2]) {
+      currentYear = maybeYearC3;
       continue;
     }
 
-    // Month row
+    // Month row — also detect year rollover automatically:
+    // if we see January again after being past January, the year incremented.
     if (MONTHS[c1str] !== undefined) {
-      currentMonth = MONTHS[c1str];
+      const newMonth = MONTHS[c1str];
+      if (newMonth === 0 && currentMonth > 0) {
+        // January appearing after a non-January month = new year
+        currentYear += 1;
+      }
+      currentMonth = newMonth;
       continue;
     }
 

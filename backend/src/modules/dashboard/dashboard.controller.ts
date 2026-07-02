@@ -17,4 +17,9 @@ export class DashboardController {
     const end = endDate ? new Date(endDate) : undefined;
     return this.dashboardService.getSummary(req.user.tenantId, start, end);
   }
+
+  @Get('product-kpis')
+  async getProductKpis(@Req() req) {
+    return this.dashboardService.getProductKpis(req.user.tenantId);
+  }
 }

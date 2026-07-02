@@ -582,9 +582,11 @@ export class PaymentsService {
     return { success: true, message: 'Reversal request submitted for admin review.' };
   }
 
-  async getPendingReversalRequests() {
+  async getPendingReversalRequests(tenantId?: number) {
+    const where: any = { reversalStatus: ReversalStatus.PENDING };
+    if (tenantId) where.tenantId = tenantId;
     return this.paymentRepo.find({
-      where: { reversalStatus: ReversalStatus.PENDING },
+      where,
       relations: ['loan', 'loan.client'],
       order: { paymentDate: 'DESC' },
     });

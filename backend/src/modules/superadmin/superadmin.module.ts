@@ -6,6 +6,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { SuperAdminController } from './superadmin.controller';
 import { SettingsModule }       from '../settings/settings.module';
 import { SuperAdminService }    from './superadmin.service';
+import { LoanProductsModule }   from '../loan-products/loan-products.module';
 import { Tenant }  from '../tenants/entities/tenant.entity';
 import { User }    from '../users/entities/user.entity';
 import { Audit }   from '../audit/entities/audit-log.entity';
@@ -13,6 +14,7 @@ import { Audit }   from '../audit/entities/audit-log.entity';
 @Module({
   imports: [
     SettingsModule,
+    LoanProductsModule,
     TypeOrmModule.forFeature([Tenant, User, Audit]),
     JwtModule.registerAsync({
       imports: [ConfigModule],

@@ -95,7 +95,12 @@ function RequestReversalModal({ payment, onClose, onSuccess }: { payment: any; o
             <div>
               <p className="text-xs text-gray-400 mb-0.5">Date</p>
               <p className="text-xs text-gray-600">
-                {new Date(payment.paymentDate || payment.payment_date || payment.createdAt || payment.created_at).toLocaleDateString()}
+                {(() => {
+                  const d = payment.paymentDate || payment.payment_date || payment.createdAt || payment.created_at;
+                  if (!d) return '—';
+                  const parsed = new Date(d);
+                  return isNaN(parsed.getTime()) ? '—' : parsed.toLocaleDateString();
+                })()}
               </p>
             </div>
           </div>
@@ -535,9 +540,14 @@ export default function ReversalsPage() {
                     <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
                       <div className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
-                        {new Date(p.paymentDate || p.payment_date || p.createdAt || p.created_at).toLocaleDateString('en-UG', {
-                          day: '2-digit', month: 'short', year: 'numeric'
-                        })}
+                        {(() => {
+                          const d = p.paymentDate || p.payment_date || p.createdAt || p.created_at;
+                          if (!d) return '—';
+                          const parsed = new Date(d);
+                          return isNaN(parsed.getTime()) ? '—' : parsed.toLocaleDateString('en-UG', {
+                            day: '2-digit', month: 'short', year: 'numeric'
+                          });
+                        })()}
                       </div>
                     </td>
                     <td className="px-4 py-3">

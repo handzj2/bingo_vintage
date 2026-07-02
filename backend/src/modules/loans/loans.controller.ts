@@ -45,6 +45,17 @@ export class CreateBikeLoanDto {
   @IsPositive()
   client_id: number;
 
+  // When supplied, this loan is created from this specific tenant-owned
+  // LoanProduct row — its calculationMethod/interestRate/term limits/fees
+  // become the authoritative source for this loan. Optional and backward
+  // compatible: omitting it falls through to the legacy hardcoded-weekly
+  // path unchanged.
+  @ApiProperty({ example: 1, required: false, description: 'Tenant-owned LoanProduct id. When provided, this product is the authoritative source of loan behavior.' })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  loan_product_id?: number;
+
   @ApiProperty({ example: 1, description: 'Bike ID', required: false })
   @IsOptional()
   @IsNumber()
@@ -513,7 +524,46 @@ export class LoansController {
     }
   }
 
-  // ==================== REPORTS & ANALYTICS ====================
+  @Patch(':id/reschedule')
+  @ApiOperation({
+    summary: 'Correct a loan start date and regenerate its schedule',
+    description: 'Deletes the existing schedule and rebuilds it from the new start date. ' +
+                 'Only allowed when no payments have been recorded against this loan.',
+  })
+  @SetMetadata('roles', ['admin', 'manager'])
+  async rescheduleLoan(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('startDate') startDate: string,
+    @Request() req: AuthRequest,
+  ) {
+    assertRole(req.user, ['admin', 'manager'], 'Admin or manager access required');
+    return await this.loansService.rescheduleLoan(id, startDate, req.user);
+  }
+
+  @Patch(':id/backdate')
+  @ApiOperation({
+    summary: 'Backdate a loan and load its historical payment records',
+    description:
+      'For loans entered with today\'s date that have real payment history from months ago. ' +
+      'Sets the real start date, regenerates the full schedule, marks already-paid installments, ' +
+      'creates payment records for amounts already collected, and sets the correct current balance. ' +
+      'Body: { startDate, newBalance, paidInstallments: [{installmentNumber, amountPaid, paidDate}] }',
+  })
+  @SetMetadata('roles', ['admin', 'manager'])
+  async backdateLoan(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('startDate') startDate: string,
+    @Body('newBalance') newBalance: number,
+    @Body('paidInstallments') paidInstallments: { installmentNumber: number; amountPaid: number; paidDate: string }[],
+    @Request() req: AuthRequest,
+  ) {
+    assertRole(req.user, ['admin', 'manager'], 'Admin or manager access required');
+    return await this.loansService.backdateLoan(
+      id, startDate, paidInstallments ?? [], newBalance, req.user,
+    );
+  }
+
+
 
   @Get('reports/summary')
   @ApiOperation({
