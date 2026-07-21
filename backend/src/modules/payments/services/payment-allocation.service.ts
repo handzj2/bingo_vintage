@@ -1,28 +1,35 @@
 /**
  * PaymentAllocationService
  *
- * Automatically distributes a payment amount across one or more loan schedule
- * rows when no explicit scheduleId is provided by the caller.
+ * Distributes a payment amount across one or more loan schedule rows,
+ * oldest installment first, and records exactly what it did in
+ * payment_allocations so the exact reverse can be replayed later.
  *
- * Allocation order: oldest due-date first (installment_number ASC).
+ * Allocation order: installment_number ASC (oldest due first).
  *
  * Rules per installment:
  *   remaining >= (amountDue - alreadyPaid)  → mark PAID, consume full remainder
  *   remaining <  (amountDue - alreadyPaid)  → mark PARTIAL, stop (amount exhausted)
  *
- * Uses raw SQL UPDATE for every schedule mutation.
- * NEVER calls repo.save() on a LoanSchedule — doing so would zero out
- * amount_due / due_date because TypeORM overwrites unloaded decimal columns.
+ * Uses raw SQL for every schedule mutation and every payment_allocations
+ * insert. NEVER calls repo.save() on a LoanSchedule — doing so would zero
+ * out amount_due / due_date because TypeORM overwrites unloaded decimal
+ * columns.
  *
- * This service is intentionally narrow in scope: it only touches
- * loan_schedules rows. Loan balance updates are handled upstream in
- * PaymentsService.create() and must not be repeated here.
+ * Runs entirely against the EntityManager passed in by the caller — this is
+ * required, not optional: PaymentsService.create() wraps payment creation,
+ * balance update, and schedule allocation in a single QueryRunner
+ * transaction. If this service opened its own connection instead (as the
+ * previous version did, via this.scheduleRepo.manager), a failure after
+ * allocation but before commit could leave the payment rolled back while
+ * the schedule mutation stuck — the exact kind of balance/schedule
+ * disagreement this whole fix exists to eliminate. Every write here must
+ * commit or roll back atomically with the payment record.
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { LoanSchedule } from '../../schedules/entities/schedule.entity';
+import { EntityManager } from 'typeorm';
+import { ScheduleStatus } from '../../schedules/entities/schedule.entity';
 
 /** Shape of each schedule row returned by the allocation query */
 interface ScheduleRow {
@@ -39,29 +46,38 @@ export interface AllocationResult {
   allocated: number;
   remaining: number;
   rowsUpdated: number;
-  detail: Array<{ scheduleId: number; applied: number; newStatus: string }>;
+  detail: Array<{ scheduleId: number; applied: number; previousStatus: string; newStatus: string }>;
 }
 
 @Injectable()
 export class PaymentAllocationService {
   private readonly logger = new Logger(PaymentAllocationService.name);
 
-  constructor(
-    @InjectRepository(LoanSchedule)
-    private readonly scheduleRepo: Repository<LoanSchedule>,
-  ) {}
-
   /**
    * allocatePayment()
    *
-   * Entry point called by PaymentsService.create() when no scheduleId
-   * was supplied with the payment.
+   * Entry point called by PaymentsService.create() inside its existing
+   * QueryRunner transaction.
    *
-   * @param loanId  - The loan whose schedules should be updated
-   * @param amount  - The payment amount to distribute (positive integer/decimal)
-   * @returns       AllocationResult for audit/logging
+   * @param manager        - EntityManager bound to the caller's transaction
+   * @param paymentId      - The already-saved Payment row this allocation belongs to
+   * @param loanId         - The loan whose schedules should be updated
+   * @param amount         - The payment amount to distribute (positive integer/decimal)
+   * @param receiptNumber  - Written onto every schedule row touched, same as the
+   *                         single-row path this replaces used to do
+   * @param paymentMethod  - Written onto every schedule row touched
+   * @param paymentDate    - Written onto every schedule row touched (paid_date)
+   * @returns              AllocationResult for audit/logging
    */
-  async allocatePayment(loanId: number, amount: number): Promise<AllocationResult> {
+  async allocatePayment(
+    manager: EntityManager,
+    paymentId: number,
+    loanId: number,
+    amount: number,
+    receiptNumber: string,
+    paymentMethod: string,
+    paymentDate: Date,
+  ): Promise<AllocationResult> {
     const originalAmount = Math.round(Number(amount)); // integer arithmetic — avoids float drift
 
     if (originalAmount <= 0) {
@@ -71,11 +87,11 @@ export class PaymentAllocationService {
 
     // ── Step 1: Fetch all unpaid / partially paid schedules, oldest first ──
     //   We include OVERDUE rows too — a late payment should still clear them.
-    const rows: ScheduleRow[] = await this.scheduleRepo.manager.query(
+    const rows: ScheduleRow[] = await manager.query(
       `SELECT id, amount_due, amount_paid, status
          FROM loan_schedules
         WHERE loan_id = $1
-          AND status IN ('PENDING'::schedule_status_enum, 'PARTIAL'::schedule_status_enum, 'OVERDUE'::schedule_status_enum)
+          AND status IN ('PENDING'::loan_schedules_status_enum, 'PARTIAL'::loan_schedules_status_enum, 'OVERDUE'::loan_schedules_status_enum)
         ORDER BY installment_number ASC`,
       [loanId],
     );
@@ -104,39 +120,56 @@ export class PaymentAllocationService {
       if (remaining >= stillOwed) {
         // This payment covers the entire remaining amount on this installment
         applied    = stillOwed;
-        newStatus  = 'PAID';
+        newStatus  = ScheduleStatus.PAID;
         remaining -= stillOwed;
       } else {
         // Partial coverage — consume all remaining payment, stop after this row
         applied    = remaining;
-        newStatus  = 'PARTIAL';
+        newStatus  = ScheduleStatus.PARTIAL;
         remaining  = 0;
       }
 
       const newPaid = alreadyPaid + applied;
+      const previousStatus = row.status;
 
-      // ── Step 3: Persist via raw SQL (safe — never zeros out columns) ──────
-      await this.scheduleRepo.manager.query(
+      // ── Step 3: Persist schedule mutation via raw SQL (safe — never zeros
+      //    out columns) — also sets receipt_number/payment_method/paid_date,
+      //    matching what the single-row path this replaces used to set, so
+      //    switching to multi-row allocation doesn't lose that data. ──────
+      await manager.query(
         `UPDATE loan_schedules
-            SET amount_paid = $1,
-                status      = $2::schedule_status_enum,
-                updated_at  = NOW()
-          WHERE id = $3`,
-        [newPaid, newStatus, row.id],
+            SET amount_paid    = $1,
+                status          = $2::loan_schedules_status_enum,
+                receipt_number  = $3,
+                payment_method  = $4,
+                paid_date       = $5,
+                updated_at      = NOW()
+          WHERE id = $6`,
+        [newPaid, newStatus, receiptNumber, paymentMethod, paymentDate, row.id],
       );
 
-      detail.push({ scheduleId: row.id, applied, newStatus });
+      // ── Step 4: Record the allocation itself — this is what lets
+      //    reversePayment() undo exactly this row later, instead of only
+      //    knowing about a single schedule_id. ─────────────────────────────
+      await manager.query(
+        `INSERT INTO payment_allocations
+           (payment_id, schedule_id, amount_applied, previous_status, new_status, created_at)
+         VALUES ($1, $2, $3, $4::loan_schedules_status_enum, $5::loan_schedules_status_enum, NOW())`,
+        [paymentId, row.id, applied, previousStatus, newStatus],
+      );
+
+      detail.push({ scheduleId: row.id, applied, previousStatus, newStatus });
 
       this.logger.debug(
-        `Loan ${loanId} | schedule ${row.id} | applied ${applied} | ` +
-        `paid ${alreadyPaid}→${newPaid}/${amountDue} | status → ${newStatus}`,
+        `Payment ${paymentId} | loan ${loanId} | schedule ${row.id} | applied ${applied} | ` +
+        `paid ${alreadyPaid}→${newPaid}/${amountDue} | status ${previousStatus} → ${newStatus}`,
       );
     }
 
     const allocated = originalAmount - remaining;
 
     this.logger.log(
-      `allocatePayment complete — loan ${loanId} | ` +
+      `allocatePayment complete — payment=${paymentId} loan=${loanId} | ` +
       `amount=${originalAmount} | allocated=${allocated} | remaining=${remaining} | ` +
       `rows=${detail.length}`,
     );

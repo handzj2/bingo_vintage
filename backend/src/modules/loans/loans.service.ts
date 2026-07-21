@@ -441,26 +441,52 @@ export class LoansService {
         const paid = paidMap.get(inst.installmentNumber);
 
         if (paid) {
-          // Mark schedule row as PAID
+          // Mark schedule row as PAID/PARTIAL. previous_status is always
+          // 'PENDING' here — persistSchedule() (step 3, just above) always
+          // inserts fresh rows with status = 'PENDING', so there is no
+          // other value this row could have had at this point.
+          const previousStatus = 'PENDING';
           const status = paid.amountPaid >= inst.amountDue ? 'PAID' : 'PARTIAL';
-          await em.query(
+          const [scheduleRow]: { id: number }[] = await em.query(
             `UPDATE loan_schedules
              SET amount_paid = $1, status = $2, paid_date = $3, updated_at = NOW()
-             WHERE loan_id = $4 AND installment_number = $5`,
+             WHERE loan_id = $4 AND installment_number = $5
+             RETURNING id`,
             [paid.amountPaid, status, paid.paidDate, id, inst.installmentNumber],
           );
 
-          // Create payment record
-          await em.query(
+          // Create payment record — linked to the schedule row it covers
+          // via schedule_id (Gap B fix). Without this, reversePayment()'s
+          // schedule-adjustment logic has nothing to act on and reversing
+          // a backdated payment silently leaves the schedule row untouched.
+          // notes uses 'Historical import' (Gap A fix), matching the exact
+          // string historicalImport() writes and the guard at the top of
+          // this method checks for — previously this wrote 'Historical
+          // entry', a different string, which meant re-running
+          // backdateLoan() on an already-backdated loan always failed the
+          // guard, incorrectly, because its own prior rows didn't match
+          // what the guard was excluding.
+          const [paymentRow]: { id: number }[] = await em.query(
             `INSERT INTO payments
-               (loan_id, amount, payment_method, payment_date, status,
+               (loan_id, schedule_id, amount, payment_method, payment_date, status,
                 receipt_number, notes, tenant_id, branch_id, created_at, updated_at)
-             VALUES ($1,$2,'CASH',$3,'COMPLETED',$4,'Historical entry',$5,$6,NOW(),NOW())`,
+             VALUES ($1,$2,$3,'CASH',$4,'COMPLETED',$5,'Historical import',$6,$7,NOW(),NOW())
+             RETURNING id`,
             [
-              id, paid.amountPaid, paid.paidDate,
+              id, scheduleRow.id, paid.amountPaid, paid.paidDate,
               `BACKDATE-${id}-${inst.installmentNumber}`,
               loan.tenantId ?? null, loan.branchId ?? null,
             ],
+          );
+
+          // Record the allocation so this payment reverses through the same
+          // payment_allocations path as a normal real-time payment, instead
+          // of needing a third, separate reversal branch.
+          await em.query(
+            `INSERT INTO payment_allocations
+               (payment_id, schedule_id, amount_applied, previous_status, new_status, created_at)
+             VALUES ($1,$2,$3,$4::loan_schedules_status_enum,$5::loan_schedules_status_enum,NOW())`,
+            [paymentRow.id, scheduleRow.id, paid.amountPaid, previousStatus, status],
           );
         } else {
           // Past due and not paid = OVERDUE
@@ -792,12 +818,13 @@ export class LoansService {
                 ? ScheduleStatus.PARTIAL
                 : ScheduleStatus.PENDING;
 
-            await em.query(
+            const [scheduleRow]: { id: number }[] = await em.query(
               `INSERT INTO loan_schedules
                  (loan_id, installment_number, due_date, amount_due, principal_due,
                   interest_due, amount_paid, status, paid_date, payment_notes,
                   tenant_id, branch_id, created_at, updated_at)
-               VALUES ($1,$2,$3,$4,$5,0,$6,$7,$8,'Historical import',$9,$10,NOW(),NOW())`,
+               VALUES ($1,$2,$3,$4,$5,0,$6,$7,$8,'Historical import',$9,$10,NOW(),NOW())
+               RETURNING id`,
               [
                 savedLoan.id, installmentNumber, p.date,
                 amountDue, amountDue, amountPaid, scheduleStatus,
@@ -807,16 +834,33 @@ export class LoansService {
             );
 
             if (amountPaid > 0) {
-              await em.query(
+              // schedule_id links this payment to the row it covers (Gap B
+              // fix) — without it, reversePayment() has nothing to act on
+              // for imported payments and reversing one leaves the schedule
+              // row exactly as it was.
+              const [paymentRow]: { id: number }[] = await em.query(
                 `INSERT INTO payments
-                   (loan_id, amount, payment_method, payment_date, status,
+                   (loan_id, schedule_id, amount, payment_method, payment_date, status,
                     receipt_number, notes, tenant_id, branch_id, created_at, updated_at)
-                 VALUES ($1,$2,'CASH',$3,'COMPLETED',$4,'Historical import',$5,$6,NOW(),NOW())`,
+                 VALUES ($1,$2,$3,'CASH',$4,'COMPLETED',$5,'Historical import',$6,$7,NOW(),NOW())
+                 RETURNING id`,
                 [
-                  savedLoan.id, amountPaid, p.date,
+                  savedLoan.id, scheduleRow.id, amountPaid, p.date,
                   `HIST-${savedLoan.id}-${installmentNumber}`,
                   tenantId ?? null, branchId ?? null,
                 ],
+              );
+
+              // previous_status is 'PENDING' — this is a freshly-inserted
+              // schedule row; before this payment.amountPaid was applied it
+              // had no payment against it, same as any other new
+              // installment. Recorded so this payment reverses through the
+              // same payment_allocations path as a normal payment.
+              await em.query(
+                `INSERT INTO payment_allocations
+                   (payment_id, schedule_id, amount_applied, previous_status, new_status, created_at)
+                 VALUES ($1,$2,$3,'PENDING'::loan_schedules_status_enum,$4::loan_schedules_status_enum,NOW())`,
+                [paymentRow.id, scheduleRow.id, amountPaid, scheduleStatus],
               );
             }
 

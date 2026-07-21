@@ -10,6 +10,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { Payment } from './entities/payment.entity';
+import { PaymentAllocation } from './entities/payment-allocation.entity'; // ← NEW
 import { Loan } from '../loans/entities/loan.entity';
 import { LoanSchedule } from '../schedules/entities/schedule.entity';
 import { AuthModule } from '../auth/auth.module';
@@ -18,10 +19,11 @@ import { SmsModule } from '../sms/sms.module';
 import { LedgerModule } from '../ledger/ledger.module';
 import { ReceiptsModule } from '../receipts/receipts.module';   // ← NEW
 import { CashDrawersModule } from '../cash-drawers/cash-drawers.module'; // Phase 3: FK validation
+import { PaymentAllocationService } from './services/payment-allocation.service'; // ← NEW: was dead code, now wired in
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payment, Loan, LoanSchedule]),
+    TypeOrmModule.forFeature([Payment, PaymentAllocation, Loan, LoanSchedule]),
     AuthModule,
     AuditModule,
     SmsModule,
@@ -32,6 +34,7 @@ import { CashDrawersModule } from '../cash-drawers/cash-drawers.module'; // Phas
   controllers: [PaymentsController],
   providers: [
     PaymentsService,
+    PaymentAllocationService,
   ],
   exports: [PaymentsService],
 })

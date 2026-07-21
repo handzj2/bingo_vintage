@@ -4,7 +4,7 @@ import {
   BadRequestException, ConflictException, Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Between, MoreThanOrEqual, EntityManager, Not } from 'typeorm';
+import { Repository, DataSource, Between, MoreThanOrEqual, Not } from 'typeorm';
 import { startOfKampalaDay } from '../../common/utils/kampala-time';
 import { randomBytes } from 'crypto';
 import { Payment } from './entities/payment.entity';
@@ -16,6 +16,7 @@ import { SmsService } from '../sms/sms.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { ReceiptsService } from '../receipts/receipts.service';
 import { CashDrawerService } from '../cash-drawers/cash-drawers.service';
+import { PaymentAllocationService } from './services/payment-allocation.service';
 
 const PG_UNIQUE_VIOLATION = '23505';
 import { sanitiseDto } from '../../common/utils/sanitise';
@@ -51,6 +52,7 @@ export class PaymentsService {
     private readonly ledgerService:  LedgerService,
     private readonly receiptsService: ReceiptsService,
     private readonly cashDrawerService: CashDrawerService,
+    private readonly paymentAllocationService: PaymentAllocationService,
   ) {}
 
   async runOverdueScan(graceDays = 0) {
@@ -98,38 +100,12 @@ export class PaymentsService {
     return rows.length ? rows[0].id : null;
   }
 
-  private async applyPaymentToSchedule(
-    manager: EntityManager,
-    scheduleId: number,
-    paymentAmount: number,
-    receiptNumber: string,
-    paymentMethod: string,
-    paymentDate: Date,
-  ) {
-    const rows: any[] = await manager.query(
-      `SELECT id, amount_due, amount_paid, status FROM loan_schedules WHERE id = $1`,
-      [scheduleId],
-    );
-    if (!rows.length) return;
-
-    const row       = rows[0];
-    const amountDue = Number(row.amount_due);
-    const newPaid   = Number(row.amount_paid || 0) + paymentAmount;
-
-    const newStatusVal = newPaid >= amountDue ? 'PAID' : newPaid > 0 ? 'PARTIAL' : row.status;
-
-    await manager.query(
-      `UPDATE loan_schedules
-          SET amount_paid    = $1,
-              status         = $2,
-              receipt_number = $3,
-              payment_method = $4,
-              paid_date      = $5,
-              updated_at     = NOW()
-        WHERE id = $6`,
-      [newPaid, newStatusVal, receiptNumber, paymentMethod, paymentDate, scheduleId],
-    );
-  }
+  // applyPaymentToSchedule() removed 2026-07 — this was the root cause of
+  // the payment-allocation bug (see PAYMENT_ALLOCATION_FIX.md): it applied
+  // an entire payment to a single schedule row and discarded any excess.
+  // Superseded by PaymentAllocationService.allocatePayment(), called from
+  // create() below. Confirmed zero other callers via
+  // `grep -rn applyPaymentToSchedule modules/` before removal.
 
   /**
    * Enterprise-grade payment creation.
@@ -279,14 +255,42 @@ export class PaymentsService {
         );
       }
 
-      if (scheduleId) {
-        await this.applyPaymentToSchedule(
-          qr.manager,
-          scheduleId,
-          Number(dto.amount),
-          receiptNumber,
-          dto.paymentMethod,
-          dto.paymentDate || new Date(),
+      // Fixed (root cause): this used to call applyPaymentToSchedule(), which
+      // applies the ENTIRE payment amount to a single schedule row and
+      // silently discards any excess instead of carrying it to the next
+      // installment. That meant a lump-sum or backdated payment reduced
+      // loan.balance correctly but left every installment past the first
+      // one OVERDUE/PARTIAL forever — which is what ArrearsCalculationJob
+      // reads to compute total_arrears. allocatePayment() walks every
+      // unpaid installment oldest-first and distributes the full amount
+      // across as many as it covers, recording each row touched in
+      // payment_allocations so reversePayment() can undo it precisely.
+      // scheduleId (resolved above) is still stored on the payment row
+      // itself for backward-compatible single-column lookups — allocation
+      // detail is the source of truth for what actually happened.
+      const allocationResult = await this.paymentAllocationService.allocatePayment(
+        qr.manager,
+        savedPayment!.id,
+        dto.loanId,
+        Number(dto.amount),
+        receiptNumber,
+        dto.paymentMethod,
+        dto.paymentDate || new Date(),
+      );
+
+      // If the payment amount exceeds what every open installment could
+      // absorb, the excess isn't applied to any schedule row (there's
+      // nothing left to apply it to) — loan.balance above already reflects
+      // the full payment either way. Flagging this rather than letting it
+      // pass silently: it usually means the loan is closing out on this
+      // payment, but it can also mean a genuine overpayment that a human
+      // should look at (e.g. as store credit or a refund), which this
+      // system does not currently track anywhere.
+      if (allocationResult.remaining > 0) {
+        this.logger.warn(
+          `Payment ${savedPayment!.id} on loan ${dto.loanId}: ` +
+          `${allocationResult.remaining} of ${allocationResult.originalAmount} ` +
+          `could not be applied to any open installment (loan balance was still reduced by the full amount).`,
         );
       }
 
@@ -406,7 +410,59 @@ export class PaymentsService {
         reversalStatus:  ReversalStatus.APPROVED,  // state machine: request fulfilled
       });
 
-      if (payment.scheduleId) {
+      // Reversal must undo exactly what allocation did. A payment posted
+      // after this fix may have touched several loan_schedules rows (see
+      // PaymentAllocationService.allocatePayment) — payment_allocations
+      // records each one. A payment posted BEFORE this fix (or before the
+      // payment_allocations table existed) has no rows there, and must
+      // still reverse via the original single-scheduleId path, unchanged,
+      // or every historical payment in production would become
+      // unreversible the moment this ships.
+      const allocations: { schedule_id: number; amount_applied: string; previous_status: string }[] =
+        await queryRunner.manager.query(
+          `SELECT schedule_id, amount_applied, previous_status
+             FROM payment_allocations
+            WHERE payment_id = $1 AND reversed_at IS NULL`,
+          [paymentId],
+        );
+
+      if (allocations.length > 0) {
+        for (const alloc of allocations) {
+          // Restore to the EXACT status recorded before this allocation
+          // touched the row (payment_allocations.previous_status), not a
+          // due-date-based guess. This matters when a row had prior
+          // payment history of its own — e.g. it was PARTIAL before this
+          // allocation made it PAID. A due-date guess would wrongly reset
+          // it to OVERDUE/PENDING and silently discard that partial-paid
+          // history, which is the same class of bug this whole fix exists
+          // to eliminate. Known limitation: this assumes reversals happen
+          // in the same order allocations were applied to a given row — if
+          // a row received allocations from two different payments and
+          // they're reversed out of order, previous_status may no longer
+          // reflect the row's actual current state. Not handled here;
+          // flag for review if multi-payment-per-installment reversal
+          // ordering ever becomes a real scenario.
+          await queryRunner.manager.query(
+            `UPDATE loan_schedules
+                SET amount_paid    = GREATEST(0, amount_paid - $1),
+                    status         = $2::loan_schedules_status_enum,
+                    receipt_number = NULL,
+                    paid_date      = CASE
+                                        WHEN $2 IN ('PENDING', 'OVERDUE') THEN NULL
+                                        ELSE paid_date
+                                      END,
+                    updated_at     = NOW()
+              WHERE id = $3`,
+            [alloc.amount_applied, alloc.previous_status, alloc.schedule_id],
+          );
+        }
+
+        await queryRunner.manager.query(
+          `UPDATE payment_allocations SET reversed_at = NOW()
+            WHERE payment_id = $1 AND reversed_at IS NULL`,
+          [paymentId],
+        );
+      } else if (payment.scheduleId) {
         // Fixed: CASE expression result is inferred as `text` by Postgres,
         // which then fails to assign into the enum-typed `status` column
         // ("column status is of type loan_schedules_status_enum but
