@@ -37,6 +37,10 @@ import { BikesService } from '../bikes/bikes.service';
 import { assertAdmin, assertRole, AuthRequest } from '../../common/helpers/role-helper';
 import { ApplyLoanDto } from './dto/apply-loan.dto';
 
+// Safe error message extractor (unknown → string)
+const errorMessage = (err: unknown, fallback: string): string =>
+  err instanceof Error ? err.message : fallback;
+
 // ==================== DTO DEFINITIONS ====================
 
 export class CreateBikeLoanDto {
@@ -45,11 +49,6 @@ export class CreateBikeLoanDto {
   @IsPositive()
   client_id: number;
 
-  // When supplied, this loan is created from this specific tenant-owned
-  // LoanProduct row — its calculationMethod/interestRate/term limits/fees
-  // become the authoritative source for this loan. Optional and backward
-  // compatible: omitting it falls through to the legacy hardcoded-weekly
-  // path unchanged.
   @ApiProperty({ example: 1, required: false, description: 'Tenant-owned LoanProduct id. When provided, this product is the authoritative source of loan behavior.' })
   @IsOptional()
   @IsNumber()
@@ -122,14 +121,6 @@ export class CashLoanCalculateDto {
 }
 
 export class AdminReversalDto {
-  // LOAN-001: this DTO previously declared reversalType, amount, and changes
-  // fields. Repository trace confirmed: (1) the only real caller — the "Admin
-  // Policy Override" UI in ReversalModal.tsx — never collects or sends any of
-  // these three fields; (2) reverseOrAdjustLoan() never reads any of them.
-  // They were validated-but-dead weight on the contract. Removed to match the
-  // one real, shipped workflow: a direct administrative balance correction
-  // with a mandatory justification, distinct from PaymentsService.reversePayment()
-  // (which undoes a specific payment transaction and is a separate capability).
   @ApiProperty({
     example: 'Customer made advance payment, waiving late fee',
     description: 'Mandatory justification for the administrative balance correction',
@@ -217,7 +208,7 @@ export class LoansController {
       const user = req.user;
       return await this.loansService.applyForLoan(data, user);
     } catch (error) {
-      throw new BadRequestException(error.message || 'Loan application failed');
+      throw new BadRequestException(errorMessage(error, 'Loan application failed'));
     }
   }
 
@@ -230,7 +221,7 @@ export class LoansController {
     try {
       return await this.loansService.findOne(id);
     } catch (error) {
-      throw new BadRequestException(error.message || 'Failed to fetch loan details');
+      throw new BadRequestException(errorMessage(error, 'Failed to fetch loan details'));
     }
   }
 
@@ -255,7 +246,7 @@ export class LoansController {
     try {
       return await this.loansService.findAll({ status, type, startDate, endDate, clientId: clientId ? +clientId : undefined, tenantId: req.user?.tenantId });
     } catch (error) {
-      throw new BadRequestException(error.message || 'Failed to fetch loans');
+      throw new BadRequestException(errorMessage(error, 'Failed to fetch loans'));
     }
   }
 
@@ -269,7 +260,7 @@ export class LoansController {
     try {
       return await this.loansService.searchLoans(searchDto);
     } catch (error) {
-      throw new BadRequestException(error.message || 'Search failed');
+      throw new BadRequestException(errorMessage(error, 'Search failed'));
     }
   }
 
@@ -285,7 +276,7 @@ export class LoansController {
     try {
       return await this.loansService.calculateCashLoan(data);
     } catch (error) {
-      throw new BadRequestException(error.message || 'Cash loan calculation failed');
+      throw new BadRequestException(errorMessage(error, 'Cash loan calculation failed'));
     }
   }
 
@@ -299,7 +290,7 @@ export class LoansController {
     try {
       return await this.loansService.calculateBikeLoan(data);
     } catch (error) {
-      throw new BadRequestException(error.message || 'Bike loan calculation failed');
+      throw new BadRequestException(errorMessage(error, 'Bike loan calculation failed'));
     }
   }
 
@@ -327,7 +318,7 @@ export class LoansController {
         targetMonthly: targetMonthly ? Number(targetMonthly) : undefined,
       });
     } catch (error) {
-      throw new BadRequestException(error.message || 'Bike loan preview failed');
+      throw new BadRequestException(errorMessage(error, 'Bike loan preview failed'));
     }
   }
 
@@ -363,14 +354,12 @@ export class LoansController {
   @ApiResponse({ status: 400, description: 'Invalid bike or deposit amount' })
   async createBikeLoan(@Body() bikeLoanDto: CreateBikeLoanDto, @Request() req: AuthRequest) {
     try {
-      // bike_id is optional — user may enter price manually without selecting from inventory
       let bikePrice: number;
       if (bikeLoanDto.bike_id) {
         const bike = await this.bikesService.findOne(bikeLoanDto.bike_id);
         if (!bike) throw new BadRequestException('Bike not found');
         bikePrice = Number(bike.sale_price || bike.price || 0);
       } else {
-        // No bike selected — frontend sends the full bike price as principal_amount
         bikePrice = Number((bikeLoanDto as any).principal_amount || 0);
       }
 
@@ -396,7 +385,7 @@ export class LoansController {
         branch_id: req.user?.branchId,
       });
     } catch (error) {
-      throw new BadRequestException(error.message || 'Bike loan creation failed');
+      throw new BadRequestException(errorMessage(error, 'Bike loan creation failed'));
     }
   }
 
@@ -424,7 +413,7 @@ export class LoansController {
       return await this.loansService.approveOrRejectLoan(id, approvalDto, user);
     } catch (error) {
       if (error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
-      throw new BadRequestException(error.message || 'Loan approval failed');
+      throw new BadRequestException(errorMessage(error, 'Loan approval failed'));
     }
   }
 
@@ -449,7 +438,7 @@ export class LoansController {
       return await this.loansService.reverseOrAdjustLoan(id, reversalDto, user);
     } catch (error) {
       if (error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
-      throw new BadRequestException(error.message || 'Loan reversal failed');
+      throw new BadRequestException(errorMessage(error, 'Loan reversal failed'));
     }
   }
 
@@ -473,7 +462,7 @@ export class LoansController {
       return await this.loansService.updateLoan(id, updateDto, user);
     } catch (error) {
       if (error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
-      throw new BadRequestException(error.message || 'Failed to update loan');
+      throw new BadRequestException(errorMessage(error, 'Failed to update loan'));
     }
   }
 
@@ -496,7 +485,7 @@ export class LoansController {
       return await this.loansService.hardDeleteLoan(id, user);
     } catch (error) {
       if (error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
-      throw new BadRequestException(error.message || 'Failed to delete loan');
+      throw new BadRequestException(errorMessage(error, 'Failed to delete loan'));
     }
   }
 
@@ -520,7 +509,7 @@ export class LoansController {
       return await this.loansService.updateLoanStatus(id, status, user);
     } catch (error) {
       if (error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
-      throw new BadRequestException(error.message || 'Failed to update loan status');
+      throw new BadRequestException(errorMessage(error, 'Failed to update loan status'));
     }
   }
 
@@ -563,8 +552,6 @@ export class LoansController {
     );
   }
 
-
-
   @Get('reports/summary')
   @ApiOperation({
     summary: 'Get loan portfolio summary',
@@ -577,7 +564,7 @@ export class LoansController {
       assertRole(req.user, ['admin', 'manager'], 'Admin or manager access required');
       return await this.loansService.getPortfolioSummary(req.user);
     } catch (error) {
-      throw new BadRequestException(error.message || 'Failed to generate portfolio summary');
+      throw new BadRequestException(errorMessage(error, 'Failed to generate portfolio summary'));
     }
   }
 
@@ -592,7 +579,7 @@ export class LoansController {
     try {
       return await this.loansService.getOverdueLoansReport(req?.user?.tenantId);
     } catch (error) {
-      throw new BadRequestException(error.message || 'Failed to generate overdue report');
+      throw new BadRequestException(errorMessage(error, 'Failed to generate overdue report'));
     }
   }
 
@@ -614,7 +601,7 @@ export class LoansController {
       return await this.loansService.getLoanAuditTrail(loanId);
     } catch (error) {
       if (error instanceof ForbiddenException) throw error;
-      throw new BadRequestException(error.message || 'Failed to retrieve audit trail');
+      throw new BadRequestException(errorMessage(error, 'Failed to retrieve audit trail'));
     }
   }
 }
