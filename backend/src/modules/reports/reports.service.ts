@@ -17,8 +17,6 @@ export class ReportsService {
 
   // ── Daily summary ─────────────────────────────────────────────────────────
   async getDailySummary(tenantId: number, date: Date = new Date()) {
-    // See common/utils/kampala-time.ts — date-fns's startOfDay/endOfDay use
-    // the server's local timezone (UTC on Railway), not Kampala's.
     const start = startOfKampalaDay(date);
     const end   = endOfKampalaDay(date);
 
@@ -77,10 +75,6 @@ export class ReportsService {
          COUNT(ls.id)                            AS overdue_installments,
          SUM(ls.amount_due - ls.amount_paid)     AS total_overdue,
          MIN(ls.due_date)                        AS oldest_overdue_date,
-         -- Expected collections: all installments due-or-overdue for this
-         -- loan, not just the OVERDUE-status ones already joined above —
-         -- a separate subquery since it needs a different status filter
-         -- than the main join.
          COALESCE((
            SELECT SUM(ls2.amount_due)
              FROM loan_schedules ls2
@@ -201,19 +195,12 @@ export class ReportsService {
         loaned:    Number(bikeRow.loaned),
         sold:      Number(bikeRow.sold),
       },
-      // Phase 5.1: per-product breakdown. Groups by loan_product_id when
-      // present (the genuinely product-driven path); falls back to
-      // loan_type for legacy loans that predate this feature — every loan
-      // currently in the system, since loan_product_id only started being
-      // populated this milestone. New products appear here automatically
-      // the moment a tenant has a loan of that product, with no code
-      // change required.
       byProduct: await this.getPortfolioByProduct(tenantId),
       generatedAt: new Date(),
     };
   }
 
-  // ── Per-product portfolio breakdown ───────────────────────────────────────
+  // ── Per-product portfolio breakdown (CORRECTED – LATERAL joins) ────────────
   private async getPortfolioByProduct(tenantId: number) {
     const rows: any[] = await this.loanRepo.manager.query(
       `SELECT
@@ -222,37 +209,29 @@ export class ReportsService {
          COALESCE(lp.code, l.loan_type)                  AS product_code,
          COUNT(l.id)                                     AS active_loans,
          COALESCE(SUM(l.balance), 0)                     AS outstanding,
-         COALESCE(SUM(l.balance) FILTER (
-           WHERE EXISTS (
-             SELECT 1 FROM loan_schedules ls
-              WHERE ls.loan_id = l.id AND ls.status = 'OVERDUE'
-           )
-         ), 0)                                           AS par_amount,
-         COUNT(l.id) FILTER (
-           WHERE EXISTS (
-             SELECT 1 FROM loan_schedules ls
-              WHERE ls.loan_id = l.id AND ls.status = 'OVERDUE'
-           )
-         )                                                AS par_loan_count,
-         COALESCE((
-           SELECT SUM(p.amount) FROM payments p
-            WHERE p.loan_id = l.id AND p.status = 'COMPLETED'
-              AND p.payment_date >= CURRENT_DATE
-         ), 0)                                            AS collected_today
+         COALESCE(SUM(l.balance) FILTER (WHERE over.overdue_count > 0), 0)   AS par_amount,
+         COUNT(l.id) FILTER (WHERE over.overdue_count > 0)                   AS par_loan_count,
+         COALESCE(SUM(today.collected), 0)               AS collected_today
        FROM loans l
        LEFT JOIN loan_products lp ON lp.id = l.loan_product_id
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*) AS overdue_count
+         FROM loan_schedules ls
+         WHERE ls.loan_id = l.id AND ls.status = 'OVERDUE'
+       ) over ON true
+       LEFT JOIN LATERAL (
+         SELECT SUM(p.amount) AS collected
+         FROM payments p
+         WHERE p.loan_id = l.id
+           AND p.status = 'COMPLETED'
+           AND p.payment_date::date = CURRENT_DATE
+       ) today ON true
       WHERE l.deleted_at IS NULL AND l.tenant_id = $1 AND l.status IN ('ACTIVE','DELINQUENT')
       GROUP BY COALESCE(lp.id, NULL), COALESCE(lp.name, INITCAP(l.loan_type)), COALESCE(lp.code, l.loan_type)
       ORDER BY product_name`,
       [tenantId],
     );
 
-    // collected_today is computed per-loan via a correlated subquery
-    // (payments is a different table than loans, so it can't be reached by
-    // a simple FILTER on the grouped rows the way par_amount/outstanding
-    // are) — each loan's figure is computed once, then summed normally by
-    // the outer GROUP BY. Same query shape already used safely elsewhere
-    // in this file (getDailySummary).
     return rows.map(r => ({
       loanProductId:  r.loan_product_id ? Number(r.loan_product_id) : null,
       productName:    r.product_name,
@@ -270,7 +249,7 @@ export class ReportsService {
     }));
   }
 
-  // ── CSV export helpers ────────────────────────────────────────────────────
+  // ── CSV export helpers (unchanged) ────────────────────────────────────────
   async getPaymentsCsv(tenantId: number, startDate?: string, endDate?: string): Promise<string> {
     const start = startDate ? new Date(startDate) : subDays(new Date(), 30);
     const end   = endDate   ? new Date(endDate)   : new Date();

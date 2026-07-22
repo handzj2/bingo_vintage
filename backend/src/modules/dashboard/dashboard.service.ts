@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Payment } from '../payments/entities/payment.entity';          // ← fixed
-import { Expense } from '../expenses/entities/expense.entity';          // ← fixed
+import { Payment } from '../payments/entities/payment.entity';
+import { Expense } from '../expenses/entities/expense.entity';
 import { PaymentStatus } from '../enums/payment-status.enum';
 
 @Injectable()
@@ -45,16 +45,9 @@ export class DashboardService {
     };
   }
 
-  // ── Phase 5.3: product-level KPIs ─────────────────────────────────────────
-  // Additive — does not modify getSummary() or any existing field. New
-  // method, new endpoint, nothing existing breaks if this is never called.
-  //
-  // (Historical note: getSummary()'s payment filter previously compared
-  // p.status = 'completed' (lowercase) against the real, uppercase-only
-  // PaymentStatus enum — found while extending this file, fixed in a
-  // follow-up edit using PaymentStatus.COMPLETED. See git history for the
-  // exact change.)
+  // ── Phase 5.3: product-level KPIs (CORRECTED – LATERAL joins) ───────────
   async getProductKpis(tenantId: number) {
+    // Main KPIs with accurate collected_today using LATERAL
     const rows: any[] = await this.paymentRepo.manager.query(
       `SELECT
          COALESCE(lp.id, NULL)                   AS loan_product_id,
@@ -64,22 +57,23 @@ export class DashboardService {
          COALESCE(SUM(l.balance) FILTER (WHERE l.status IN ('ACTIVE','DELINQUENT')), 0) AS outstanding,
          COUNT(l.id) FILTER (WHERE l.status = 'PENDING_APPROVAL') AS pending_disbursement,
          COALESCE(SUM(l.principal_amount) FILTER (WHERE l.status = 'ACTIVE' AND l.created_at >= CURRENT_DATE), 0) AS disbursed_today,
-         COALESCE((
-           SELECT SUM(p.amount) FROM payments p
-            WHERE p.loan_id = l.id AND p.status = 'COMPLETED'
-              AND p.payment_date >= CURRENT_DATE
-         ), 0)                                    AS collected_today_per_loan
+         COALESCE(SUM(today.collected), 0)       AS collected_today_per_loan
        FROM loans l
        LEFT JOIN loan_products lp ON lp.id = l.loan_product_id
+       LEFT JOIN LATERAL (
+         SELECT SUM(p.amount) AS collected
+         FROM payments p
+         WHERE p.loan_id = l.id
+           AND p.status = 'COMPLETED'
+           AND p.payment_date::date = CURRENT_DATE
+       ) today ON true
       WHERE l.deleted_at IS NULL AND l.tenant_id = $1
       GROUP BY COALESCE(lp.id, NULL), COALESCE(lp.name, INITCAP(l.loan_type)), COALESCE(lp.code, l.loan_type)
       ORDER BY product_name`,
       [tenantId],
     );
 
-    // PAR per product — separate query, same pattern as
-    // ReportsService.getPortfolioByProduct, since it needs loan_schedules,
-    // a table not already joined above.
+    // PAR per product (unchanged, separate query is fine)
     const parRows: any[] = await this.paymentRepo.manager.query(
       `SELECT
          COALESCE(lp.id, NULL) AS loan_product_id,
