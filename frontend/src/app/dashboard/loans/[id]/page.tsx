@@ -10,6 +10,7 @@ import {
   User, Phone, Mail, Calendar, DollarSign, Bike, Banknote,
   FileText, CreditCard, RefreshCw, ArrowRight, MinusCircle,
   XCircle, TrendingUp, Shield, ThumbsUp, ThumbsDown, X,
+  Edit3,  // NEW: edit icon
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
@@ -44,7 +45,6 @@ export default function LoanDetailPage() {
   const { user, can } = useAuth();
   const role       = (user?.role ?? '').toLowerCase();
   const isAdmin    = role === 'admin' || role === 'superadmin';
-  // Permission-based access — respects Settings toggles for any role
   const canApprove = isAdmin || role === 'manager' || can('loan.approve');
   const canEdit    = isAdmin || role === 'manager' || can('loan.create');
   const canReverse = isAdmin || can('payment.reverse');
@@ -60,10 +60,22 @@ export default function LoanDetailPage() {
   const [approveComment, setApproveComment] = useState('');
   const [approveErr, setApproveErr]   = useState('');
 
+  // ── NEW: Edit Loan state ────────────────────────────────────────────────
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editing, setEditing]           = useState(false);
+  const [editErr, setEditErr]           = useState('');
+  const [editForm, setEditForm] = useState({
+    principalAmount: 0,
+    termWeeks: 0,
+    weeklyAmount: 0,
+    interestRate: 0,
+    startDate: '',
+    newBalance: undefined as number | undefined,
+  });
+
   const load = useCallback(async () => {
     setLoading(true); setErr('');
     try {
-      // Load loan detail and schedule in parallel
       const [loanRes, schedRes] = await Promise.all([
         fetch(`${API_URL}/loans/${id}`, { headers: getH() }),
         fetch(`${API_URL}/schedules/loan/${id}`, { headers: getH() }).catch(() => null),
@@ -71,14 +83,15 @@ export default function LoanDetailPage() {
 
       if (!loanRes.ok) throw new Error('Loan not found');
       const loanData = await loanRes.json();
-      setLoan(loanData?.data || loanData);
+      const currentLoan = loanData?.data || loanData;
+      setLoan(currentLoan);
 
       if (schedRes?.ok) {
         setSched(await schedRes.json());
       }
 
-      // Fetch approver username if we have an approvedBy ID
-      const approvedById = (loanData?.data || loanData)?.approvedBy ?? (loanData?.data || loanData)?.approved_by;
+      // Fetch approver username
+      const approvedById = currentLoan?.approvedBy ?? currentLoan?.approved_by;
       if (approvedById) {
         try {
           const uRes = await fetch(`${API_URL}/users/${approvedById}`, { headers: getH() });
@@ -88,6 +101,16 @@ export default function LoanDetailPage() {
           }
         } catch { /* non-critical */ }
       }
+
+      // ── Pre‑fill edit form with current loan values ────────────────
+      setEditForm({
+        principalAmount: Number(currentLoan.principal_amount) || 0,
+        termWeeks: Number(currentLoan.term_weeks) || 0,
+        weeklyAmount: Number(currentLoan.weekly_amount) || 0,
+        interestRate: Number(currentLoan.interest_rate) || 0,
+        startDate: currentLoan.start_date ? new Date(currentLoan.start_date).toISOString().slice(0,10) : '',
+        newBalance: undefined,
+      });
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -103,7 +126,6 @@ export default function LoanDetailPage() {
       const res = await fetch(`${API_URL}/loans/${id}/approve`, {
         method: 'POST', headers: getH(),
         body: JSON.stringify({
-          // Map to AdminApprovalDto: action='approve'|'reject', reason?
           action: approveAction === 'approved' ? 'approve' : 'reject',
           ...(approveComment ? { reason: approveComment } : {}),
         }),
@@ -117,7 +139,34 @@ export default function LoanDetailPage() {
     finally { setApproving(false); }
   };
 
-    if (loading) return (
+  // ── NEW: Handle loan edit submission ────────────────────────────────────
+  const handleEditSubmit = async () => {
+    setEditErr(''); setEditing(true);
+    try {
+      const payload: any = {};
+      if (editForm.principalAmount) payload.principalAmount = Number(editForm.principalAmount);
+      if (editForm.termWeeks)       payload.termWeeks       = Number(editForm.termWeeks);
+      if (editForm.weeklyAmount)    payload.weeklyAmount    = Number(editForm.weeklyAmount);
+      if (editForm.interestRate)    payload.interestRate    = Number(editForm.interestRate);
+      if (editForm.startDate)       payload.startDate       = editForm.startDate;
+      if (editForm.newBalance !== undefined && editForm.newBalance !== null) {
+        payload.newBalance = Number(editForm.newBalance);
+      }
+
+      const res = await fetch(`${API_URL}/loans/${id}/edit-details`, {
+        method: 'PATCH',
+        headers: getH(),
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Edit failed');
+      setShowEditModal(false);
+      load(); // reload everything
+    } catch (e: any) { setEditErr(e.message); }
+    finally { setEditing(false); }
+  };
+
+  if (loading) return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
     </div>
@@ -139,7 +188,7 @@ export default function LoanDetailPage() {
     : client.full_name || '—';
 
   const schedSummary = sched?.summary;
-  const schedules    = (sched?.schedules || []).slice(0, 6); // show first 6 rows preview
+  const schedules    = (sched?.schedules || []).slice(0, 6);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -174,6 +223,18 @@ export default function LoanDetailPage() {
               <button onClick={() => { setApproveAction('approved'); setShowApproveModal(true); }}
                 className="flex items-center gap-2 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-xl text-sm font-bold">
                 <ThumbsUp className="w-4 h-4" /> Review
+              </button>
+            )}
+            {/* ── NEW: Edit Loan Button ────────────────────────────────── */}
+            {canEdit && (
+              <button
+                onClick={() => {
+                  setEditErr('');
+                  setShowEditModal(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold"
+              >
+                <Edit3 className="w-4 h-4" /> Edit
               </button>
             )}
             <Link
@@ -301,7 +362,6 @@ export default function LoanDetailPage() {
               </Link>
             </div>
 
-            {/* Progress bar */}
             <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
               <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
                 <div
@@ -428,6 +488,93 @@ export default function LoanDetailPage() {
         </div>
       )}
 
+      {/* ── NEW: Edit Loan Details Modal ─────────────────────────────────── */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="font-bold text-gray-900 text-lg">Edit Loan Details</h2>
+              <button onClick={() => setShowEditModal(false)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-gray-50 rounded-xl p-4 text-sm space-y-1">
+                <p><span className="text-gray-500">Loan #:</span> <span className="font-semibold">{loan.loan_number}</span></p>
+                <p><span className="text-gray-500">Client:</span> <span className="font-semibold">{clientName}</span></p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Principal Amount</label>
+                  <input
+                    type="number"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={editForm.principalAmount}
+                    onChange={e => setEditForm({...editForm, principalAmount: Number(e.target.value)})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Term (weeks)</label>
+                  <input
+                    type="number"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={editForm.termWeeks}
+                    onChange={e => setEditForm({...editForm, termWeeks: Number(e.target.value)})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Weekly Amount</label>
+                  <input
+                    type="number"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={editForm.weeklyAmount}
+                    onChange={e => setEditForm({...editForm, weeklyAmount: Number(e.target.value)})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Interest Rate (%)</label>
+                  <input
+                    type="number"
+                    step="any"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={editForm.interestRate}
+                    onChange={e => setEditForm({...editForm, interestRate: Number(e.target.value)})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={editForm.startDate}
+                    onChange={e => setEditForm({...editForm, startDate: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">New Balance (optional)</label>
+                  <input
+                    type="number"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Calculated if empty"
+                    value={editForm.newBalance !== undefined ? editForm.newBalance : ''}
+                    onChange={e => setEditForm({...editForm, newBalance: e.target.value ? Number(e.target.value) : undefined})}
+                  />
+                </div>
+              </div>
+              {editErr && <p className="text-red-600 text-sm">{editErr}</p>}
+              <div className="flex gap-3 pt-1">
+                <button onClick={() => setShowEditModal(false)}
+                  className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
+                  Cancel
+                </button>
+                <button onClick={handleEditSubmit} disabled={editing}
+                  className="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50">
+                  {editing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Edit3 className="w-4 h-4" />}
+                  {editing ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

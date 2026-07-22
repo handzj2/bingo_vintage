@@ -182,6 +182,43 @@ export class SearchLoansDto {
   endDate?: string;
 }
 
+// ==================== NEW: Edit Loan Details DTO ====================
+
+export class EditLoanDetailsDto {
+  @ApiProperty({ example: 150000, description: 'Corrected principal amount', required: false })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  principalAmount?: number;
+
+  @ApiProperty({ example: 104, description: 'Corrected term in weeks', required: false })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  termWeeks?: number;
+
+  @ApiProperty({ example: 1442, description: 'Corrected weekly instalment amount', required: false })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  weeklyAmount?: number;
+
+  @ApiProperty({ example: 0.15, description: 'Corrected annual interest rate', required: false })
+  @IsOptional()
+  @IsNumber()
+  interestRate?: number;
+
+  @ApiProperty({ example: '2026-06-01', description: 'Corrected start date', required: false })
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @ApiProperty({ example: 120000, description: 'New remaining balance (optional, otherwise calculated)', required: false })
+  @IsOptional()
+  @IsNumber()
+  newBalance?: number;
+}
+
 // ==================== MAIN CONTROLLER ====================
 
 @ApiTags('Loans')
@@ -551,6 +588,37 @@ export class LoansController {
       id, startDate, paidInstallments ?? [], newBalance, req.user,
     );
   }
+
+  // ==================== NEW: Edit Loan Details (admin correction with schedule regeneration) ====================
+
+  @Patch(':id/edit-details')
+  @ApiOperation({
+    summary: 'Admin only: Correct loan details and regenerate the schedule',
+    description: 'Updates the loan principal, term, weekly amount, interest rate, or start date. ' +
+                 'The schedule is regenerated using the loan calculator, and all existing payments are replayed. ' +
+                 'The loan balance is recalculated unless a specific newBalance is provided.',
+  })
+  @ApiParam({ name: 'id', example: 1, description: 'Loan ID' })
+  @SetMetadata('roles', ['admin'])
+  @ApiResponse({ status: 200, description: 'Loan details updated and schedule regenerated' })
+  @ApiResponse({ status: 400, description: 'Invalid input' })
+  @ApiResponse({ status: 404, description: 'Loan not found' })
+  async editLoanDetails(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: EditLoanDetailsDto,
+    @Request() req: AuthRequest,
+  ) {
+    try {
+      const user = req.user;
+      assertAdmin(user, 'Only administrators can edit loan details');
+      return await this.loansService.editLoanDetails(id, dto, user);
+    } catch (error) {
+      if (error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
+      throw new BadRequestException(errorMessage(error, 'Failed to edit loan details'));
+    }
+  }
+
+  // ==================== REPORT ENDPOINTS ====================
 
   @Get('reports/summary')
   @ApiOperation({

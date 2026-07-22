@@ -35,6 +35,8 @@ import { PaymentAllocation } from '../payments/entities/payment-allocation.entit
  *  FIX-L07: schedule generators explicitly set tenant_id & branch_id
  *  FIX-L08: backdateLoan writes payment_allocations for reversals
  *  FIX-L09: historicalImport uses loan calculator and writes payment_allocations
+ *  FIX-L10: editLoanDetails added – allows admin to correct loan details,
+ *           regenerates schedule via calculator, replays all payments
  */
 @Injectable()
 export class LoansService {
@@ -509,6 +511,159 @@ export class LoansService {
         newStartDate: newStart.toISOString().slice(0, 10),
         newEndDate: newEnd.toISOString().slice(0, 10),
         installmentsGenerated: calculation.installments.length,
+      };
+    });
+  }
+
+  // ── editLoanDetails (NEW — admin correction with schedule regeneration) ────
+  async editLoanDetails(
+    id: number,
+    dto: {
+      principalAmount?: number;
+      termWeeks?: number;
+      weeklyAmount?: number;
+      interestRate?: number;
+      startDate?: string;
+      newBalance?: number;
+    },
+    user: RequestUser,
+  ) {
+    return this.loansRepo.manager.transaction(async (em) => {
+      const loan = await em.findOne(Loan, { where: { id }, relations: ['client'] });
+      if (!loan) throw new NotFoundException(`Loan ${id} not found`);
+      if (loan.status === LoanStatus.CANCELLED || loan.deletedAt) {
+        throw new BadRequestException('Cannot edit a cancelled or deleted loan');
+      }
+
+      // Update loan fields if provided
+      if (dto.principalAmount !== undefined) loan.principalAmount = dto.principalAmount;
+      if (dto.termWeeks !== undefined) loan.termWeeks = dto.termWeeks;
+      if (dto.weeklyAmount !== undefined) loan.weeklyAmount = dto.weeklyAmount;
+      if (dto.interestRate !== undefined) loan.interestRate = dto.interestRate;
+      if (dto.startDate) {
+        const newStart = new Date(dto.startDate);
+        if (isNaN(newStart.getTime())) throw new BadRequestException('Invalid start date');
+        loan.startDate = newStart;
+      }
+
+      // Determine term for calculator
+      const weeks = loan.termWeeks || 0;
+      const termCount = weeks > 0 ? weeks : (loan.termMonths || 12);
+      const principal = Number(loan.principalAmount);
+      const startDate = new Date(loan.startDate);
+
+      const calculationMethod = loan.loanType === 'bike' ? 'weekly_flat' : 'monthly_flat';
+      const calculator = this.loanCalculatorRegistry.resolve(calculationMethod);
+      const calculation = calculator.calculate({
+        principal,
+        termCount,
+        annualInterestRate: Number(loan.interestRate),
+        processingFee: Number(loan.processingFee ?? 0),
+        startDate,
+        ...(loan.loanType === 'bike' && loan.weeklyAmount
+          ? { installmentOverride: Number(loan.weeklyAmount) }
+          : {}),
+      });
+
+      // Save existing payments before deleting them
+      const payments = await em.query(
+        `SELECT * FROM payments
+         WHERE loan_id = $1 AND status = 'COMPLETED' AND reversed_at IS NULL
+         ORDER BY payment_date, id`,
+        [id],
+      );
+
+      // Delete old schedule, payment_allocations, and payments
+      await em.query('DELETE FROM payment_allocations WHERE payment_id IN (SELECT id FROM payments WHERE loan_id = $1)', [id]);
+      await em.query('DELETE FROM payments WHERE loan_id = $1', [id]);
+      await em.query('DELETE FROM loan_schedules WHERE loan_id = $1', [id]);
+
+      // Persist new schedule
+      await this.persistSchedule(em, loan, calculation.installments);
+
+      // Replay payments
+      for (let idx = 0; idx < payments.length && idx < calculation.installments.length; idx++) {
+        const p = payments[idx];
+        const instNum = idx + 1;
+        const amountPaid = Number(p.amount);
+        const inst = calculation.installments[instNum - 1];
+        const due = inst.amountDue;
+        const status = amountPaid >= due ? 'PAID' : 'PARTIAL';
+        const paymentDate = new Date(p.payment_date).toISOString().slice(0, 10);
+
+        const [sched] = await em.query(
+          'SELECT id FROM loan_schedules WHERE loan_id = $1 AND installment_number = $2',
+          [id, instNum],
+        );
+        if (!sched) continue;
+
+        await em.query(
+          `UPDATE loan_schedules
+           SET amount_paid = $1, status = $2, paid_date = $3, payment_notes = 'Edited loan replay',
+               updated_at = NOW()
+           WHERE id = $4`,
+          [amountPaid, status, paymentDate, sched.id],
+        );
+
+        const [newPayment] = await em.query(
+          `INSERT INTO payments
+             (loan_id, schedule_id, amount, payment_method, payment_date, status,
+              receipt_number, notes, tenant_id, branch_id, created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,'COMPLETED',$6,$7,$8,$9,NOW(),NOW())
+           RETURNING id`,
+          [
+            id, sched.id, amountPaid,
+            p.payment_method || 'CASH',
+            paymentDate,
+            p.receipt_number || `EDIT-${id}-${instNum}`,
+            `Original payment ${p.id} replayed after loan edit`,
+            loan.tenantId, loan.branchId,
+          ],
+        );
+
+        await em.query(
+          `INSERT INTO payment_allocations
+             (payment_id, schedule_id, amount_applied, previous_status, new_status, created_at)
+           VALUES ($1,$2,$3,'PENDING'::loan_schedules_status_enum,$4::loan_schedules_status_enum,NOW())`,
+          [newPayment.id, sched.id, amountPaid, status],
+        );
+      }
+
+      // Mark overdue installments
+      const today = new Date().toISOString().slice(0, 10);
+      await em.query(
+        `UPDATE loan_schedules SET status = 'OVERDUE' WHERE loan_id = $1 AND status = 'PENDING' AND due_date < $2`,
+        [id, today],
+      );
+
+      // Update totalAmount and balance
+      const newTotal = calculation.totalPayable;
+      const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+      const computedBalance = newTotal - totalPaid;
+      const finalBalance = dto.newBalance !== undefined ? dto.newBalance : computedBalance;
+
+      await em.query(
+        `UPDATE loans
+         SET total_amount = $1, balance = $2, updated_at = NOW()
+         WHERE id = $3`,
+        [newTotal, finalBalance, id],
+      );
+
+      loan.addAuditNote(
+        'EDIT_DETAILS',
+        `Admin ${user.userId}`,
+        `Loan details edited. Principal: ${principal}, termWeeks: ${weeks}, ` +
+        `totalAmount: ${newTotal}, balance: ${finalBalance}`,
+      );
+      await em.save(Loan, loan);
+
+      return {
+        success: true,
+        loanNumber: loan.loanNumber,
+        totalAmount: newTotal,
+        balance: finalBalance,
+        scheduleRegenerated: calculation.installments.length,
+        paymentsReplayed: payments.length,
       };
     });
   }
