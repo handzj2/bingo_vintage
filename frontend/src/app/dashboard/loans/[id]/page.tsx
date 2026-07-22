@@ -1,5 +1,4 @@
 // fix: edit modal pre-fill — openEditModal reads current loan data so all fields are populated instantly
-// patch 2026-06-16
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
