@@ -37,6 +37,15 @@ import { PaymentAllocation } from '../payments/entities/payment-allocation.entit
  *  FIX-L09: historicalImport uses loan calculator and writes payment_allocations
  *  FIX-L10: editLoanDetails added – allows admin to correct loan details,
  *           regenerates schedule via calculator, replays all payments
+ *  FIX-L11: Waterfall payment allocation in editLoanDetails, backdateLoan,
+ *           and historicalImport. Payments now carry over excess amounts to
+ *           subsequent installments instead of discarding them.
+ *  FIX-L12: applyPaymentsWaterfall now correctly sets tenant_id & branch_id
+ *           on every payment row it inserts.
+ *  FIX-L13: backdateLoan again honours the admin-supplied newBalance parameter
+ *           rather than overriding it with a computed value.
+ *  FIX-L14: historicalImport again preserves an imported balance (rec.balance)
+ *           when provided; only falls back to computed when absent.
  */
 @Injectable()
 export class LoansService {
@@ -117,6 +126,108 @@ export class LoansService {
          inst.interestDue, loan.tenantId ?? null, loan.branchId ?? null],
       );
     }
+  }
+
+  // ── Waterfall payment replay (FIX‑L12: tenant/branch on payments) ────────
+  /**
+   * Allocates payments to installments in strict order, carrying over
+   * any excess to the next installment. Creates payment rows and
+   * payment_allocations for every applied chunk.
+   *
+   * @param em          EntityManager (transaction)
+   * @param loanId      The loan ID
+   * @param payments    Array of { amount, paymentDate, paymentMethod?,
+   *                     receiptNumber?, notes? } in chronological order.
+   * @param tenantId    Tenant ID to stamp on every payment row (FIX-L12)
+   * @param branchId    Branch ID to stamp on every payment row (FIX-L12)
+   * @returns           Total amount applied across all installments.
+   */
+  private async applyPaymentsWaterfall(
+    em: any,
+    loanId: number,
+    payments: { amount: number; paymentDate: string; paymentMethod?: string; receiptNumber?: string; notes?: string }[],
+    tenantId?: number,
+    branchId?: number,
+  ): Promise<number> {
+    // Fetch schedule rows in installment order
+    const schedules = await em.query(
+      `SELECT id, installment_number, amount_due, due_date
+         FROM loan_schedules
+        WHERE loan_id = $1
+        ORDER BY installment_number`,
+      [loanId],
+    );
+
+    let totalApplied = 0;
+    let paymentQueue = payments.map(p => ({ ...p, remaining: p.amount })); // mutable remaining amounts
+
+    for (const sched of schedules) {
+      if (paymentQueue.length === 0) break;
+
+      const due = Number(sched.amount_due);
+      let paid = 0;
+
+      while (paymentQueue.length > 0 && paid < due) {
+        const current = paymentQueue[0];
+        const apply = Math.min(current.remaining, due - paid);
+        paid += apply;
+        current.remaining -= apply;
+        totalApplied += apply;
+
+        // Build a receipt number (unique per chunk)
+        const baseReceipt = current.receiptNumber || `WF-${loanId}-${sched.installment_number}`;
+        const receipt = baseReceipt + '-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+
+        // Insert payment row for this applied chunk (FIX-L12: tenant_id & branch_id)
+        const [newPayment] = await em.query(
+          `INSERT INTO payments
+             (loan_id, schedule_id, amount, payment_method, payment_date, status,
+              receipt_number, notes, tenant_id, branch_id, created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,'COMPLETED',$6,$7,$8,$9,NOW(),NOW())
+           RETURNING id`,
+          [
+            loanId,
+            sched.id,
+            apply,
+            current.paymentMethod || 'CASH',
+            current.paymentDate,
+            receipt,
+            current.notes || 'Waterfall allocation',
+            tenantId ?? null,
+            branchId ?? null,
+          ],
+        );
+
+        // Insert allocation record
+        await em.query(
+          `INSERT INTO payment_allocations
+             (payment_id, schedule_id, amount_applied, previous_status, new_status, created_at)
+           VALUES ($1,$2,$3,'PENDING'::loan_schedules_status_enum,$4::loan_schedules_status_enum,NOW())`,
+          [newPayment.id, sched.id, apply, paid >= due ? 'PAID' : 'PARTIAL'],
+        );
+
+        // If the current payment is fully consumed, remove it from the queue
+        if (current.remaining <= 0) {
+          paymentQueue.shift();
+        }
+      }
+
+      // Update the schedule row with total paid and status
+      const status = paid >= due ? 'PAID' : paid > 0 ? 'PARTIAL' : 'PENDING';
+      if (paid > 0) {
+        await em.query(
+          `UPDATE loan_schedules
+              SET amount_paid = $1,
+                  status      = $2::loan_schedules_status_enum,
+                  paid_date   = $3,
+                  updated_at  = NOW()
+            WHERE id = $4`,
+          [paid, status, payments[0]?.paymentDate || new Date().toISOString(), sched.id],
+        );
+      }
+    }
+
+    return totalApplied;
   }
 
   // ── Apply for loan (main creation path) ───────────────────────────────────
@@ -320,7 +431,7 @@ export class LoansService {
     return this.loansRepo.save(loan);
   }
 
-  // ── backdateLoan (with payment_allocations fix) ───────────────────────────
+  // ── backdateLoan (FIX-L13: honours newBalance parameter) ──────────────────
   async backdateLoan(
     id: number,
     startDateStr: string,
@@ -351,19 +462,20 @@ export class LoansService {
       }
 
       // Step 1: Clear existing payments and schedules
+      await em.query(`DELETE FROM payment_allocations WHERE payment_id IN (SELECT id FROM payments WHERE loan_id = $1)`, [id]);
       await em.query(`DELETE FROM payments WHERE loan_id = $1`, [id]);
       await em.query(`DELETE FROM loan_schedules WHERE loan_id = $1`, [id]);
 
-      // Step 2: Update loan start/end date and balance
+      // Step 2: Update loan start/end date – balance will be set later
       const newEnd = loan.termWeeks && loan.termWeeks > 0
         ? new Date(newStart.getTime() + loan.termWeeks * 7 * 24 * 60 * 60 * 1000)
         : addMonths(newStart, loan.termMonths);
 
       await em.query(
         `UPDATE loans
-         SET start_date = $1, end_date = $2, balance = $3, updated_at = NOW()
-         WHERE id = $4`,
-        [newStart.toISOString().slice(0, 10), newEnd.toISOString().slice(0, 10), newBalance, id],
+         SET start_date = $1, end_date = $2, updated_at = NOW()
+         WHERE id = $3`,
+        [newStart.toISOString().slice(0, 10), newEnd.toISOString().slice(0, 10), id],
       );
 
       // Step 3: Regenerate schedule
@@ -383,63 +495,46 @@ export class LoansService {
 
       await this.persistSchedule(em, loan, calculation.installments);
 
-      // Step 4: Mark paid installments and create payment records
-      const paidMap = new Map(
-        paidInstallments.map(p => [p.installmentNumber, p]),
+      // Step 4: Build waterfall payment list from paidInstallments
+      const paymentsForWaterfall = paidInstallments
+        .sort((a, b) => a.installmentNumber - b.installmentNumber)
+        .map(p => ({
+          amount: p.amountPaid,
+          paymentDate: p.paidDate,
+          paymentMethod: 'CASH' as string,
+          receiptNumber: `BACKDATE-${id}-${p.installmentNumber}`,
+          notes: 'Historical import',
+        }));
+
+      // Apply waterfall (FIX-L12: pass tenant & branch)
+      const totalApplied = await this.applyPaymentsWaterfall(
+        em, id, paymentsForWaterfall, loan.tenantId, loan.branchId,
       );
+
+      // Mark overdue installments
       const today = new Date().toISOString().slice(0, 10);
+      await em.query(
+        `UPDATE loan_schedules SET status = 'OVERDUE' WHERE loan_id = $1 AND status = 'PENDING' AND due_date < $2`,
+        [id, today],
+      );
 
-      for (const inst of calculation.installments) {
-        const paid = paidMap.get(inst.installmentNumber);
+      // Update totalAmount and balance – HONOUR the admin-supplied newBalance (FIX-L13)
+      const newTotal = calculation.totalPayable;
+      const finalBalance = newBalance;   // use the parameter exactly as given
 
-        if (paid) {
-          const previousStatus = 'PENDING';
-          const status = paid.amountPaid >= inst.amountDue ? 'PAID' : 'PARTIAL';
-          const [scheduleRow]: { id: number }[] = await em.query(
-            `UPDATE loan_schedules
-             SET amount_paid = $1, status = $2, paid_date = $3, updated_at = NOW()
-             WHERE loan_id = $4 AND installment_number = $5
-             RETURNING id`,
-            [paid.amountPaid, status, paid.paidDate, id, inst.installmentNumber],
-          );
-
-          const [paymentRow]: { id: number }[] = await em.query(
-            `INSERT INTO payments
-               (loan_id, schedule_id, amount, payment_method, payment_date, status,
-                receipt_number, notes, tenant_id, branch_id, created_at, updated_at)
-             VALUES ($1,$2,$3,'CASH',$4,'COMPLETED',$5,'Historical import',$6,$7,NOW(),NOW())
-             RETURNING id`,
-            [
-              id, scheduleRow.id, paid.amountPaid, paid.paidDate,
-              `BACKDATE-${id}-${inst.installmentNumber}`,
-              loan.tenantId ?? null, loan.branchId ?? null,
-            ],
-          );
-
-          await em.query(
-            `INSERT INTO payment_allocations
-               (payment_id, schedule_id, amount_applied, previous_status, new_status, created_at)
-             VALUES ($1,$2,$3,$4::loan_schedules_status_enum,$5::loan_schedules_status_enum,NOW())`,
-            [paymentRow.id, scheduleRow.id, paid.amountPaid, previousStatus, status],
-          );
-        } else {
-          const dueDate = inst.dueDate.toISOString().slice(0, 10);
-          if (dueDate < today) {
-            await em.query(
-              `UPDATE loan_schedules SET status = 'OVERDUE', updated_at = NOW()
-               WHERE loan_id = $1 AND installment_number = $2`,
-              [id, inst.installmentNumber],
-            );
-          }
-        }
-      }
+      await em.query(
+        `UPDATE loans
+         SET total_amount = $1, balance = $2, updated_at = NOW()
+         WHERE id = $3`,
+        [newTotal, finalBalance, id],
+      );
 
       loan.addAuditNote(
         'BACKDATE',
         `User ${user.userId}`,
         `Loan backdated to ${startDateStr}. ` +
         `${paidInstallments.length} historical payments recorded. ` +
-        `Balance set to ${newBalance}.`,
+        `Balance set to ${finalBalance}.`,
       );
       await em.save(Loan, loan);
 
@@ -449,7 +544,7 @@ export class LoansService {
         realStartDate:            newStart.toISOString().slice(0, 10),
         scheduleRegenerated:      calculation.installments.length,
         historicalPaymentsLoaded: paidInstallments.length,
-        newBalance,
+        newBalance: finalBalance,
       };
     });
   }
@@ -515,7 +610,7 @@ export class LoansService {
     });
   }
 
-  // ── editLoanDetails (NEW — admin correction with schedule regeneration) ────
+  // ── editLoanDetails (waterfall version) ───────────────────────────────────
   async editLoanDetails(
     id: number,
     dto: {
@@ -566,7 +661,7 @@ export class LoansService {
       });
 
       // Save existing payments before deleting them
-      const payments = await em.query(
+      const originalPayments = await em.query(
         `SELECT * FROM payments
          WHERE loan_id = $1 AND status = 'COMPLETED' AND reversed_at IS NULL
          ORDER BY payment_date, id`,
@@ -581,53 +676,19 @@ export class LoansService {
       // Persist new schedule
       await this.persistSchedule(em, loan, calculation.installments);
 
-      // Replay payments
-      for (let idx = 0; idx < payments.length && idx < calculation.installments.length; idx++) {
-        const p = payments[idx];
-        const instNum = idx + 1;
-        const amountPaid = Number(p.amount);
-        const inst = calculation.installments[instNum - 1];
-        const due = inst.amountDue;
-        const status = amountPaid >= due ? 'PAID' : 'PARTIAL';
-        const paymentDate = new Date(p.payment_date).toISOString().slice(0, 10);
+      // Convert original payments to waterfall format
+      const paymentsForWaterfall = originalPayments.map((p: any) => ({
+        amount: Number(p.amount),
+        paymentDate: new Date(p.payment_date).toISOString().slice(0, 10),
+        paymentMethod: p.payment_method || 'CASH',
+        receiptNumber: p.receipt_number,
+        notes: p.notes || 'Replayed after edit',
+      }));
 
-        const [sched] = await em.query(
-          'SELECT id FROM loan_schedules WHERE loan_id = $1 AND installment_number = $2',
-          [id, instNum],
-        );
-        if (!sched) continue;
-
-        await em.query(
-          `UPDATE loan_schedules
-           SET amount_paid = $1, status = $2, paid_date = $3, payment_notes = 'Edited loan replay',
-               updated_at = NOW()
-           WHERE id = $4`,
-          [amountPaid, status, paymentDate, sched.id],
-        );
-
-        const [newPayment] = await em.query(
-          `INSERT INTO payments
-             (loan_id, schedule_id, amount, payment_method, payment_date, status,
-              receipt_number, notes, tenant_id, branch_id, created_at, updated_at)
-           VALUES ($1,$2,$3,$4,$5,'COMPLETED',$6,$7,$8,$9,NOW(),NOW())
-           RETURNING id`,
-          [
-            id, sched.id, amountPaid,
-            p.payment_method || 'CASH',
-            paymentDate,
-            p.receipt_number || `EDIT-${id}-${instNum}`,
-            `Original payment ${p.id} replayed after loan edit`,
-            loan.tenantId, loan.branchId,
-          ],
-        );
-
-        await em.query(
-          `INSERT INTO payment_allocations
-             (payment_id, schedule_id, amount_applied, previous_status, new_status, created_at)
-           VALUES ($1,$2,$3,'PENDING'::loan_schedules_status_enum,$4::loan_schedules_status_enum,NOW())`,
-          [newPayment.id, sched.id, amountPaid, status],
-        );
-      }
+      // Apply waterfall (FIX-L12: pass tenant & branch)
+      const totalApplied = await this.applyPaymentsWaterfall(
+        em, id, paymentsForWaterfall, loan.tenantId, loan.branchId,
+      );
 
       // Mark overdue installments
       const today = new Date().toISOString().slice(0, 10);
@@ -636,11 +697,9 @@ export class LoansService {
         [id, today],
       );
 
-      // Update totalAmount and balance
+      // Update totalAmount and balance (FIX-L10: honour optional newBalance)
       const newTotal = calculation.totalPayable;
-      const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
-      const computedBalance = newTotal - totalPaid;
-      const finalBalance = dto.newBalance !== undefined ? dto.newBalance : computedBalance;
+      const finalBalance = dto.newBalance !== undefined ? dto.newBalance : (newTotal - totalApplied);
 
       await em.query(
         `UPDATE loans
@@ -663,7 +722,7 @@ export class LoansService {
         totalAmount: newTotal,
         balance: finalBalance,
         scheduleRegenerated: calculation.installments.length,
-        paymentsReplayed: payments.length,
+        paymentsReplayed: originalPayments.length,
       };
     });
   }
@@ -776,7 +835,7 @@ export class LoansService {
     });
   }
 
-  // ── Historical loan import (calculator‑driven, schedule‑aware) ─────────────
+  // ── Historical loan import (FIX-L14: preserves imported balance) ──────────
   async historicalImport(
     records: any[],
     tenantId: number | undefined,
@@ -862,69 +921,46 @@ export class LoansService {
           // Persist calculator‑generated schedule
           await this.persistSchedule(em, savedLoan, calculation.installments);
 
-          // Replay historical payments
-          const payments = Array.isArray(rec.payments) ? rec.payments : [];
-          let paymentIndex = 0;
-
-          for (const inst of calculation.installments) {
-            const [scheduleRow]: { id: number }[] = await em.query(
-              `SELECT id FROM loan_schedules WHERE loan_id = $1 AND installment_number = $2 LIMIT 1`,
-              [savedLoan.id, inst.installmentNumber],
-            );
-            if (!scheduleRow) continue;
-
-            const scheduleId = scheduleRow.id;
-            const dueDate = inst.dueDate.toISOString().slice(0, 10);
-
-            const payment = paymentIndex < payments.length ? payments[paymentIndex] : null;
-            if (payment) {
-              const amountPaid = Number(payment.amountPaid) || 0;
+          // Build payment list from the import data
+          const paymentsArray: { amount: number; paymentDate: string; paymentMethod: string; receiptNumber: string; notes: string }[] = [];
+          if (Array.isArray(rec.payments)) {
+            for (const p of rec.payments) {
+              const amountPaid = Number(p.amountPaid) || 0;
               if (amountPaid > 0) {
-                const paymentDate = payment.date || dueDate;
-                const scheduleStatus = amountPaid >= inst.amountDue
-                  ? ScheduleStatus.PAID
-                  : ScheduleStatus.PARTIAL;
-
-                await em.query(
-                  `UPDATE loan_schedules
-                   SET amount_paid = $1, status = $2::loan_schedules_status_enum,
-                       paid_date = $3, payment_notes = 'Historical import', updated_at = NOW()
-                   WHERE id = $4`,
-                  [amountPaid, scheduleStatus, paymentDate, scheduleId],
-                );
-
-                const [paymentRow]: { id: number }[] = await em.query(
-                  `INSERT INTO payments
-                     (loan_id, schedule_id, amount, payment_method, payment_date, status,
-                      receipt_number, notes, tenant_id, branch_id, created_at, updated_at)
-                   VALUES ($1,$2,$3,'CASH',$4,'COMPLETED',$5,'Historical import',$6,$7,NOW(),NOW())
-                   RETURNING id`,
-                  [
-                    savedLoan.id, scheduleId, amountPaid, paymentDate,
-                    `HIST-${savedLoan.id}-${inst.installmentNumber}`,
-                    tenantId ?? null, branchId ?? null,
-                  ],
-                );
-
-                await em.query(
-                  `INSERT INTO payment_allocations
-                     (payment_id, schedule_id, amount_applied, previous_status, new_status, created_at)
-                   VALUES ($1,$2,$3,'PENDING'::loan_schedules_status_enum,$4::loan_schedules_status_enum,NOW())`,
-                  [paymentRow.id, scheduleId, amountPaid, scheduleStatus],
-                );
-              }
-              paymentIndex++;
-            } else {
-              // No more payments – mark overdue if past today
-              const today = new Date().toISOString().slice(0, 10);
-              if (dueDate < today) {
-                await em.query(
-                  `UPDATE loan_schedules SET status = 'OVERDUE', updated_at = NOW() WHERE id = $1`,
-                  [scheduleId],
-                );
+                paymentsArray.push({
+                  amount: amountPaid,
+                  paymentDate: p.date || new Date().toISOString().slice(0, 10),
+                  paymentMethod: 'CASH',
+                  receiptNumber: `HIST-${savedLoan.id}-${p.date || 'unknown'}`,
+                  notes: 'Historical import',
+                });
               }
             }
           }
+
+          // Apply waterfall (FIX-L12: pass tenant & branch)
+          const totalApplied = await this.applyPaymentsWaterfall(
+            em, savedLoan.id, paymentsArray, tenantId, branchId,
+          );
+
+          // Mark overdue installments
+          const today = new Date().toISOString().slice(0, 10);
+          await em.query(
+            `UPDATE loan_schedules SET status = 'OVERDUE' WHERE loan_id = $1 AND status = 'PENDING' AND due_date < $2`,
+            [savedLoan.id, today],
+          );
+
+          // Update loan totals – PRESERVE imported balance if provided (FIX-L14)
+          const newTotal = calculation.totalPayable;
+          const importedBalance = rec.balance !== undefined ? Number(rec.balance) : undefined;
+          const finalBalance = importedBalance !== undefined ? importedBalance : (newTotal - totalApplied);
+
+          await em.query(
+            `UPDATE loans
+             SET total_amount = $1, balance = $2, updated_at = NOW()
+             WHERE id = $3`,
+            [newTotal, finalBalance, savedLoan.id],
+          );
         });
 
         success++;
