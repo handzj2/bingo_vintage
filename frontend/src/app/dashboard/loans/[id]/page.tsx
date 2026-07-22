@@ -10,7 +10,7 @@ import {
   User, Phone, Mail, Calendar, DollarSign, Bike, Banknote,
   FileText, CreditCard, RefreshCw, ArrowRight, MinusCircle,
   XCircle, TrendingUp, Shield, ThumbsUp, ThumbsDown, X,
-  Edit3,  // NEW: edit icon
+  Edit3,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
@@ -60,7 +60,7 @@ export default function LoanDetailPage() {
   const [approveComment, setApproveComment] = useState('');
   const [approveErr, setApproveErr]   = useState('');
 
-  // ── NEW: Edit Loan state ────────────────────────────────────────────────
+  // ── Edit Loan state ────────────────────────────────────────────────
   const [showEditModal, setShowEditModal] = useState(false);
   const [editing, setEditing]           = useState(false);
   const [editErr, setEditErr]           = useState('');
@@ -101,16 +101,6 @@ export default function LoanDetailPage() {
           }
         } catch { /* non-critical */ }
       }
-
-      // ── Pre‑fill edit form with current loan values ────────────────
-      setEditForm({
-        principalAmount: Number(currentLoan.principal_amount) || 0,
-        termWeeks: Number(currentLoan.term_weeks) || 0,
-        weeklyAmount: Number(currentLoan.weekly_amount) || 0,
-        interestRate: Number(currentLoan.interest_rate) || 0,
-        startDate: currentLoan.start_date ? new Date(currentLoan.start_date).toISOString().slice(0,10) : '',
-        newBalance: undefined,
-      });
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -119,6 +109,23 @@ export default function LoanDetailPage() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // ── Open the Edit modal and pre‑fill with CURRENT loan values ──────
+  const openEditModal = () => {
+    if (!loan) return;
+    setEditForm({
+      principalAmount: Number(loan.principal_amount) || 0,
+      termWeeks: Number(loan.term_weeks) || 0,
+      weeklyAmount: Number(loan.weekly_amount || loan.weeklyAmount) || 0,
+      interestRate: Number(loan.interest_rate || loan.interestRate) || 0,
+      startDate: loan.start_date
+        ? new Date(loan.start_date).toISOString().slice(0, 10)
+        : '',
+      newBalance: undefined,
+    });
+    setEditErr('');
+    setShowEditModal(true);
+  };
 
   const handleApprove = async () => {
     setApproveErr(''); setApproving(true);
@@ -139,7 +146,7 @@ export default function LoanDetailPage() {
     finally { setApproving(false); }
   };
 
-  // ── NEW: Handle loan edit submission ────────────────────────────────────
+  // ── Handle loan edit submission ────────────────────────────────────
   const handleEditSubmit = async () => {
     setEditErr(''); setEditing(true);
     try {
@@ -225,13 +232,10 @@ export default function LoanDetailPage() {
                 <ThumbsUp className="w-4 h-4" /> Review
               </button>
             )}
-            {/* ── NEW: Edit Loan Button ────────────────────────────────── */}
+            {/* ── Edit Loan Button ────────────────────────────────── */}
             {canEdit && (
               <button
-                onClick={() => {
-                  setEditErr('');
-                  setShowEditModal(true);
-                }}
+                onClick={openEditModal}
                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold"
               >
                 <Edit3 className="w-4 h-4" /> Edit
@@ -488,7 +492,7 @@ export default function LoanDetailPage() {
         </div>
       )}
 
-      {/* ── NEW: Edit Loan Details Modal ─────────────────────────────────── */}
+      {/* ── Edit Loan Details Modal (PRE‑FILLED CORRECTLY) ────────────────── */}
       {showEditModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
