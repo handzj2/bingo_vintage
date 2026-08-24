@@ -4,15 +4,22 @@ import { Repository, Between, Not } from 'typeorm';
 import { Payment } from '../payments/entities/payment.entity';
 import { Loan, LoanStatus } from '../loans/entities/loan.entity';
 import { LoanSchedule } from '../schedules/entities/schedule.entity';
-import { subDays } from 'date-fns';
+import { CashDrawer } from '../cash-drawers/entities/cash-drawer.entity';
+import { Expense } from '../expenses/entities/expense.entity';
+import { Reconciliation } from '../reconciliation/entities/reconciliation.entity';
+import { subDays, addDays } from 'date-fns';
 import { startOfKampalaDay, endOfKampalaDay } from '../../common/utils/kampala-time';
+import { buildExcelBuffer, ExcelColumn } from '../../common/utils/excel-export.util';
 
 @Injectable()
 export class ReportsService {
   constructor(
-    @InjectRepository(Payment)      private paymentRepo:  Repository<Payment>,
-    @InjectRepository(Loan)         private loanRepo:     Repository<Loan>,
-    @InjectRepository(LoanSchedule) private scheduleRepo: Repository<LoanSchedule>,
+    @InjectRepository(Payment)        private paymentRepo:  Repository<Payment>,
+    @InjectRepository(Loan)           private loanRepo:     Repository<Loan>,
+    @InjectRepository(LoanSchedule)   private scheduleRepo: Repository<LoanSchedule>,
+    @InjectRepository(CashDrawer)     private drawerRepo:   Repository<CashDrawer>,
+    @InjectRepository(Expense)        private expenseRepo:  Repository<Expense>,
+    @InjectRepository(Reconciliation) private reconRepo:    Repository<Reconciliation>,
   ) {}
 
   // ── Daily summary ─────────────────────────────────────────────────────────
@@ -320,5 +327,341 @@ export class ReportsService {
        r.total_loans, r.active_loans, r.outstanding].join(',')
     );
     return header + lines.join('\n');
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Daily Payment Accountability — every payment recorded on a given day,
+  // tenant-wide (optionally one branch), so an admin who was never
+  // physically in a branch can see exactly what was collected, by whom,
+  // through which drawer, without relying on the branch to self-report it.
+  // ═══════════════════════════════════════════════════════════════════════
+  async getDailyPaymentAccountability(tenantId: number, date: Date = new Date(), branchId?: number) {
+    const start = startOfKampalaDay(date);
+    const end   = endOfKampalaDay(date);
+
+    const rows: any[] = await this.paymentRepo.manager.query(
+      `SELECT p.id, p.receipt_number, p.payment_date, p.amount, p.payment_method,
+              p.status, p.collected_by, p.cash_drawer_id,
+              l.loan_number, l.loan_type,
+              c.first_name || ' ' || c.last_name AS client_name, c.phone,
+              b.name AS branch_name, br.branch_id
+         FROM payments p
+         JOIN loans l    ON l.id = p.loan_id
+         JOIN clients c  ON c.id = l.client_id
+         LEFT JOIN cash_drawers br ON br.id = p.cash_drawer_id
+         LEFT JOIN branches b      ON b.id = br.branch_id
+        WHERE p.tenant_id = $1
+          AND p.payment_date BETWEEN $2 AND $3
+          ${branchId ? 'AND br.branch_id = $4' : ''}
+        ORDER BY p.payment_date ASC`,
+      branchId ? [tenantId, start, end, branchId] : [tenantId, start, end],
+    );
+
+    const completed = rows.filter(r => r.status !== 'REVERSED');
+    const reversed  = rows.filter(r => r.status === 'REVERSED');
+
+    const byMethod: Record<string, { count: number; amount: number }> = {};
+    for (const r of completed) {
+      const m = r.payment_method || 'UNKNOWN';
+      if (!byMethod[m]) byMethod[m] = { count: 0, amount: 0 };
+      byMethod[m].count++;
+      byMethod[m].amount += Number(r.amount);
+    }
+
+    return {
+      date: start.toISOString().slice(0, 10),
+      branchId: branchId ?? null,
+      totalCollected: completed.reduce((s, r) => s + Number(r.amount), 0),
+      transactionCount: completed.length,
+      reversedCount: reversed.length,
+      reversedAmount: reversed.reduce((s, r) => s + Number(r.amount), 0),
+      byMethod,
+      payments: rows.map(r => ({
+        id: r.id,
+        receiptNumber: r.receipt_number,
+        time: r.payment_date,
+        clientName: r.client_name,
+        phone: r.phone,
+        loanNumber: r.loan_number,
+        loanType: r.loan_type,
+        amount: Number(r.amount),
+        method: r.payment_method,
+        status: r.status,
+        collectedBy: r.collected_by,
+        branchName: r.branch_name || '—',
+      })),
+    };
+  }
+
+  async getDailyPaymentAccountabilityExcel(tenantId: number, date: Date = new Date(), branchId?: number): Promise<Buffer> {
+    const report = await this.getDailyPaymentAccountability(tenantId, date, branchId);
+
+    const columns: ExcelColumn[] = [
+      { header: 'Time',        key: 'time',       width: 20 },
+      { header: 'Receipt #',   key: 'receipt',    width: 16 },
+      { header: 'Client',      key: 'client',     width: 24 },
+      { header: 'Phone',       key: 'phone',       width: 16 },
+      { header: 'Loan #',      key: 'loan',        width: 14 },
+      { header: 'Branch',      key: 'branch',      width: 16 },
+      { header: 'Method',      key: 'method',      width: 14 },
+      { header: 'Collected By',key: 'collectedBy', width: 18 },
+      { header: 'Status',      key: 'status',      width: 12 },
+      { header: 'Amount (UGX)',key: 'amount',      width: 16, currency: true },
+    ];
+
+    const rows = report.payments.map(p => ({
+      time: new Date(p.time).toLocaleString('en-UG', { hour12: false }),
+      receipt: p.receiptNumber,
+      client: p.clientName,
+      phone: p.phone,
+      loan: p.loanNumber,
+      branch: p.branchName,
+      method: p.method,
+      collectedBy: p.collectedBy || '—',
+      status: p.status,
+      amount: p.amount,
+    }));
+
+    return buildExcelBuffer({
+      sheetName: 'Daily Accountability',
+      title: `Daily Payment Accountability — ${report.date}${branchId ? ` (Branch #${branchId})` : ' (All Branches)'}`,
+      columns,
+      rows,
+      totalsRow: {
+        client: `${report.transactionCount} transaction(s)` +
+                 (report.reversedCount ? `, ${report.reversedCount} reversed (${report.reversedAmount.toLocaleString()})` : ''),
+        amount: report.totalCollected,
+      },
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Upcoming Due Installments — every loan schedule row due within the
+  // next N days (default 7), oldest due date first, so collections staff
+  // and admins can see who to follow up with before payments become
+  // overdue rather than only after.
+  // ═══════════════════════════════════════════════════════════════════════
+  async getUpcomingDue(tenantId: number, days = 7, branchId?: number) {
+    const today = startOfKampalaDay(new Date());
+    const until = addDays(today, days);
+
+    const rows: any[] = await this.scheduleRepo.manager.query(
+      `SELECT ls.id, ls.loan_id, ls.installment_number, ls.due_date,
+              ls.amount_due, ls.amount_paid, ls.status,
+              l.loan_number, l.loan_type, l.branch_id,
+              c.first_name || ' ' || c.last_name AS client_name, c.phone,
+              b.name AS branch_name
+         FROM loan_schedules ls
+         JOIN loans l        ON l.id = ls.loan_id
+         JOIN clients c      ON c.id = l.client_id
+         LEFT JOIN branches b ON b.id = l.branch_id
+        WHERE ls.tenant_id = $1
+          AND ls.status IN ('PENDING','PARTIAL','OVERDUE')
+          AND ls.due_date <= $2
+          ${branchId ? 'AND l.branch_id = $3' : ''}
+        ORDER BY ls.due_date ASC`,
+      branchId ? [tenantId, until, branchId] : [tenantId, until],
+    );
+
+    const todayStr = today.toISOString().slice(0, 10);
+    const installments = rows.map(r => {
+      const dueDateStr = new Date(r.due_date).toISOString().slice(0, 10);
+      const daysUntil = Math.round(
+        (new Date(dueDateStr).getTime() - new Date(todayStr).getTime()) / 86_400_000,
+      );
+      return {
+        loanNumber: r.loan_number,
+        loanType: r.loan_type,
+        clientName: r.client_name,
+        phone: r.phone,
+        branchName: r.branch_name || '—',
+        installmentNumber: r.installment_number,
+        dueDate: dueDateStr,
+        amountDue: Number(r.amount_due) - Number(r.amount_paid || 0),
+        status: r.status,
+        daysUntilDue: daysUntil, // negative = already overdue
+      };
+    });
+
+    return {
+      generatedFor: todayStr,
+      windowDays: days,
+      branchId: branchId ?? null,
+      count: installments.length,
+      totalDue: installments.reduce((s, i) => s + i.amountDue, 0),
+      installments,
+    };
+  }
+
+  async getUpcomingDueExcel(tenantId: number, days = 7, branchId?: number): Promise<Buffer> {
+    const report = await this.getUpcomingDue(tenantId, days, branchId);
+
+    const columns: ExcelColumn[] = [
+      { header: 'Due Date',    key: 'dueDate',   width: 14 },
+      { header: 'Client',      key: 'client',     width: 24 },
+      { header: 'Phone',       key: 'phone',       width: 16 },
+      { header: 'Loan #',      key: 'loan',        width: 14 },
+      { header: 'Branch',      key: 'branch',      width: 16 },
+      { header: 'Installment', key: 'installment', width: 12 },
+      { header: 'Status',      key: 'status',       width: 12 },
+      { header: 'Days',        key: 'daysUntil',    width: 10 },
+      { header: 'Amount Due (UGX)', key: 'amountDue', width: 18, currency: true },
+    ];
+
+    const rows = report.installments.map(i => ({
+      dueDate: i.dueDate,
+      client: i.clientName,
+      phone: i.phone,
+      loan: i.loanNumber,
+      branch: i.branchName,
+      installment: i.installmentNumber,
+      status: i.daysUntilDue < 0 ? 'OVERDUE' : i.status,
+      daysUntil: i.daysUntilDue < 0 ? `${Math.abs(i.daysUntilDue)}d overdue` : `in ${i.daysUntilDue}d`,
+      amountDue: i.amountDue,
+    }));
+
+    return buildExcelBuffer({
+      sheetName: 'Upcoming Due',
+      title: `Upcoming Due Installments — next ${report.windowDays} days from ${report.generatedFor}` +
+             (branchId ? ` (Branch #${branchId})` : ' (All Branches)'),
+      columns,
+      rows,
+      totalsRow: { client: `${report.count} installment(s)`, amountDue: report.totalDue },
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Cash Drawer Balancing — per drawer, per day: opening float, cash
+  // collected through that drawer, approved expenses paid out of it,
+  // the resulting expected balance, what was actually counted at close,
+  // the variance, and whether it's been reconciled. This is the report
+  // an admin who is never physically in a branch uses to check the real
+  // cash position without having to trust a branch's word for it.
+  //
+  // Expected-cash formula matches ReconciliationService.getExpected()
+  // exactly (opening + payments through this drawer − approved expenses),
+  // so this report and the in-app reconciliation screen never disagree.
+  // ═══════════════════════════════════════════════════════════════════════
+  async getDrawerBalancing(tenantId: number, startDate?: string, endDate?: string, branchId?: number) {
+    const start = startDate ? startOfKampalaDay(new Date(startDate)) : startOfKampalaDay(subDays(new Date(), 7));
+    const end   = endDate   ? endOfKampalaDay(new Date(endDate))     : endOfKampalaDay(new Date());
+
+    const drawers: any[] = await this.drawerRepo.manager.query(
+      `SELECT d.id, d.drawer_date, d.status, d.opening_balance, d.closing_balance,
+              d.expected_balance, d.difference, d.closed_at,
+              b.name AS branch_name, b.id AS branch_id,
+              u.username AS opened_by, cu.username AS closed_by,
+              r.id AS reconciliation_id, r.actual_cash AS reconciled_actual, r.difference AS reconciled_difference
+         FROM cash_drawers d
+         LEFT JOIN branches b ON b.id = d.branch_id
+         LEFT JOIN users u    ON u.id = d.user_id
+         LEFT JOIN users cu   ON cu.id = d.closed_by_id
+         LEFT JOIN office_reconciliations r ON r.drawer_id = d.id
+        WHERE d.tenant_id = $1
+          AND d.drawer_date BETWEEN $2 AND $3
+          ${branchId ? 'AND d.branch_id = $4' : ''}
+        ORDER BY d.drawer_date DESC, d.id DESC`,
+      branchId ? [tenantId, start, end, branchId] : [tenantId, start, end],
+    );
+
+    const drawerIds = drawers.map(d => d.id);
+    const collectedByDrawer: Record<number, number> = {};
+    const expensesByDrawer:  Record<number, number> = {};
+    if (drawerIds.length) {
+      const payRows: any[] = await this.paymentRepo.manager.query(
+        `SELECT cash_drawer_id, COALESCE(SUM(amount),0) AS total
+           FROM payments
+          WHERE cash_drawer_id = ANY($1) AND status != 'REVERSED'
+          GROUP BY cash_drawer_id`,
+        [drawerIds],
+      );
+      payRows.forEach(r => { collectedByDrawer[r.cash_drawer_id] = Number(r.total); });
+
+      const expRows: any[] = await this.expenseRepo.manager.query(
+        `SELECT cash_drawer_id, COALESCE(SUM(amount),0) AS total
+           FROM expenses
+          WHERE cash_drawer_id = ANY($1) AND status = 'approved'
+          GROUP BY cash_drawer_id`,
+        [drawerIds],
+      );
+      expRows.forEach(r => { expensesByDrawer[r.cash_drawer_id] = Number(r.total); });
+    }
+
+    const items = drawers.map(d => {
+      const collected = collectedByDrawer[d.id] || 0;
+      const expenses   = expensesByDrawer[d.id]  || 0;
+      const opening    = Number(d.opening_balance || 0);
+      const expected   = opening + collected - expenses;
+      const actual     = d.closing_balance !== null ? Number(d.closing_balance) : null;
+      const variance    = actual !== null ? actual - expected : null;
+      return {
+        drawerId: d.id,
+        date: new Date(d.drawer_date).toISOString().slice(0, 10),
+        branchName: d.branch_name || '—',
+        openedBy: d.opened_by || '—',
+        closedBy: d.closed_by || (d.status === 'open' ? '— (still open)' : '—'),
+        status: d.reconciliation_id ? 'reconciled' : d.status,
+        openingBalance: opening,
+        cashCollected: collected,
+        expensesPaid: expenses,
+        expectedBalance: expected,
+        actualBalance: actual,
+        variance,
+      };
+    });
+
+    return {
+      startDate: start.toISOString().slice(0, 10),
+      endDate: end.toISOString().slice(0, 10),
+      branchId: branchId ?? null,
+      drawerCount: items.length,
+      openDrawers: items.filter(i => i.status === 'open').length,
+      totalVariance: items.reduce((s, i) => s + (i.variance || 0), 0),
+      drawers: items,
+    };
+  }
+
+  async getDrawerBalancingExcel(tenantId: number, startDate?: string, endDate?: string, branchId?: number): Promise<Buffer> {
+    const report = await this.getDrawerBalancing(tenantId, startDate, endDate, branchId);
+
+    const columns: ExcelColumn[] = [
+      { header: 'Date',            key: 'date',      width: 14 },
+      { header: 'Branch',          key: 'branch',     width: 16 },
+      { header: 'Opened By',       key: 'openedBy',   width: 16 },
+      { header: 'Closed By',       key: 'closedBy',   width: 18 },
+      { header: 'Status',          key: 'status',      width: 14 },
+      { header: 'Opening (UGX)',   key: 'opening',      width: 16, currency: true },
+      { header: 'Collected (UGX)', key: 'collected',    width: 16, currency: true },
+      { header: 'Expenses (UGX)',  key: 'expenses',      width: 16, currency: true },
+      { header: 'Expected (UGX)',  key: 'expected',       width: 16, currency: true },
+      { header: 'Actual/Closing (UGX)', key: 'actual',    width: 18, currency: true },
+      { header: 'Variance (UGX)',  key: 'variance',        width: 16, currency: true },
+    ];
+
+    const rows = report.drawers.map(d => ({
+      date: d.date,
+      branch: d.branchName,
+      openedBy: d.openedBy,
+      closedBy: d.closedBy,
+      status: d.status,
+      opening: d.openingBalance,
+      collected: d.cashCollected,
+      expenses: d.expensesPaid,
+      expected: d.expectedBalance,
+      actual: d.actualBalance ?? '(not closed)',
+      variance: d.variance ?? '',
+    }));
+
+    return buildExcelBuffer({
+      sheetName: 'Drawer Balancing',
+      title: `Cash Drawer Balancing — ${report.startDate} to ${report.endDate}` +
+             (branchId ? ` (Branch #${branchId})` : ' (All Branches)'),
+      columns,
+      rows,
+      totalsRow: {
+        branch: `${report.drawerCount} drawer(s), ${report.openDrawers} still open`,
+        variance: report.totalVariance,
+      },
+    });
   }
 }

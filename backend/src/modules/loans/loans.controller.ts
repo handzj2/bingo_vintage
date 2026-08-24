@@ -191,11 +191,17 @@ export class EditLoanDetailsDto {
   @IsPositive()
   principalAmount?: number;
 
-  @ApiProperty({ example: 104, description: 'Corrected term in weeks', required: false })
+  @ApiProperty({ example: 104, description: 'Corrected term in weeks (bike loans)', required: false })
   @IsOptional()
   @IsNumber()
   @IsPositive()
   termWeeks?: number;
+
+  @ApiProperty({ example: 12, description: 'Corrected term in months (cash loans)', required: false })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  termMonths?: number;
 
   @ApiProperty({ example: 1442, description: 'Corrected weekly instalment amount', required: false })
   @IsOptional()

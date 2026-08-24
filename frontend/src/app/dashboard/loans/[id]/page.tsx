@@ -1,7 +1,8 @@
 // fix: edit modal pre-fill — openEditModal reads current loan data so all fields are populated instantly
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { calculateCashLoan, calculateBikeLoan } from '@/features/loans/loan.utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -46,7 +47,10 @@ export default function LoanDetailPage() {
   const role       = (user?.role ?? '').toLowerCase();
   const isAdmin    = role === 'admin' || role === 'superadmin';
   const canApprove = isAdmin || role === 'manager' || can('loan.approve');
-  const canEdit    = isAdmin || role === 'manager' || can('loan.create');
+  // Edit Loan Details is admin-only on the backend (editLoanDetails asserts assertAdmin),
+  // so the button is restricted the same way — a manager could otherwise fill out the
+  // whole form and only find out it's rejected when they hit Save.
+  const canEdit    = isAdmin;
   const canReverse = isAdmin || can('payment.reverse');
 
   const [loan, setLoan]               = useState<any>(null);
@@ -67,6 +71,7 @@ export default function LoanDetailPage() {
   const [editForm, setEditForm] = useState({
     principalAmount: 0,
     termWeeks: 0,
+    termMonths: 0,
     weeklyAmount: 0,
     interestRate: 0,
     startDate: '',
@@ -116,8 +121,11 @@ export default function LoanDetailPage() {
     setEditForm({
       principalAmount: Number(loan.principal_amount) || 0,
       termWeeks: Number(loan.term_weeks) || 0,
+      termMonths: Number(loan.term_months) || 0,
       weeklyAmount: Number(loan.weekly_amount || loan.weeklyAmount) || 0,
-      interestRate: Number(loan.interest_rate || loan.interestRate) || 0,
+      // Stored as a decimal fraction (e.g. 0.15) — shown here as a percentage (15),
+      // matching how the Create Loan screen collects and displays the rate.
+      interestRate: (Number(loan.interest_rate || loan.interestRate) || 0) * 100,
       startDate: loan.start_date
         ? new Date(loan.start_date).toISOString().slice(0, 10)
         : '',
@@ -126,6 +134,42 @@ export default function LoanDetailPage() {
     setEditErr('');
     setShowEditModal(true);
   };
+
+  // ── Calculation preview: what the loan looked like before this edit,
+  //    and what it will look like with the values currently in the form —
+  //    same engine (loan.utils) and card style the Create Loan screen uses. ──
+  const originalCalc = useMemo(() => {
+    if (!loan) return null;
+    const weekly = loan.loan_type === 'bike';
+    return weekly
+      ? calculateBikeLoan(
+          (Number(loan.principal_amount) || 0) + (Number(loan.deposit) || 0),
+          Number(loan.deposit) || 0,
+          (Number(loan.interest_rate || loan.interestRate) || 0) * 100,
+          Number(loan.term_weeks) || 0,
+        )
+      : calculateCashLoan(
+          Number(loan.principal_amount) || 0,
+          (Number(loan.interest_rate || loan.interestRate) || 0) * 100,
+          Number(loan.term_months) || 0,
+        );
+  }, [loan]);
+
+  const previewCalc = useMemo(() => {
+    const weekly = loan?.loan_type === 'bike';
+    return weekly
+      ? calculateBikeLoan(
+          editForm.principalAmount + (Number(loan?.deposit) || 0),
+          Number(loan?.deposit) || 0,
+          editForm.interestRate,
+          editForm.termWeeks,
+        )
+      : calculateCashLoan(
+          editForm.principalAmount,
+          editForm.interestRate,
+          editForm.termMonths,
+        );
+  }, [editForm, loan]);
 
   const handleApprove = async () => {
     setApproveErr(''); setApproving(true);
@@ -152,9 +196,11 @@ export default function LoanDetailPage() {
     try {
       const payload: any = {};
       if (editForm.principalAmount) payload.principalAmount = Number(editForm.principalAmount);
-      if (editForm.termWeeks)       payload.termWeeks       = Number(editForm.termWeeks);
+      if (isWeekly && editForm.termWeeks)   payload.termWeeks  = Number(editForm.termWeeks);
+      if (!isWeekly && editForm.termMonths) payload.termMonths = Number(editForm.termMonths);
       if (editForm.weeklyAmount)    payload.weeklyAmount    = Number(editForm.weeklyAmount);
-      if (editForm.interestRate)    payload.interestRate    = Number(editForm.interestRate);
+      // Form shows a percentage (e.g. 15); backend stores a decimal fraction (e.g. 0.15).
+      if (editForm.interestRate)    payload.interestRate    = Number(editForm.interestRate) / 100;
       if (editForm.startDate)       payload.startDate       = editForm.startDate;
       if (editForm.newBalance !== undefined && editForm.newBalance !== null) {
         payload.newBalance = Number(editForm.newBalance);
@@ -495,7 +541,7 @@ export default function LoanDetailPage() {
       {/* ── Edit Loan Details Modal (PRE‑FILLED CORRECTLY) ────────────────── */}
       {showEditModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-gray-100">
               <h2 className="font-bold text-gray-900 text-lg">Edit Loan Details</h2>
               <button onClick={() => setShowEditModal(false)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
@@ -504,7 +550,9 @@ export default function LoanDetailPage() {
               <div className="bg-gray-50 rounded-xl p-4 text-sm space-y-1">
                 <p><span className="text-gray-500">Loan #:</span> <span className="font-semibold">{loan.loan_number}</span></p>
                 <p><span className="text-gray-500">Client:</span> <span className="font-semibold">{clientName}</span></p>
+                <p><span className="text-gray-500">Type:</span> <span className="font-semibold">{isWeekly ? 'Bike (Weekly)' : 'Cash (Monthly)'}</span></p>
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Principal Amount</label>
@@ -516,25 +564,35 @@ export default function LoanDetailPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Term (weeks)</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Term ({isWeekly ? 'weeks' : 'months'})
+                  </label>
                   <input
                     type="number"
                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={editForm.termWeeks}
-                    onChange={e => setEditForm({...editForm, termWeeks: Number(e.target.value)})}
+                    value={isWeekly ? editForm.termWeeks : editForm.termMonths}
+                    onChange={e => setEditForm(
+                      isWeekly
+                        ? {...editForm, termWeeks: Number(e.target.value)}
+                        : {...editForm, termMonths: Number(e.target.value)}
+                    )}
                   />
                 </div>
+                {isWeekly && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Weekly Amount (override)</label>
+                    <input
+                      type="number"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      value={editForm.weeklyAmount}
+                      onChange={e => setEditForm({...editForm, weeklyAmount: Number(e.target.value)})}
+                    />
+                  </div>
+                )}
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Weekly Amount</label>
-                  <input
-                    type="number"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={editForm.weeklyAmount}
-                    onChange={e => setEditForm({...editForm, weeklyAmount: Number(e.target.value)})}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Interest Rate (%)</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    {isWeekly ? 'Weekly' : 'Monthly'} Interest Rate (%)
+                  </label>
                   <input
                     type="number"
                     step="any"
@@ -563,6 +621,36 @@ export default function LoanDetailPage() {
                   />
                 </div>
               </div>
+
+              {/* ── Calculation preview: current terms vs. what these edits produce ── */}
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="rounded-2xl p-4 bg-gray-100 text-gray-700">
+                  <p className="text-[10px] font-bold uppercase tracking-wider opacity-60 mb-2">Current (before edit)</p>
+                  <p className="text-xl font-black">
+                    {Math.round(originalCalc?.installment || 0).toLocaleString()}
+                    <span className="text-xs font-medium opacity-60 ml-1">UGX / {isWeekly ? 'wk' : 'mo'}</span>
+                  </p>
+                  <div className="mt-3 pt-3 border-t border-gray-300/70 space-y-1 text-xs">
+                    <div className="flex justify-between"><span className="opacity-60">Total Interest</span><span className="font-semibold">{Math.round(originalCalc?.totalInterest || 0).toLocaleString()}</span></div>
+                    <div className="flex justify-between font-bold"><span>Total Payable</span><span>{Math.round(originalCalc?.totalPayable || 0).toLocaleString()}</span></div>
+                  </div>
+                </div>
+                <div className={`rounded-2xl p-4 text-white ${isWeekly ? 'bg-gradient-to-br from-orange-500 to-orange-700' : 'bg-gradient-to-br from-blue-600 to-blue-800'}`}>
+                  <p className="text-[10px] font-bold uppercase tracking-wider opacity-70 mb-2">New (with these edits)</p>
+                  <p className="text-xl font-black">
+                    {Math.round(previewCalc?.installment || 0).toLocaleString()}
+                    <span className="text-xs font-medium opacity-60 ml-1">UGX / {isWeekly ? 'wk' : 'mo'}</span>
+                  </p>
+                  <div className="mt-3 pt-3 border-t border-white/20 space-y-1 text-xs">
+                    <div className="flex justify-between"><span className="opacity-70">Total Interest</span><span className="font-semibold">{Math.round(previewCalc?.totalInterest || 0).toLocaleString()}</span></div>
+                    <div className="flex justify-between font-bold"><span>Total Payable</span><span>{Math.round(previewCalc?.totalPayable || 0).toLocaleString()}</span></div>
+                  </div>
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-400 -mt-1">
+                Preview only — the schedule is recalculated and existing payments replayed against it when you save.
+              </p>
+
               {editErr && <p className="text-red-600 text-sm">{editErr}</p>}
               <div className="flex gap-3 pt-1">
                 <button onClick={() => setShowEditModal(false)}

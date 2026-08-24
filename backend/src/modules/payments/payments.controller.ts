@@ -49,6 +49,21 @@ export class PaymentsController {
       );
     }
 
+    // ✅ POLICY: Backdated payments (payment_date on a calendar day before
+    // today) may only be entered by an admin. A cashier/teller/manager
+    // recording a same-day or future-dated payment is unaffected — this
+    // only blocks setting the date into the past.
+    if (createPaymentDto.payment_date && role !== 'admin' && role !== 'superadmin') {
+      const requested = new Date(createPaymentDto.payment_date);
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      if (!isNaN(requested.getTime()) && requested < todayStart) {
+        throw new ForbiddenException(
+          'Policy: backdated payments can only be entered by an administrator. ' +
+          'Record this payment with today\'s date, or ask an admin to enter it.',
+        );
+      }
+    }
+
     const serviceDto = {
       loanId:        createPaymentDto.loan_id,
       amount:        createPaymentDto.amount,

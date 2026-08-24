@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   Banknote, Plus, X, Search, RefreshCw, CheckCircle, AlertCircle,
   Receipt, TrendingUp, Calendar, Clock, RotateCcw, Loader2,
@@ -67,6 +68,9 @@ function Modal({ title, subtitle, onClose, children, wide }: any) {
 
 // ── Record Payment Modal ──────────────────────────────────────
 function RecordPaymentModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const { user } = useAuth();
+  const isAdmin = (user?.role ?? '').toLowerCase() === 'admin' || (user?.role ?? '').toLowerCase() === 'superadmin';
+  const todayStr = new Date().toISOString().split('T')[0];
   const [step, setStep] = useState<1 | 2>(1);
   const [allLoans, setAllLoans] = useState<any[]>([]);
   const [clientSearch, setClientSearch] = useState('');
@@ -132,6 +136,9 @@ function RecordPaymentModal({ onClose, onSaved }: { onClose: () => void; onSaved
     if (!selectedLoan) return setError('Please select a loan');
     if (!form.amount || Number(form.amount) <= 0) return setError('Enter a valid amount');
     if (!form.receipt_number.trim()) return setError('Receipt number is required');
+    if (!isAdmin && form.payment_date < todayStr) {
+      return setError('Backdated payments can only be entered by an administrator.');
+    }
     setError(''); setSubmitting(true);
     try {
       const dt = new Date(`${form.payment_date}T${form.payment_time}`);
@@ -342,8 +349,12 @@ function RecordPaymentModal({ onClose, onSaved }: { onClose: () => void; onSaved
             <div>
               <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Payment Date *</label>
               <input type="date"
+                min={isAdmin ? undefined : todayStr}
                 className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:border-blue-500"
                 value={form.payment_date} onChange={e => setForm({ ...form, payment_date: e.target.value })} />
+              {!isAdmin && (
+                <p className="text-[11px] text-gray-400 mt-1">Only admins can enter a backdated payment.</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Time</label>

@@ -79,4 +79,102 @@ export class ReportsController {
     res.setHeader('Content-Disposition', `attachment; filename="clients-${Date.now()}.csv"`);
     return res.send(csv);
   }
+
+  // ── Daily Payment Accountability ──────────────────────────────────────
+  @Get('daily-accountability')
+  @ApiOperation({ summary: 'All payments recorded on a given day, tenant-wide or one branch' })
+  getDailyAccountability(
+    @Request() req: AuthRequest,
+    @Query('date') date?: string,
+    @Query('branchId') branchId?: number,
+  ) {
+    return this.reportsService.getDailyPaymentAccountability(
+      req.user.tenantId,
+      date ? new Date(date) : new Date(),
+      branchId ? +branchId : undefined,
+    );
+  }
+
+  @Get('export/daily-accountability')
+  @ApiOperation({ summary: 'Download Daily Payment Accountability as Excel (.xlsx)' })
+  async exportDailyAccountability(
+    @Request() req: AuthRequest,
+    @Res() res: any,
+    @Query('date') date?: string,
+    @Query('branchId') branchId?: number,
+  ) {
+    const buffer = await this.reportsService.getDailyPaymentAccountabilityExcel(
+      req.user.tenantId,
+      date ? new Date(date) : new Date(),
+      branchId ? +branchId : undefined,
+    );
+    const day = (date || new Date().toISOString().slice(0, 10));
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="daily-accountability-${day}.xlsx"`);
+    return res.send(buffer);
+  }
+
+  // ── Upcoming Due Installments ─────────────────────────────────────────
+  @Get('upcoming-due')
+  @ApiOperation({ summary: 'Loan installments due within the next N days (default 7)' })
+  getUpcomingDue(
+    @Request() req: AuthRequest,
+    @Query('days') days?: number,
+    @Query('branchId') branchId?: number,
+  ) {
+    return this.reportsService.getUpcomingDue(
+      req.user.tenantId,
+      days ? +days : 7,
+      branchId ? +branchId : undefined,
+    );
+  }
+
+  @Get('export/upcoming-due')
+  @ApiOperation({ summary: 'Download Upcoming Due Installments as Excel (.xlsx)' })
+  async exportUpcomingDue(
+    @Request() req: AuthRequest,
+    @Res() res: any,
+    @Query('days') days?: number,
+    @Query('branchId') branchId?: number,
+  ) {
+    const buffer = await this.reportsService.getUpcomingDueExcel(
+      req.user.tenantId,
+      days ? +days : 7,
+      branchId ? +branchId : undefined,
+    );
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="upcoming-due-${Date.now()}.xlsx"`);
+    return res.send(buffer);
+  }
+
+  // ── Cash Drawer Balancing ─────────────────────────────────────────────
+  @Get('drawer-balancing')
+  @ApiOperation({ summary: 'Per-drawer opening/collected/expenses/expected vs actual cash, for a date range' })
+  getDrawerBalancing(
+    @Request() req: AuthRequest,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('branchId') branchId?: number,
+  ) {
+    return this.reportsService.getDrawerBalancing(
+      req.user.tenantId, startDate, endDate, branchId ? +branchId : undefined,
+    );
+  }
+
+  @Get('export/drawer-balancing')
+  @ApiOperation({ summary: 'Download Cash Drawer Balancing as Excel (.xlsx)' })
+  async exportDrawerBalancing(
+    @Request() req: AuthRequest,
+    @Res() res: any,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('branchId') branchId?: number,
+  ) {
+    const buffer = await this.reportsService.getDrawerBalancingExcel(
+      req.user.tenantId, startDate, endDate, branchId ? +branchId : undefined,
+    );
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="drawer-balancing-${Date.now()}.xlsx"`);
+    return res.send(buffer);
+  }
 }

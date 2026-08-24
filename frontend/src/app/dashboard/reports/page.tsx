@@ -73,9 +73,9 @@ function AgingBar({ bucket, loanCount, atRisk, maxRisk }: any) {
   );
 }
 
-// ── CSV download helper ───────────────────────────────────────────────────────
+// ── File download helper (CSV or Excel — content type doesn't matter here) ────
 const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '') + '/api';
-async function downloadCsv(path: string, filename: string) {
+async function downloadFile(path: string, filename: string) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : '';
   const res = await fetch(`${API_URL}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -87,6 +87,18 @@ async function downloadCsv(path: string, filename: string) {
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 }
+const downloadCsv = downloadFile; // kept for existing call sites below
+
+// ApiClient.get() wraps every response as { success, data, message, status }.
+// Fetches here previously stored that wrapper directly instead of its .data,
+// which is why "Today's Collections" and the 7-day sparkline have been
+// showing zeros — unwrap consistently everywhere a report is fetched.
+function unwrap<T = any>(res: any, fallback: T): T {
+  if (res && typeof res === 'object' && 'success' in res && 'data' in res) {
+    return (res.success ? res.data : fallback) ?? fallback;
+  }
+  return res ?? fallback; // already-unwrapped (e.g. a .catch() fallback value)
+}
 
 export default function ReportsPage() {
   const [portfolio, setPortfolio]   = useState<any>(null);
@@ -95,8 +107,34 @@ export default function ReportsPage() {
   const [aging,     setAging]       = useState<any[]>([]);
   const [daily,     setDaily]       = useState<any>(null);
   const [loading,   setLoading]     = useState(true);
-  const [tab,       setTab]         = useState<'overview' | 'arrears' | 'aging'>('overview');
+  const [tab,       setTab]         = useState<'overview' | 'arrears' | 'aging' | 'accountability'>('overview');
   const [exporting, setExporting]   = useState('');
+
+  // ── Daily Payment Accountability / Upcoming Due / Drawer Balancing tab ──
+  const [accDate, setAccDate]         = useState(new Date().toISOString().slice(0, 10));
+  const [dueDays, setDueDays]         = useState(7);
+  const [accData, setAccData]         = useState<any>(null);
+  const [dueData, setDueData]         = useState<any>(null);
+  const [drawerData, setDrawerData]   = useState<any>(null);
+  const [accLoading, setAccLoading]   = useState(false);
+
+  const loadAccountability = useCallback(async () => {
+    setAccLoading(true);
+    try {
+      const [acc, due, drw] = await Promise.all([
+        api.get(`/reports/daily-accountability?date=${accDate}`).catch(() => null),
+        api.get(`/reports/upcoming-due?days=${dueDays}`).catch(() => null),
+        api.get(`/reports/drawer-balancing?startDate=${accDate}&endDate=${accDate}`).catch(() => null),
+      ]);
+      setAccData(unwrap(acc, null));
+      setDueData(unwrap(due, null));
+      setDrawerData(unwrap(drw, null));
+    } finally {
+      setAccLoading(false);
+    }
+  }, [accDate, dueDays]);
+
+  useEffect(() => { if (tab === 'accountability') loadAccountability(); }, [tab, loadAccountability]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -108,11 +146,14 @@ export default function ReportsPage() {
         api.get('/reports/portfolio-aging').catch(() => []),
         api.get('/reports/daily-summary').catch(() => ({})),
       ]);
-      setPortfolio(port);
-      setWeekly(Array.isArray(wk) ? wk : []);
-      setArrears(Array.isArray(arr) ? arr : []);
-      setAging(Array.isArray(ag) ? ag : []);
-      setDaily(day);
+      setPortfolio(unwrap(port, {}));
+      const wkData = unwrap(wk, []);
+      setWeekly(Array.isArray(wkData) ? wkData : []);
+      const arrData = unwrap(arr, []);
+      setArrears(Array.isArray(arrData) ? arrData : []);
+      const agData = unwrap(ag, []);
+      setAging(Array.isArray(agData) ? agData : []);
+      setDaily(unwrap(day, {}));
     } finally {
       setLoading(false);
     }
@@ -168,7 +209,7 @@ export default function ReportsPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-white border border-gray-200 rounded-xl p-1 mb-6 w-fit shadow-sm">
-        {([['overview', 'Overview'], ['arrears', 'Arrears'], ['aging', 'Portfolio Aging']] as [string, string][]).map(([key, label]) => (
+        {([['overview', 'Overview'], ['arrears', 'Arrears'], ['aging', 'Portfolio Aging'], ['accountability', 'Daily & Cash']] as [string, string][]).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key as any)}
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
             {label}
@@ -396,6 +437,199 @@ export default function ReportsPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── ACCOUNTABILITY TAB: Daily payments, upcoming due, drawer balancing ── */}
+      {tab === 'accountability' && (
+        <div className="space-y-6">
+
+          {/* Date controls */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm flex flex-wrap items-end gap-4">
+            <div>
+              <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-1.5">Date</label>
+              <input type="date" value={accDate} onChange={e => setAccDate(e.target.value)}
+                className="border-2 border-gray-200 rounded-xl px-3 py-2 text-sm font-semibold focus:outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-1.5">Due Within (days)</label>
+              <input type="number" min={1} value={dueDays} onChange={e => setDueDays(Math.max(1, Number(e.target.value)))}
+                className="border-2 border-gray-200 rounded-xl px-3 py-2 text-sm font-semibold w-24 focus:outline-none focus:border-blue-500" />
+            </div>
+            <button onClick={loadAccountability} disabled={accLoading}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50 disabled:opacity-50">
+              {accLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Refresh
+            </button>
+            <p className="text-xs text-gray-400 ml-auto">Tenant-wide — every branch, no need to be on site to see it</p>
+          </div>
+
+          {/* ── Daily Payment Accountability ── */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-black text-gray-900">Daily Payment Accountability — {accDate}</h3>
+              <button
+                onClick={() => downloadFile(`/reports/export/daily-accountability?date=${accDate}`, `daily-accountability-${accDate}.xlsx`)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-xs font-semibold hover:bg-gray-50">
+                <Download className="w-3.5 h-3.5" /> Excel
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mb-4">Every payment recorded today, across every branch</p>
+            {!accData ? (
+              <p className="text-sm text-gray-400 italic">{accLoading ? 'Loading…' : 'No data'}</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                  <div className="p-3 rounded-xl bg-emerald-50">
+                    <p className="text-xs text-emerald-700 font-semibold">Total Collected</p>
+                    <p className="text-lg font-black text-emerald-800">{fmt(accData.totalCollected || 0)}</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-blue-50">
+                    <p className="text-xs text-blue-700 font-semibold">Transactions</p>
+                    <p className="text-lg font-black text-blue-800">{accData.transactionCount || 0}</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-red-50">
+                    <p className="text-xs text-red-700 font-semibold">Reversed</p>
+                    <p className="text-lg font-black text-red-800">{accData.reversedCount || 0}</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-gray-50">
+                    <p className="text-xs text-gray-500 font-semibold">Reversed Amount</p>
+                    <p className="text-lg font-black text-gray-700">{fmt(accData.reversedAmount || 0)}</p>
+                  </div>
+                </div>
+                {(accData.payments || []).length === 0 ? (
+                  <p className="text-sm text-gray-400 italic">No payments recorded on this date</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-100 bg-gray-50">
+                          {['Time', 'Receipt #', 'Client', 'Loan #', 'Branch', 'Method', 'Collected By', 'Amount'].map(h => (
+                            <th key={h} className="text-left text-xs font-black text-gray-500 uppercase tracking-wider px-3 py-2">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {accData.payments.slice(0, 25).map((p: any) => (
+                          <tr key={p.id} className="border-b border-gray-50">
+                            <td className="px-3 py-2 text-xs text-gray-500">{new Date(p.time).toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit' })}</td>
+                            <td className="px-3 py-2 font-mono text-xs">{p.receiptNumber}</td>
+                            <td className="px-3 py-2 font-semibold text-gray-800">{p.clientName}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-gray-600">{p.loanNumber}</td>
+                            <td className="px-3 py-2 text-xs text-gray-500">{p.branchName}</td>
+                            <td className="px-3 py-2 text-xs text-gray-500">{p.method}</td>
+                            <td className="px-3 py-2 text-xs text-gray-500">{p.collectedBy || '—'}</td>
+                            <td className={`px-3 py-2 font-black ${p.status === 'REVERSED' ? 'text-red-600 line-through' : 'text-gray-900'}`}>{fmt(p.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {accData.payments.length > 25 && (
+                      <p className="text-xs text-gray-400 mt-2">Showing first 25 of {accData.payments.length} — download the Excel file for the full list.</p>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* ── Upcoming Due ── */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-black text-gray-900">Upcoming Due — next {dueDays} days</h3>
+              <button
+                onClick={() => downloadFile(`/reports/export/upcoming-due?days=${dueDays}`, `upcoming-due-${accDate}.xlsx`)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-xs font-semibold hover:bg-gray-50">
+                <Download className="w-3.5 h-3.5" /> Excel
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mb-4">{dueData?.count || 0} installment(s) due, {fmt(dueData?.totalDue || 0)} total</p>
+            {!dueData || (dueData.installments || []).length === 0 ? (
+              <p className="text-sm text-gray-400 italic">{accLoading ? 'Loading…' : 'Nothing due in this window'}</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50">
+                      {['Due Date', 'Client', 'Loan #', 'Branch', 'Status', 'Amount Due'].map(h => (
+                        <th key={h} className="text-left text-xs font-black text-gray-500 uppercase tracking-wider px-3 py-2">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dueData.installments.slice(0, 25).map((i: any, idx: number) => (
+                      <tr key={idx} className="border-b border-gray-50">
+                        <td className="px-3 py-2 text-xs text-gray-600">{i.dueDate}</td>
+                        <td className="px-3 py-2 font-semibold text-gray-800">{i.clientName}</td>
+                        <td className="px-3 py-2 font-mono text-xs text-gray-600">{i.loanNumber}</td>
+                        <td className="px-3 py-2 text-xs text-gray-500">{i.branchName}</td>
+                        <td className="px-3 py-2">
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${i.daysUntilDue < 0 ? 'bg-red-50 text-red-700' : 'bg-yellow-50 text-yellow-700'}`}>
+                            {i.daysUntilDue < 0 ? `${Math.abs(i.daysUntilDue)}d overdue` : `in ${i.daysUntilDue}d`}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 font-black text-gray-900">{fmt(i.amountDue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {dueData.installments.length > 25 && (
+                  <p className="text-xs text-gray-400 mt-2">Showing first 25 of {dueData.installments.length} — download the Excel file for the full list.</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Cash Drawer Balancing ── */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-black text-gray-900">Cash Drawer Balancing — {accDate}</h3>
+              <button
+                onClick={() => downloadFile(`/reports/export/drawer-balancing?startDate=${accDate}&endDate=${accDate}`, `drawer-balancing-${accDate}.xlsx`)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-xs font-semibold hover:bg-gray-50">
+                <Download className="w-3.5 h-3.5" /> Excel
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mb-4">Expected cash vs. what was actually counted — per drawer, per branch</p>
+            {!drawerData || (drawerData.drawers || []).length === 0 ? (
+              <p className="text-sm text-gray-400 italic">{accLoading ? 'Loading…' : 'No drawers for this date'}</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50">
+                      {['Branch', 'Opened By', 'Status', 'Opening', 'Collected', 'Expenses', 'Expected', 'Actual', 'Variance'].map(h => (
+                        <th key={h} className="text-left text-xs font-black text-gray-500 uppercase tracking-wider px-3 py-2">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {drawerData.drawers.map((d: any) => (
+                      <tr key={d.drawerId} className="border-b border-gray-50">
+                        <td className="px-3 py-2 font-semibold text-gray-800">{d.branchName}</td>
+                        <td className="px-3 py-2 text-xs text-gray-500">{d.openedBy}</td>
+                        <td className="px-3 py-2">
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${
+                            d.status === 'reconciled' ? 'bg-emerald-50 text-emerald-700'
+                            : d.status === 'open' ? 'bg-yellow-50 text-yellow-700'
+                            : 'bg-gray-100 text-gray-600'}`}>
+                            {d.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-xs text-gray-600">{fmt(d.openingBalance)}</td>
+                        <td className="px-3 py-2 text-xs text-gray-600">{fmt(d.cashCollected)}</td>
+                        <td className="px-3 py-2 text-xs text-gray-600">{fmt(d.expensesPaid)}</td>
+                        <td className="px-3 py-2 text-xs font-semibold text-gray-700">{fmt(d.expectedBalance)}</td>
+                        <td className="px-3 py-2 text-xs font-semibold text-gray-700">{d.actualBalance === null ? '(not closed)' : fmt(d.actualBalance)}</td>
+                        <td className={`px-3 py-2 font-black ${d.variance == null ? 'text-gray-400' : d.variance === 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                          {d.variance == null ? '—' : fmt(d.variance)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

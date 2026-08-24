@@ -616,6 +616,7 @@ export class LoansService {
     dto: {
       principalAmount?: number;
       termWeeks?: number;
+      termMonths?: number;
       weeklyAmount?: number;
       interestRate?: number;
       startDate?: string;
@@ -633,6 +634,7 @@ export class LoansService {
       // Update loan fields if provided
       if (dto.principalAmount !== undefined) loan.principalAmount = dto.principalAmount;
       if (dto.termWeeks !== undefined) loan.termWeeks = dto.termWeeks;
+      if (dto.termMonths !== undefined) loan.termMonths = dto.termMonths;
       if (dto.weeklyAmount !== undefined) loan.weeklyAmount = dto.weeklyAmount;
       if (dto.interestRate !== undefined) loan.interestRate = dto.interestRate;
       if (dto.startDate) {
