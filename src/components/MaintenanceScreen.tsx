@@ -1,4 +1,10 @@
 /**
+ * ★★★ NEW FILE — MAINTENANCE MODE 2026-09-19 ★★★
+ * Path: frontend/src/components/MaintenanceScreen.tsx
+ * Shown when SITE_STATUS=OFF
+ */
+
+/**
  * ─────────────────────────────────────────────────────────────
  * MAINTENANCE / OFFLINE SCREEN — Bingo Vintage
  * ─────────────────────────────────────────────────────────────

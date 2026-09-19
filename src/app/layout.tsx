@@ -1,9 +1,15 @@
+/**
+ * ★★★ MAINTENANCE MODE ADDED 2026-09-19 ★★★
+ * File: frontend/src/app/layout.tsx
+ * Change: SITE_STATUS switch + MaintenanceScreen
+ * Search this file for: [MAINTENANCE] or SITE_STATUS
+ */
 import type { Metadata } from 'next';
 // Inter loaded via CSS in globals.css — avoids Google Fonts network call at build time
 import '@/styles/globals.css';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { Toaster } from 'react-hot-toast';
-import MaintenanceScreen from '@/components/MaintenanceScreen';
+import MaintenanceScreen from '@/components/MaintenanceScreen'; // [MAINTENANCE] NEW IMPORT
 
 export const metadata: Metadata = {
   title: 'Bingo Vintage - Lending System',
@@ -12,15 +18,10 @@ export const metadata: Metadata = {
 
 /**
  * ─────────────────────────────────────────────────────────────
- * MAINTENANCE MODE (SITE_STATUS)
+ * [MAINTENANCE] SITE_STATUS controlled suspension
  * ─────────────────────────────────────────────────────────────
- * Added: 2026-09-19 — controlled site suspension.
- * Does NOT delete the project, domain, GitHub code, or deployments.
- *
- * Vercel → Settings → Environment Variables:
- *   SITE_STATUS = OFF  → offline page (Handzj Tech contacts)
- *   SITE_STATUS = ON   → normal site (default if unset)
- * Then Redeploy production.
+ * Vercel env: SITE_STATUS=OFF → offline page | SITE_STATUS=ON → normal
+ * Hosting admin: Handzj Tech · 0781909507 · handzj2@gmail.com
  * ─────────────────────────────────────────────────────────────
  */
 export default function RootLayout({
@@ -28,7 +29,7 @@ export default function RootLayout({
 }: {
   children: any;
 }) {
-  // [MAINTENANCE] Default ON so missing env never takes the site offline
+  // [MAINTENANCE] ★ THIS BLOCK IS NEW — do not remove ★
   const siteOff =
     (process.env.SITE_STATUS || 'ON').toUpperCase().trim() === 'OFF';
 
@@ -37,12 +38,12 @@ export default function RootLayout({
       <html lang="en">
         <body>
           <MaintenanceScreen />
-          {/* Keep children in tree so Next.js can collect page data on Vercel */}
           <div style={{ display: 'none' }}>{children}</div>
         </body>
       </html>
     );
   }
+  // [MAINTENANCE] ★ END NEW BLOCK ★
 
   return (
     <html lang="en">

@@ -1,3 +1,8 @@
+/**
+ * ★★★ NEW FILE — MAINTENANCE MODE 2026-09-19 ★★★
+ * Path: frontend/src/app/not-found.tsx
+ */
+
 import Link from 'next/link';
 
 /**
