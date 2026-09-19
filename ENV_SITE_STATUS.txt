@@ -1,0 +1,6 @@
+# Add this to Vercel Environment Variables (and optionally .env.local):
+
+SITE_STATUS=ON
+
+# OFF = maintenance page
+# ON  = normal site
