@@ -1,10 +1,11 @@
 // patch 2026-06-16: removed ::schedule_status_enum casts — production enum is loan_schedules_status_enum
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { LoanSchedule } from './entities/schedule.entity';
 import { LoanAlert } from './entities/alert.entity';
 import { Loan, LoanStatus } from '../loans/entities/loan.entity';
+import { kampalaDateString } from '../../common/utils/kampala-time';
 
 @Injectable()
 export class SchedulesService {
@@ -17,22 +18,28 @@ export class SchedulesService {
   ) {}
 
   // ── Get schedule rows for one loan ────────────────────────────────────────
-  async getLoanSchedule(loanId: number) {
-    const today = new Date().toISOString().slice(0, 10);
+  async getLoanSchedule(loanId: number, tenantId?: number) {
+    const today = kampalaDateString();
 
     // Schedule rows — join most recent COMPLETED payment per schedule row
+    // Receipt/payment display:
+    // Multi-instalment payments write payment_allocations (not always payments.schedule_id).
+    // allocatePayment also stamps loan_schedules.receipt_number / payment_method / paid_date.
+    // Prefer schedule columns, then latest non-reversed allocation → payment.
     const rows = await this.scheduleRepo.manager.query(
       `SELECT ls.*,
-              p.receipt_number,
-              p.payment_method,
-              p.created_at AS paid_date
+              COALESCE(ls.receipt_number, p.receipt_number) AS receipt_number,
+              COALESCE(ls.payment_method, p.payment_method) AS payment_method,
+              COALESCE(ls.paid_date, p.created_at) AS paid_date
          FROM loan_schedules ls
          LEFT JOIN LATERAL (
-           SELECT receipt_number, payment_method, created_at
-             FROM payments
-            WHERE schedule_id = ls.id
-              AND status = 'COMPLETED'
-            ORDER BY created_at DESC
+           SELECT pay.receipt_number, pay.payment_method, pay.created_at
+             FROM payment_allocations pa
+             JOIN payments pay ON pay.id = pa.payment_id
+            WHERE pa.schedule_id = ls.id
+              AND pa.reversed_at IS NULL
+              AND pay.status = 'COMPLETED'
+            ORDER BY pa.id DESC
             LIMIT 1
          ) p ON true
         WHERE ls.loan_id = $1
@@ -50,6 +57,13 @@ export class SchedulesService {
       where: { id: loanId },
       relations: ['client', 'bike'],
     });
+
+    if (!loan) {
+      throw new NotFoundException(`Loan ${loanId} not found`);
+    }
+    if (tenantId != null && Number(loan.tenantId ?? (loan as any).tenant_id) !== Number(tenantId)) {
+      throw new ForbiddenException('Loan is outside your tenant scope');
+    }
 
     // ── Total paid: sum ALL completed payments for this loan (not just schedule-linked ones) ──
     const [payRow] = await this.scheduleRepo.manager.query(
@@ -275,7 +289,7 @@ export class SchedulesService {
     }));
   }
 
-  async getAlertSummary() {
+      async getAlertSummary() {
     const [row] = await this.alertRepo.manager.query(
       `SELECT
          COUNT(*)                                   AS total,
@@ -283,17 +297,17 @@ export class SchedulesService {
          COUNT(*) FILTER (WHERE alert_type = 'OVERDUE')   AS overdue,
          COUNT(*) FILTER (WHERE alert_type = 'DUE_TODAY') AS due_today,
          COUNT(*) FILTER (WHERE severity   = 'critical')  AS critical,
-         SUM(amount_due)                            AS total_at_risk
+         COALESCE(SUM(amount_due), 0)               AS total_at_risk
        FROM loan_alerts
        WHERE is_resolved = false`,
     );
     return {
-      total:       Number(row.total),
-      unread:      Number(row.unread),
-      overdue:     Number(row.overdue),
-      dueToday:    Number(row.due_today),
-      critical:    Number(row.critical),
-      totalAtRisk: Math.round(Number(row.total_at_risk || 0)),
+      total:       Number(row?.total || 0),
+      unread:      Number(row?.unread || 0),
+      overdue:     Number(row?.overdue || 0),
+      dueToday:    Number(row?.due_today || 0),
+      critical:    Number(row?.critical || 0),
+      totalAtRisk: Math.round(Number(row?.total_at_risk || 0)),
     };
   }
 

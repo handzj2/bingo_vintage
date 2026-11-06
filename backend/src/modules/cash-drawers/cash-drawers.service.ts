@@ -2,11 +2,12 @@ import {
   Injectable, NotFoundException, BadRequestException, ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository }       from 'typeorm';
+import { Repository, EntityManager }       from 'typeorm';
 import { CashDrawer }       from './entities/cash-drawer.entity';
 import { Payment }          from '../payments/entities/payment.entity';
 import { Expense }          from '../expenses/entities/expense.entity';
-import { getUserId, RequestUser } from '../../common/helpers/role-helper';
+import { getUserId, RequestUser, getEffectiveRole } from '../../common/helpers/role-helper';
+import { startOfKampalaDay } from '../../common/utils/kampala-time';
 
 /**
  * PHASE 7 — CashDrawerService
@@ -124,7 +125,7 @@ export class CashDrawerService {
   // Branch-shared: any cashier at the SAME branch as the drawer can close it
   // (not just whoever opened it — shifts rotate). closedById records who
   // actually closed it, since that may differ from userId (who opened it).
-  async close(drawerId: number, user: RequestUser, actualCash: number): Promise<CashDrawer> {
+  async close(drawerId: number, user: RequestUser, actualCash: number, opts?: { forceClose?: boolean; forceReason?: string }): Promise<CashDrawer> {
     if (!user.tenantId) throw new ForbiddenException('No tenant assigned');
 
     if (!user.branchId) {
@@ -145,6 +146,39 @@ export class CashDrawerService {
     if (drawer.branchId !== user.branchId) {
       throw new ForbiddenException('You can only close a drawer at your own branch');
     }
+
+    // ── Same-day close policy (Kampala) ─────────────────────────────────────
+    // Cashier must close on the drawer business day. After that day ends,
+    // only manager / admin / superadmin may force-close with a written reason.
+    const drawerDay = startOfKampalaDay(new Date(drawer.drawerDate));
+    const today = startOfKampalaDay(new Date());
+    const isLateClose = drawerDay.getTime() < today.getTime();
+    const role = getEffectiveRole(user).toLowerCase();
+    const canForce = ['manager', 'admin', 'superadmin', 'super_admin', 'md'].includes(role);
+
+    if (isLateClose) {
+      if (!opts?.forceClose) {
+        throw new BadRequestException(
+          'This drawer is past its business day (Kampala). ' +
+          'A manager or admin must force-close it with a reason.',
+        );
+      }
+      if (!canForce) {
+        throw new ForbiddenException(
+          'Only a manager or administrator can force-close a late drawer.',
+        );
+      }
+      const reason = (opts.forceReason || '').trim();
+      if (reason.length < 5) {
+        throw new BadRequestException(
+          'forceReason is required (min 5 characters) when force-closing a late drawer.',
+        );
+      }
+      // Stash reason on notes-like fields if present; difference already tracked
+      // Reason retained for API response / callers; no extra DB column required
+      (drawer as any)._forceCloseReason = reason;
+    }
+
 
     // FIX-CD03: sum collections linked to this drawer
     const payRow = await this.paymentRepo
@@ -191,12 +225,20 @@ export class CashDrawerService {
   // All balance changes must flow through deduct() or add().
   // Called by ExpensesService.approve() for cash expenses.
 
-  async deduct(drawerId: number, amount: number, description: string): Promise<void> {
-    await this.drawerRepo.decrement({ id: drawerId }, 'currentBalance', amount);
+  async deduct(drawerId: number, amount: number, description: string, manager?: EntityManager): Promise<void> {
+    if (manager) {
+      await manager.decrement(CashDrawer, { id: drawerId }, 'currentBalance', amount);
+    } else {
+      await this.drawerRepo.decrement({ id: drawerId }, 'currentBalance', amount);
+    }
   }
 
-  async add(drawerId: number, amount: number, description: string): Promise<void> {
-    await this.drawerRepo.increment({ id: drawerId }, 'currentBalance', amount);
+  async add(drawerId: number, amount: number, description: string, manager?: EntityManager): Promise<void> {
+    if (manager) {
+      await manager.increment(CashDrawer, { id: drawerId }, 'currentBalance', amount);
+    } else {
+      await this.drawerRepo.increment({ id: drawerId }, 'currentBalance', amount);
+    }
   }
 
   async getSummary(drawerId: number, tenantId: number) {

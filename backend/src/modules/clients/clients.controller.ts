@@ -283,6 +283,31 @@ export class ClientFormModelDto {
   @ApiProperty({ required: false })
   @IsOptional() @IsString()
   reference2_phone?: string;
+
+  // Flat fields sent by ClientForm (also supported as nested kin/business)
+  @ApiProperty({ required: false })
+  @IsOptional() @IsString()
+  next_of_kin_name?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional() @IsString()
+  next_of_kin_phone?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional() @IsString()
+  next_of_kin_relationship?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional() @IsString()
+  business_name?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional() @IsString()
+  business_type?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional() @IsString()
+  business_address?: string;
 }
 
 // Original DTO (kept for backward compatibility)
@@ -473,25 +498,26 @@ export class ClientsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get a specific client by ID' })
   @ApiParam({ name: 'id', type: Number, description: 'Client ID' })
-  async findOne(@Param('id', ParseIntPipe) id: number) {
-    return await this.clientsService.getRiderById(id);
+  async findOne(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
+    // Phase 3: tenant-scoped — a user cannot fetch another tenant's client by guessing the ID
+    return await this.clientsService.getRiderById(id, req.user?.tenantId);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a client by ID' })
   @ApiParam({ name: 'id', type: Number, description: 'Client ID' })
-  async update(@Param('id', ParseIntPipe) id: number, @Body() updateData: any) {
+  async update(@Param('id', ParseIntPipe) id: number, @Body() updateData: any, @Request() req: AuthRequest) {
     // transformFormClientData handles first_name/last_name snake_case
     // prevents null constraint errors same root cause as POST / bug
     const transformedData = this.transformFormClientData(updateData);
-    return await this.clientsService.update(id, transformedData);
+    return await this.clientsService.update(id, transformedData, req.user?.tenantId);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a client by ID' })
   @ApiParam({ name: 'id', type: Number, description: 'Client ID' })
-  async remove(@Param('id', ParseIntPipe) id: number) {
-    return await this.clientsService.delete(id);
+  async remove(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
+    return await this.clientsService.delete(id, req.user?.tenantId);
   }
 
   /**
@@ -548,7 +574,7 @@ export class ClientsController {
   /**
    * New transformation method for ClientFormModel structure
    */
-  private transformFormClientData(data: any): any {
+  private transformFormClientData(data: Partial<ClientFormModelDto>): any {
     const result: any = { ...data };
 
     // Handle name fields
@@ -620,14 +646,15 @@ export class ClientsController {
     // Flat next-of-kin fields from ClientForm (next_of_kin_name etc.)
     // These are distinct from the nested data.kin object path handled above —
     // ClientForm sends flat snake_case, so both paths must be covered.
-    if (data.next_of_kin_name)         result.nextOfKinName         = data.next_of_kin_name;
-    if (data.next_of_kin_phone)        result.nextOfKinPhone        = data.next_of_kin_phone;
-    if (data.next_of_kin_relationship) result.nextOfKinRelationship = data.next_of_kin_relationship;
+    // Use !== undefined so an explicit empty value can clear the field on PATCH.
+    if (data.next_of_kin_name !== undefined)         result.nextOfKinName         = data.next_of_kin_name;
+    if (data.next_of_kin_phone !== undefined)        result.nextOfKinPhone        = data.next_of_kin_phone;
+    if (data.next_of_kin_relationship !== undefined) result.nextOfKinRelationship = data.next_of_kin_relationship;
 
     // Flat business fields from ClientForm
-    if (data.business_name)    result.businessName    = data.business_name;
-    if (data.business_type)    result.businessType    = data.business_type;
-    if (data.business_address) result.businessAddress = data.business_address;
+    if (data.business_name !== undefined)    result.businessName    = data.business_name;
+    if (data.business_type !== undefined)    result.businessType    = data.business_type;
+    if (data.business_address !== undefined) result.businessAddress = data.business_address;
 
     if (data.reference1_name)  result.reference1Name  = data.reference1_name;
     if (data.reference1_phone) result.reference1Phone = data.reference1_phone;

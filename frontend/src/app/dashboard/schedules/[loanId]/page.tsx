@@ -21,9 +21,9 @@ const fmtDShort = (d: any) => d ? new Date(d).toLocaleDateString('en-UG', { day:
 const STATUS: Record<string, { label: string; cls: string; dot: string; row: string; icon: any }> = {
   PAID:      { label: 'Paid',     cls: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500', row: 'bg-emerald-50/40', icon: CheckCircle2 },
   PARTIAL:   { label: 'Partial',  cls: 'bg-amber-100 text-amber-700',    dot: 'bg-amber-400',   row: 'bg-amber-50/40',   icon: MinusCircle  },
-  OVERDUE:   { label: 'Overdue',  cls: 'bg-red-100 text-red-700',        dot: 'bg-red-500',     row: 'bg-red-50/30',     icon: AlertTriangle },
-  PENDING:   { label: 'Upcoming', cls: 'bg-gray-100 text-gray-500',      dot: 'bg-gray-300',    row: '',                 icon: Clock        },
-  CANCELLED: { label: 'Cancelled',cls: 'bg-gray-100 text-gray-400',      dot: 'bg-gray-200',    row: 'opacity-50',       icon: XCircle      },
+  OVERDUE:   { label: 'Overdue',  cls: 'bg-bv-danger-bg text-bv-danger',        dot: 'bg-bv-danger-bg0',     row: 'bg-bv-danger-bg/30',     icon: AlertTriangle },
+  PENDING:   { label: 'Upcoming', cls: 'bg-bv-hover text-bv-meta',      dot: 'bg-gray-300',    row: '',                 icon: Clock        },
+  CANCELLED: { label: 'Cancelled',cls: 'bg-bv-hover text-bv-meta',      dot: 'bg-bv-border',    row: 'opacity-50',       icon: XCircle      },
   WAIVED:    { label: 'Waived',   cls: 'bg-purple-100 text-purple-700',  dot: 'bg-purple-400',  row: 'bg-purple-50/30',  icon: BadgeCheck   },
 };
 
@@ -44,7 +44,7 @@ function RowProgress({ paid, due }: { paid: number; due: number }) {
   if (!due) return null;
   const pct = Math.min(100, Math.round((paid / due) * 100));
   return (
-    <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+    <div className="w-16 h-1.5 bg-bv-hover rounded-full overflow-hidden">
       <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
     </div>
   );
@@ -72,18 +72,18 @@ export default function SchedulePage() {
   useEffect(() => { load(); }, [load]);
 
   if (loading) return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
+    <div className="flex items-center justify-center min-h-screen bg-bv-hover">
       <div className="text-center">
         <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-3" />
-        <p className="text-sm text-gray-400">Loading schedule...</p>
+        <p className="text-sm text-bv-meta">Loading schedule...</p>
       </div>
     </div>
   );
 
   if (err || !data) return (
-    <div className="flex flex-col items-center justify-center min-h-screen gap-4 bg-gray-50 p-8">
+    <div className="flex flex-col items-center justify-center min-h-screen gap-4 bg-bv-hover p-8">
       <AlertTriangle className="w-12 h-12 text-red-300" />
-      <p className="text-gray-600 font-bold">{err || 'Schedule not found'}</p>
+      <p className="text-bv-muted font-bold">{err || 'Schedule not found'}</p>
       <button onClick={load} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold">Retry</button>
     </div>
   );
@@ -149,12 +149,12 @@ export default function SchedulePage() {
   ] as [string, string][];
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-bv-hover">
       {/* Sticky header */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+      <div className="bg-bv-surface border-b border-bv-border sticky top-0 z-20 shadow-sm">
+        <div className="max-w-bv mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => router.back()} className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition-colors">
+            <button onClick={() => router.back()} className="p-2 rounded-xl hover:bg-bv-hover text-bv-meta transition-colors">
               <ChevronLeft className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-2.5">
@@ -163,17 +163,17 @@ export default function SchedulePage() {
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h1 className="text-base font-black text-gray-900">{loan.clientName || 'Client'}</h1>
+                  <h1 className="text-base font-black text-bv-text">{loan.clientName || 'Client'}</h1>
                   {loan.bikePlate && (
                     <span className="px-2 py-0.5 bg-orange-50 text-orange-700 rounded-lg text-xs font-black border border-orange-100">{loan.bikePlate}</span>
                   )}
                   {loan.clientPhone && (
-                    <a href={`tel:${loan.clientPhone}`} className="flex items-center gap-1 text-xs text-blue-600 font-semibold hover:underline">
+                    <a href={`tel:${loan.clientPhone}`} className="flex items-center gap-1 text-xs text-bv-accent font-semibold hover:underline">
                       <Phone className="w-3 h-3" />{loan.clientPhone}
                     </a>
                   )}
                 </div>
-                <p className="text-xs text-gray-400">{loan.loanNumber} · {isWeekly ? 'Weekly' : 'Monthly'} Schedule</p>
+                <p className="text-xs text-bv-meta">{loan.loanNumber} · {isWeekly ? 'Weekly' : 'Monthly'} Schedule</p>
               </div>
             </div>
           </div>
@@ -186,43 +186,43 @@ export default function SchedulePage() {
                 <CreditCard className="w-4 h-4" /> Record Payment
               </button>
             ) : null}
-            <button onClick={load} className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-semibold text-gray-600 transition-colors">
+            <button onClick={load} className="flex items-center gap-2 px-3 py-2 bg-bv-hover hover:bg-bv-border rounded-xl text-sm font-semibold text-bv-muted transition-colors">
               <RefreshCw className="w-4 h-4" /> Refresh
             </button>
           </div>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+      <div className="max-w-bv mx-auto px-4 sm:px-6 py-6 space-y-5">
 
         {/* KPI Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Total Loan',    value: fmt(totalDue || loan.totalAmount),  icon: DollarSign,    color: 'bg-blue-500',    sub: `${rows.length} instalments` },
+            { label: 'Total Loan',    value: fmt(totalDue || loan.totalAmount),  icon: DollarSign,    color: 'bg-bv-info-bg0',    sub: `${rows.length} instalments` },
             { label: 'Total Paid',    value: fmt(totalPaid),                     icon: CheckCircle2,  color: 'bg-emerald-500', sub: `${paidCount} paid` },
             { label: 'Outstanding',   value: fmt(outstanding),                   icon: TrendingUp,    color: 'bg-violet-500',  sub: `Loan balance` },
-            { label: 'Overdue',       value: fmt(totalOverdue),                  icon: AlertTriangle, color: overdueCount > 0 ? 'bg-red-500' : 'bg-gray-300', sub: `${overdueCount} overdue` },
+            { label: 'Overdue',       value: fmt(totalOverdue),                  icon: AlertTriangle, color: overdueCount > 0 ? 'bg-bv-danger-bg0' : 'bg-gray-300', sub: `${overdueCount} overdue` },
           ].map(c => (
-            <div key={c.label} className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+            <div key={c.label} className="bg-bv-surface rounded-2xl border border-bv-border p-4 shadow-sm">
               <div className={`w-9 h-9 ${c.color} rounded-xl flex items-center justify-center mb-3`}>
                 <c.icon className="w-4 h-4 text-white" />
               </div>
-              <p className="text-xl font-black text-gray-900 leading-tight">{c.value}</p>
-              <p className="text-xs font-bold text-gray-400 mt-0.5">{c.label}</p>
-              <p className="text-xs text-gray-400">{c.sub}</p>
+              <p className="text-xl font-black text-bv-text leading-tight">{c.value}</p>
+              <p className="text-xs font-bold text-bv-meta mt-0.5">{c.label}</p>
+              <p className="text-xs text-bv-meta">{c.sub}</p>
             </div>
           ))}
         </div>
 
         {/* Progress card */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+        <div className="bg-bv-surface rounded-2xl border border-bv-border p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-blue-500" />
-              <h2 className="font-black text-gray-900">Repayment Progress</h2>
+              <h2 className="font-black text-bv-text">Repayment Progress</h2>
             </div>
             {nextDue && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-100 rounded-xl text-sm font-bold text-blue-700">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-bv-info-bg border border-blue-100 rounded-xl text-sm font-bold text-bv-accent">
                 <Calendar className="w-4 h-4" />
                 Next: {fmtD(nextDue.dueDate)} · {fmt(nextDue.remainingAmount)}
               </div>
@@ -230,10 +230,10 @@ export default function SchedulePage() {
           </div>
 
           <div className="flex justify-between text-sm mb-2">
-            <span className="text-gray-500 font-medium">{paidCount} of {rows.length} paid</span>
-            <span className="font-black text-gray-900">{progressPct}%</span>
+            <span className="text-bv-meta font-medium">{paidCount} of {rows.length} paid</span>
+            <span className="font-black text-bv-text">{progressPct}%</span>
           </div>
-          <div className="h-4 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-4 bg-bv-hover rounded-full overflow-hidden">
             <div className="h-full rounded-full transition-all duration-700 relative"
               style={{
                 width: `${progressPct}%`,
@@ -248,9 +248,9 @@ export default function SchedulePage() {
           <div className="flex flex-wrap gap-2 mt-3">
             {[
               { label: `${paidCount} Paid`,          cls: 'bg-emerald-100 text-emerald-700' },
-              { label: `${partialCount} Partial`,    cls: partialCount > 0 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-400' },
-              { label: `${overdueCount} Overdue`,    cls: overdueCount > 0 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-400' },
-              { label: `${pendingCount} Upcoming`,   cls: 'bg-gray-100 text-gray-500' },
+              { label: `${partialCount} Partial`,    cls: partialCount > 0 ? 'bg-amber-100 text-amber-700' : 'bg-bv-hover text-bv-meta' },
+              { label: `${overdueCount} Overdue`,    cls: overdueCount > 0 ? 'bg-bv-danger-bg text-bv-danger' : 'bg-bv-hover text-bv-meta' },
+              { label: `${pendingCount} Upcoming`,   cls: 'bg-bv-hover text-bv-meta' },
             ].map(p => (
               <span key={p.label} className={`px-3 py-1 rounded-full text-xs font-bold ${p.cls}`}>{p.label}</span>
             ))}
@@ -262,11 +262,11 @@ export default function SchedulePage() {
 
         {/* Overdue alert */}
         {overdueCount > 0 && (
-          <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div className="bg-bv-danger-bg border border-bv-danger/30 rounded-2xl p-4 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-bv-danger flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-black text-red-800">{overdueCount} overdue instalment{overdueCount !== 1 ? 's' : ''}</p>
-              <p className="text-sm text-red-600 mt-0.5">
+              <p className="font-black text-bv-danger">{overdueCount} overdue instalment{overdueCount !== 1 ? 's' : ''}</p>
+              <p className="text-sm text-bv-danger mt-0.5">
                 Total overdue: <strong>{fmt(totalOverdue)}</strong>
                 {totalFines > 0 && <> · Fines: <strong>{fmt(totalFines)}</strong></>}
               </p>
@@ -275,19 +275,19 @@ export default function SchedulePage() {
         )}
 
         {/* Instalments table */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="bg-bv-surface rounded-2xl border border-bv-border shadow-sm overflow-hidden">
           {/* Toolbar */}
-          <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row gap-3">
+          <div className="p-4 border-b border-bv-border flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1 max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-bv-meta" />
               <input value={search} onChange={e => setSearch(e.target.value)}
                 placeholder="Search # or receipt..."
-                className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="w-full pl-9 pr-4 py-2 bg-bv-hover border border-bv-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-bv-action" />
             </div>
             <div className="flex gap-1.5 flex-wrap">
               {FILTERS.map(([f, label]) => (
                 <button key={f} onClick={() => setFilter(f)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${filter === f ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${filter === f ? 'bg-blue-600 text-white shadow-sm' : 'bg-bv-hover text-bv-muted hover:bg-bv-border'}`}>
                   {label}
                 </button>
               ))}
@@ -297,18 +297,18 @@ export default function SchedulePage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="px-4 py-3 text-left text-xs font-black text-gray-400 uppercase tracking-wide w-10">#</th>
-                  <th className="px-4 py-3 text-left text-xs font-black text-gray-400 uppercase tracking-wide">Due Date</th>
-                  <th className="px-4 py-3 text-right text-xs font-black text-gray-400 uppercase tracking-wide">Amount Due</th>
-                  <th className="px-4 py-3 text-right text-xs font-black text-gray-400 uppercase tracking-wide">Paid</th>
-                  <th className="px-4 py-3 text-right text-xs font-black text-gray-400 uppercase tracking-wide">Remaining</th>
-                  <th className="px-4 py-3 text-left  text-xs font-black text-gray-400 uppercase tracking-wide">Progress</th>
-                  <th className="px-4 py-3 text-right text-xs font-black text-gray-400 uppercase tracking-wide">Fine</th>
-                  <th className="px-4 py-3 text-left  text-xs font-black text-gray-400 uppercase tracking-wide">Status</th>
-                  <th className="px-4 py-3 text-left  text-xs font-black text-gray-400 uppercase tracking-wide">Paid On</th>
-                  <th className="px-4 py-3 text-left  text-xs font-black text-gray-400 uppercase tracking-wide">Receipt</th>
-                  <th className="px-4 py-3 text-left  text-xs font-black text-gray-400 uppercase tracking-wide">Method</th>
+                <tr className="bg-bv-hover border-b border-bv-border">
+                  <th className="px-4 py-3 text-left text-xs font-black text-bv-meta uppercase tracking-wide w-10">#</th>
+                  <th className="px-4 py-3 text-left text-xs font-black text-bv-meta uppercase tracking-wide">Due Date</th>
+                  <th className="px-4 py-3 text-right text-xs font-black text-bv-meta uppercase tracking-wide">Amount Due</th>
+                  <th className="px-4 py-3 text-right text-xs font-black text-bv-meta uppercase tracking-wide">Paid</th>
+                  <th className="px-4 py-3 text-right text-xs font-black text-bv-meta uppercase tracking-wide">Remaining</th>
+                  <th className="px-4 py-3 text-left  text-xs font-black text-bv-meta uppercase tracking-wide">Progress</th>
+                  <th className="px-4 py-3 text-right text-xs font-black text-bv-meta uppercase tracking-wide">Fine</th>
+                  <th className="px-4 py-3 text-left  text-xs font-black text-bv-meta uppercase tracking-wide">Status</th>
+                  <th className="px-4 py-3 text-left  text-xs font-black text-bv-meta uppercase tracking-wide">Paid On</th>
+                  <th className="px-4 py-3 text-left  text-xs font-black text-bv-meta uppercase tracking-wide">Receipt</th>
+                  <th className="px-4 py-3 text-left  text-xs font-black text-bv-meta uppercase tracking-wide">Method</th>
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
@@ -317,7 +317,7 @@ export default function SchedulePage() {
                   <tr>
                     <td colSpan={11} className="px-4 py-16 text-center">
                       <Search className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-                      <p className="text-gray-400 font-semibold">No records match</p>
+                      <p className="text-bv-meta font-semibold">No records match</p>
                     </td>
                   </tr>
                 ) : filtered.map((s: any) => {
@@ -329,17 +329,17 @@ export default function SchedulePage() {
 
                   return (
                     <tr key={s.id}
-                      className={`transition-colors hover:bg-gray-50 ${cfg.row} ${isToday ? 'border-l-4 border-l-blue-500' : ''}`}>
+                      className={`transition-colors hover:bg-bv-hover ${cfg.row} ${isToday ? 'border-l-4 border-l-blue-500' : ''}`}>
                       {/* # */}
                       <td className="px-4 py-3">
-                        <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black ${isPaid ? 'bg-emerald-100 text-emerald-700' : isOverdue ? 'bg-red-100 text-red-700' : isPartial ? 'bg-amber-100 text-amber-700' : isToday ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+                        <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black ${isPaid ? 'bg-emerald-100 text-emerald-700' : isOverdue ? 'bg-bv-danger-bg text-bv-danger' : isPartial ? 'bg-amber-100 text-amber-700' : isToday ? 'bg-bv-info-bg text-bv-accent' : 'bg-bv-hover text-bv-meta'}`}>
                           {s.installmentNumber || '—'}
                         </span>
                       </td>
                       {/* Due date */}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <span className={`font-semibold ${isToday ? 'text-blue-700' : isOverdue ? 'text-red-700' : 'text-gray-900'}`}>
+                          <span className={`font-semibold ${isToday ? 'text-bv-accent' : isOverdue ? 'text-bv-danger' : 'text-bv-text'}`}>
                             {fmtDShort(s.dueDate)}
                           </span>
                           {isToday && <span className="px-1.5 py-0.5 bg-blue-600 text-white rounded text-xs font-black animate-pulse">TODAY</span>}
@@ -347,21 +347,21 @@ export default function SchedulePage() {
                       </td>
                       {/* Amount due */}
                       <td className="px-4 py-3 text-right">
-                        <span className="font-black text-gray-900">{s.amountDue > 0 ? fmt(s.amountDue) : <span className="text-gray-300">—</span>}</span>
+                        <span className="font-black text-bv-text">{s.amountDue > 0 ? fmt(s.amountDue) : <span className="text-bv-meta">—</span>}</span>
                       </td>
                       {/* Paid */}
                       <td className="px-4 py-3 text-right">
                         {s.amountPaid > 0
                           ? <span className="font-black text-emerald-700">{fmt(s.amountPaid)}</span>
-                          : <span className="text-gray-300">—</span>}
+                          : <span className="text-bv-meta">—</span>}
                       </td>
                       {/* Remaining */}
                       <td className="px-4 py-3 text-right">
                         {isPaid
                           ? <span className="text-emerald-500 font-black">✓</span>
                           : s.remainingAmount > 0
-                            ? <span className={`font-black ${isOverdue ? 'text-red-600' : isPartial ? 'text-amber-600' : 'text-gray-500'}`}>{fmt(s.remainingAmount)}</span>
-                            : <span className="text-gray-300">—</span>}
+                            ? <span className={`font-black ${isOverdue ? 'text-bv-danger' : isPartial ? 'text-amber-600' : 'text-bv-meta'}`}>{fmt(s.remainingAmount)}</span>
+                            : <span className="text-bv-meta">—</span>}
                       </td>
                       {/* Mini progress */}
                       <td className="px-4 py-3">
@@ -371,20 +371,20 @@ export default function SchedulePage() {
                       <td className="px-4 py-3 text-right">
                         {s.lateFeeAmount > 0
                           ? <span className="font-bold text-orange-600 text-xs">{fmt(s.lateFeeAmount)}</span>
-                          : <span className="text-gray-300">—</span>}
+                          : <span className="text-bv-meta">—</span>}
                       </td>
                       {/* Status */}
                       <td className="px-4 py-3"><Badge status={s.status} days={s.overdueDays} /></td>
                       {/* Paid on */}
-                      <td className="px-4 py-3 text-xs text-gray-500 font-medium whitespace-nowrap">{fmtD(s.paidDate)}</td>
+                      <td className="px-4 py-3 text-xs text-bv-meta font-medium whitespace-nowrap">{fmtD(s.paidDate)}</td>
                       {/* Receipt */}
                       <td className="px-4 py-3">
                         {s.receiptNumber
-                          ? <span className="font-mono text-xs font-bold bg-gray-100 text-gray-700 px-2 py-0.5 rounded">{s.receiptNumber}</span>
-                          : <span className="text-gray-300">—</span>}
+                          ? <span className="font-mono text-xs font-bold bg-bv-hover text-bv-muted px-2 py-0.5 rounded">{s.receiptNumber}</span>
+                          : <span className="text-bv-meta">—</span>}
                       </td>
                       {/* Method */}
-                      <td className="px-4 py-3 text-xs text-gray-500">{s.paymentMethod || '—'}</td>
+                      <td className="px-4 py-3 text-xs text-bv-meta">{s.paymentMethod || '—'}</td>
                       {/* Quick pay */}
                       <td className="px-4 py-3">
                         {(s.status === 'PENDING' || s.status === 'OVERDUE' || s.status === 'PARTIAL') && (
@@ -404,11 +404,11 @@ export default function SchedulePage() {
               {/* Footer totals */}
               {filtered.length > 0 && (
                 <tfoot>
-                  <tr className="border-t-2 border-gray-200 bg-gray-50 font-black text-xs">
-                    <td colSpan={2} className="px-4 py-3 text-gray-500 uppercase tracking-wide">Totals ({filtered.length})</td>
-                    <td className="px-4 py-3 text-right text-gray-900">{fmt(filtered.reduce((n: number, s: any) => n + s.amountDue, 0))}</td>
+                  <tr className="border-t-2 border-bv-border bg-bv-hover font-black text-xs">
+                    <td colSpan={2} className="px-4 py-3 text-bv-meta uppercase tracking-wide">Totals ({filtered.length})</td>
+                    <td className="px-4 py-3 text-right text-bv-text">{fmt(filtered.reduce((n: number, s: any) => n + s.amountDue, 0))}</td>
                     <td className="px-4 py-3 text-right text-emerald-700">{fmt(filtered.reduce((n: number, s: any) => n + s.amountPaid, 0))}</td>
-                    <td className="px-4 py-3 text-right text-gray-600">{fmt(filtered.reduce((n: number, s: any) => n + s.remainingAmount, 0))}</td>
+                    <td className="px-4 py-3 text-right text-bv-muted">{fmt(filtered.reduce((n: number, s: any) => n + s.remainingAmount, 0))}</td>
                     <td colSpan={7} />
                   </tr>
                 </tfoot>
@@ -416,7 +416,7 @@ export default function SchedulePage() {
             </table>
           </div>
 
-          <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
+          <div className="px-4 py-3 bg-bv-hover border-t border-bv-border flex items-center justify-between text-xs text-bv-meta">
             <span>Showing {filtered.length} of {rows.length} instalments</span>
             <span>{isWeekly ? '📅 Weekly' : '📆 Monthly'} · {loan.loanNumber}</span>
           </div>

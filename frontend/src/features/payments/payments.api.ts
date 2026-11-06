@@ -35,3 +35,9 @@ export const createPayment = async (payload: CreatePaymentPayload) => {
   if (!result.success) throw new Error(result.message || "Failed to record payment");
   return result.data;
 };
+
+export const previewAllocation = async (loanId: number, amount: number) => {
+  const result = await api.get<any>(`/payments/preview-allocation?loanId=${loanId}&amount=${amount}`);
+  if (result.success) return result.data;
+  throw new Error(result.message || "Failed to preview allocation");
+};

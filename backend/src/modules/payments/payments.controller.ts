@@ -12,14 +12,16 @@ import {
   UseGuards, 
   Request,
   ForbiddenException,
+  BadRequestException,
   Query,
   SetMetadata,
   ParseIntPipe,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard'; // 👈 Import RolesGuard
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { PaymentsService } from './payments.service';
+import { AuditService } from '../audit/audit.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ReversePaymentDto } from './dto/reverse-payment.dto';
 
@@ -28,19 +30,22 @@ import { ReversePaymentDto } from './dto/reverse-payment.dto';
 @Controller('payments')
 @UseGuards(JwtAuthGuard)
 export class PaymentsController {
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(
+    private readonly paymentsService: PaymentsService,
+    private readonly auditService: AuditService,
+  ) {}
 
   @Post()
-  @Throttle({ default: { ttl: 60_000, limit: 10 } })  // 10 payment submissions/min per IP
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   @ApiOperation({ summary: 'Create a new payment' })
-  create(@Body() createPaymentDto: CreatePaymentDto, @Request() req: AuthRequest) {
-    // ✅ POLICY: Only cashier, manager, admin can record payments — not agents
+  async create(@Body() createPaymentDto: CreatePaymentDto, @Request() req: AuthRequest) {
+    // Only cashier, manager, admin can record payments — not agents
     const role = getEffectiveRole(req?.user);
     if (role === 'agent') {
       throw new ForbiddenException('Policy [2026-01-10]: Agents are not authorised to record payments');
     }
 
-    // PHASE 4.1: branch assignment required only for branch-scoped roles
+    // Branch assignment required only for branch-scoped roles
     // Admin and manager operate tenant-wide and may have branchId = null
     const BRANCH_SCOPED_ROLES = ['cashier', 'teller', 'credit_officer', 'branch_manager'];
     if (BRANCH_SCOPED_ROLES.includes(role) && !req?.user?.branchId) {
@@ -49,18 +54,29 @@ export class PaymentsController {
       );
     }
 
-    // ✅ POLICY: Backdated payments (payment_date on a calendar day before
-    // today) may only be entered by an admin. A cashier/teller/manager
-    // recording a same-day or future-dated payment is unaffected — this
-    // only blocks setting the date into the past.
-    if (createPaymentDto.payment_date && role !== 'admin' && role !== 'superadmin') {
+    // Backdated payments only by admin/superadmin, with required reason + audit
+    let isBackdated = false;
+    let paymentDate = new Date();
+    if (createPaymentDto.payment_date) {
       const requested = new Date(createPaymentDto.payment_date);
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-      if (!isNaN(requested.getTime()) && requested < todayStart) {
-        throw new ForbiddenException(
-          'Policy: backdated payments can only be entered by an administrator. ' +
-          'Record this payment with today\'s date, or ask an admin to enter it.',
-        );
+      if (!isNaN(requested.getTime())) {
+        paymentDate = requested;
+        if (requested < todayStart) {
+          isBackdated = true;
+          if (role !== 'admin' && role !== 'superadmin') {
+            throw new ForbiddenException(
+              'Policy: backdated payments can only be entered by an administrator. ' +
+              "Record this payment with today's date, or ask an admin to enter it.",
+            );
+          }
+          const reason = (createPaymentDto.backdate_reason || '').trim();
+          if (reason.length < 5) {
+            throw new BadRequestException(
+              'backdate_reason is required (min 5 characters) when posting a backdated payment.',
+            );
+          }
+        }
       }
     }
 
@@ -69,15 +85,39 @@ export class PaymentsController {
       amount:        createPaymentDto.amount,
       paymentMethod: createPaymentDto.payment_method,
       receiptNumber: createPaymentDto.receipt_number,
-      paymentDate:   createPaymentDto.payment_date ? new Date(createPaymentDto.payment_date) : new Date(),
+      paymentDate,
       transactionId: createPaymentDto.transaction_id,
-      notes:         createPaymentDto.notes,
+      notes:         isBackdated
+        ? `[BACKDATE] ${createPaymentDto.backdate_reason}${createPaymentDto.notes ? ' | ' + createPaymentDto.notes : ''}`
+        : createPaymentDto.notes,
       collectedBy:   createPaymentDto.collected_by,
       scheduleId:    createPaymentDto.schedule_id,
       cashDrawerId:  (createPaymentDto as any).cash_drawer_id,
+      idempotencyKey: createPaymentDto.idempotency_key,
       tenantId:      req?.user?.tenantId,
     };
-    return this.paymentsService.create(serviceDto, (req as any).requestId);
+
+    const result = await this.paymentsService.create(serviceDto, (req as any).requestId);
+
+    if (isBackdated && this.auditService) {
+      try {
+        await this.auditService.logAction({
+          action: 'PAYMENT_BACKDATE',
+          tableName: 'payments',
+          recordId: (result as any)?.payment?.id || (result as any)?.id,
+          user: req.user?.username || req.user?.email || String(req.user?.id),
+          description: `Backdated payment to ${createPaymentDto.payment_date}`,
+          tenantId: req.user?.tenantId,
+          metadata: {
+            backdate_reason: createPaymentDto.backdate_reason,
+            loan_id: createPaymentDto.loan_id,
+            amount: createPaymentDto.amount,
+          },
+        });
+      } catch (_) { /* non-fatal */ }
+    }
+
+    return result;
   }
 
   @Get()
@@ -128,53 +168,16 @@ export class PaymentsController {
     return this.paymentsService.findByDateRange(new Date(start), new Date(end), req?.user?.tenantId);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get payment by ID' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.paymentsService.findOne(id);
-  }
-
-  // ⚡ FINAL STEP: Enhanced Admin-Only Reversal Endpoint with Dual Security [cite: 2026-01-10]
-  @Post(':id/reverse')
-  @UseGuards(JwtAuthGuard, RolesGuard) // 👈 Double guard for maximum security
-  @SetMetadata('roles', ['admin']) // 👈 Metadata for RolesGuard to check admin role
-  @ApiOperation({ 
-    summary: 'Reverse a payment (Admin Only)',
-    description: 'Policy [2026-01-10]: Only administrators can reverse transactions. This creates a complete audit trail and restores loan balance.' 
-  })
-  async reversePayment(
-    @Param('id') id: number, 
-    @Body('reason') reason: string, 
-    @Request() req: AuthRequest
+  @Get('preview-allocation')
+  @ApiOperation({ summary: 'Dry-run chronological payment allocation (no writes)' })
+  previewAllocation(
+    @Query('loanId', ParseIntPipe) loanId: number,
+    @Query('amount') amount: string,
   ) {
-    // The RolesGuard already validates admin role, but we keep user extraction
-    const adminUser = req.user;
-    
-    return await this.paymentsService.reversePayment(id, adminUser, reason);
+    return this.paymentsService.previewAllocation(loanId, Number(amount));
   }
 
-  // ⚡ ALTERNATIVE: Original reversal endpoint (kept for backward compatibility)
-  @Patch(':id/reverse')
-  @ApiOperation({ summary: 'Reverse payment (Legacy endpoint)' })
-  async legacyReversePayment(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() reverseDto: ReversePaymentDto,
-    @Request() req: AuthRequest,
-  ) {
-    const adminName = req.user?.username || req.user?.email || 'System Administrator';
-    assertAdmin(req.user, 'Policy [2026-01-10]: Only administrators can reverse payments');
-    
-    return this.paymentsService.reversePayment(
-      id, 
-      req.user, // Pass user object instead of just name
-      reverseDto.reversal_reason
-    );
-  }
-
-
-  // ── REVERSAL REQUEST WORKFLOW ─────────────────────────────
-
-  // GET pending requests (admin view)
+  // Static path must be declared before :id param routes
   @Get('reversal-requests')
   @ApiOperation({ summary: 'Get all pending reversal requests (Admin only)' })
   async getPendingReversalRequests(@Request() req: AuthRequest) {
@@ -183,7 +186,41 @@ export class PaymentsController {
     return this.paymentsService.getPendingReversalRequests(user?.tenantId);
   }
 
-  // Cashier submits a reversal request
+  @Post(':id/reverse')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @SetMetadata('roles', ['admin'])
+  @ApiOperation({
+    summary: 'Reverse a payment (Admin Only)',
+    description:
+      'Policy [2026-01-10]: Only administrators can reverse transactions. This creates a complete audit trail and restores loan balance.',
+  })
+  async reversePayment(
+    @Param('id') id: number,
+    @Body('reason') reason: string,
+    @Request() req: AuthRequest,
+  ) {
+    return await this.paymentsService.reversePayment(id, req.user, reason);
+  }
+
+  // Legacy reversal endpoint (kept for backward compatibility)
+  @Patch(':id/reverse')
+  @ApiOperation({ summary: 'Reverse payment (Legacy endpoint)' })
+  async legacyReversePayment(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() reverseDto: ReversePaymentDto,
+    @Request() req: AuthRequest,
+  ) {
+    assertAdmin(req.user, 'Policy [2026-01-10]: Only administrators can reverse payments');
+    return this.paymentsService.reversePayment(id, req.user, reverseDto.reversal_reason);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get payment by ID' })
+  findOne(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
+    // Tenant-scoped — cannot fetch another tenant's payment by ID
+    return this.paymentsService.findOne(id, req?.user?.tenantId);
+  }
+
   @Post(':id/request-reversal')
   @ApiOperation({ summary: 'Request a reversal (cashier submits, admin approves)' })
   async requestReversal(
@@ -196,14 +233,13 @@ export class PaymentsController {
     return this.paymentsService.requestReversal(id, requestedBy, reason);
   }
 
-  // Admin approves a reversal request
   @Post(':id/approve-reversal')
   @ApiOperation({ summary: 'Approve a reversal request (Admin only)' })
   async approveReversal(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
+    assertAdmin(req.user, 'Policy [2026-01-10]: Only administrators can approve payment reversals');
     return this.paymentsService.approveReversalRequest(id, req.user);
   }
 
-  // Admin rejects a reversal request
   @Post(':id/reject-reversal')
   @ApiOperation({ summary: 'Reject a reversal request (Admin only)' })
   async rejectReversal(
@@ -211,15 +247,18 @@ export class PaymentsController {
     @Body('reason') reason: string,
     @Request() req: AuthRequest,
   ) {
+    assertAdmin(req.user, 'Policy [2026-01-10]: Only administrators can reject payment reversals');
     return this.paymentsService.rejectReversalRequest(id, req.user, reason);
   }
 
   @Delete(':id')
-  @ApiOperation({ 
-    summary: 'Delete payment (Not Allowed)', 
-    description: 'Payments should not be deleted. Use reversal instead for audit trail compliance.' 
+  @ApiOperation({
+    summary: 'Delete payment (Not Allowed)',
+    description: 'Payments should not be deleted. Use reversal instead for audit trail compliance.',
   })
   remove(@Param('id') id: string) {
-    throw new ForbiddenException('Payments should not be deleted. Use reversal instead for audit trail compliance. Policy [2026-01-10]');
+    throw new ForbiddenException(
+      'Payments should not be deleted. Use reversal instead for audit trail compliance. Policy [2026-01-10]',
+    );
   }
 }

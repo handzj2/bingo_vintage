@@ -10,6 +10,8 @@ import {
   BarChart3, Banknote, Shield, Bell, Zap, Calendar,
   Wallet, Smartphone, Building2, Sun, Sunrise, Sunset, Moon,
 } from 'lucide-react';
+import { startGuidedTour } from '@/components/ui/GuidedTour';
+import BulletChart from '@/components/charts/BulletChart';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -33,10 +35,10 @@ const fmtM = (n: any) => {
 };
 
 const METHODS: Record<string, { label: string; icon: any; color: string }> = {
-  CASH:          { label: 'Cash',  icon: Wallet,     color: 'text-emerald-700 bg-emerald-50' },
-  Momo:          { label: 'MoMo', icon: Smartphone, color: 'text-yellow-700 bg-yellow-50'  },
-  BANK_TRANSFER: { label: 'Bank', icon: Building2,  color: 'text-blue-700 bg-blue-50'      },
-  Airtelmoney:   { label: 'Airtel',icon: Smartphone,color: 'text-red-700 bg-red-50'        },
+  CASH:          { label: 'Cash',  icon: Wallet,     color: 'text-bv-success bg-bv-success-bg' },
+  Momo:          { label: 'MoMo', icon: Smartphone, color: 'text-bv-warning bg-bv-warning-bg'  },
+  BANK_TRANSFER: { label: 'Bank', icon: Building2,  color: 'text-bv-info bg-bv-info-bg'      },
+  Airtelmoney:   { label: 'Airtel',icon: Smartphone,color: 'text-bv-danger bg-bv-danger-bg'  },
 };
 
 function LiveClock() {
@@ -48,10 +50,10 @@ function LiveClock() {
   const h = now.getHours();
   const GreetIcon = h < 6 ? Moon : h < 12 ? Sunrise : h < 17 ? Sun : Sunset;
   return (
-    <div className="text-xs text-gray-400 flex items-center gap-1.5 mt-0.5 flex-wrap">
+    <div className="text-xs text-bv-meta flex items-center gap-1.5 mt-0.5 flex-wrap">
       <GreetIcon className="w-3.5 h-3.5" />
       {now.toLocaleDateString('en-UG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-      <span className="font-mono font-bold text-gray-500 tabular-nums">
+      <span className="font-mono font-bold text-bv-muted tabular-nums">
         {now.toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
       </span>
     </div>
@@ -59,7 +61,7 @@ function LiveClock() {
 }
 
 function SparkBars({ data }: { data: { date: string; total: number }[] }) {
-  if (!data || data.length === 0) return <p className="text-xs text-gray-300 mt-2 italic">No payments in last 7 days</p>;
+  if (!data || data.length === 0) return <p className="text-xs text-bv-meta mt-2 italic">No payments in last 7 days</p>;
   const max = Math.max(...data.map(d => d.total), 1);
   const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   return (
@@ -71,10 +73,10 @@ function SparkBars({ data }: { data: { date: string; total: number }[] }) {
         return (
           <div key={i} className="flex-1 flex flex-col items-center gap-0.5 group" title={`${dayLabel}: ${fmt(d.total)}`}>
             <div
-              className={`w-full rounded-t transition-all ${isToday ? 'bg-blue-500' : 'bg-blue-200 group-hover:bg-blue-400'}`}
+              className={`w-full rounded-t transition-all ${isToday ? 'bg-bv-action' : 'bg-bv-border group-hover:bg-bv-muted'}`}
               style={{ height: `${pct}%` }}
             />
-            <span className={`text-[9px] font-bold ${isToday ? 'text-blue-600' : 'text-gray-400'}`}>{dayLabel}</span>
+            <span className={`text-[9px] font-bold ${isToday ? 'text-bv-action' : 'text-bv-meta'}`}>{dayLabel}</span>
           </div>
         );
       })}
@@ -84,23 +86,23 @@ function SparkBars({ data }: { data: { date: string; total: number }[] }) {
 
 function StatCard({ title, value, sub, icon: Icon, color, href, loading, highlight }: any) {
   const inner = (
-    <div className={`bg-white rounded-2xl border p-5 shadow-sm hover:shadow-md transition-all group ${href ? 'cursor-pointer' : ''} ${highlight ? 'border-orange-200 ring-2 ring-orange-100' : 'border-gray-100'}`}>
+    <div className={`bg-bv-surface rounded-bv border p-5 shadow-sm hover:shadow-md transition-all group ${href ? 'cursor-pointer' : ''} ${highlight ? 'border-bv-warning ring-2 ring-bv-warning-bg' : 'border-bv-border'}`}>
       <div className="flex items-start justify-between mb-3">
-        <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${color}`}>
+        <div className={`w-11 h-11 rounded-bv flex items-center justify-center ${color}`}>
           <Icon className="w-5 h-5 text-white" />
         </div>
-        {href && <ArrowUpRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-colors" />}
+        {href && <ArrowUpRight className="w-4 h-4 text-bv-meta group-hover:text-bv-muted transition-colors" />}
       </div>
       {loading ? (
         <div className="space-y-2">
-          <div className="h-7 w-28 bg-gray-100 rounded animate-pulse" />
-          <div className="h-4 w-20 bg-gray-50 rounded animate-pulse" />
+          <div className="h-7 w-28 bg-bv-hover rounded animate-pulse" />
+          <div className="h-4 w-20 bg-bv-hover rounded animate-pulse" />
         </div>
       ) : (
         <>
-          <p className="text-2xl font-black text-gray-900 tracking-tight">{value}</p>
-          <p className="text-xs text-gray-400 mt-0.5 font-medium">{title}</p>
-          {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
+          <p className="text-2xl font-black text-bv-text tracking-tight">{value}</p>
+          <p className="text-xs text-bv-meta mt-0.5 font-medium">{title}</p>
+          {sub && <p className="text-xs text-bv-muted mt-0.5">{sub}</p>}
         </>
       )}
     </div>
@@ -110,16 +112,16 @@ function StatCard({ title, value, sub, icon: Icon, color, href, loading, highlig
 
 function StatusBadge({ status, count }: { status: string; count: number }) {
   const map: Record<string, any> = {
-    ACTIVE:           { color: 'bg-green-100 text-green-700',   icon: CheckCircle, label: 'Active' },
-    PENDING_APPROVAL: { color: 'bg-yellow-100 text-yellow-700', icon: Clock,       label: 'Pending' },
-    DELINQUENT:       { color: 'bg-red-100 text-red-700',       icon: AlertCircle, label: 'Overdue' },
-    COMPLETED:        { color: 'bg-blue-100 text-blue-700',     icon: CheckCircle, label: 'Completed' },
-    CANCELLED:        { color: 'bg-gray-100 text-gray-600',     icon: XCircle,     label: 'Cancelled' },
+    ACTIVE:           { color: 'bg-bv-success-bg text-bv-success',   icon: CheckCircle, label: 'Active' },
+    PENDING_APPROVAL: { color: 'bg-bv-warning-bg text-bv-warning',   icon: Clock,       label: 'Pending' },
+    DELINQUENT:       { color: 'bg-bv-overdue-bg text-bv-overdue',   icon: AlertCircle, label: 'Overdue' },
+    COMPLETED:        { color: 'bg-bv-info-bg text-bv-info',         icon: CheckCircle, label: 'Completed' },
+    CANCELLED:        { color: 'bg-bv-neutral-bg text-bv-neutral',   icon: XCircle,     label: 'Cancelled' },
   };
-  const cfg = map[status] || { color: 'bg-gray-100 text-gray-600', icon: FileText, label: status };
+  const cfg = map[status] || { color: 'bg-bv-neutral-bg text-bv-neutral', icon: FileText, label: status };
   const Icon = cfg.icon;
   return (
-    <div className={`flex items-center justify-between px-4 py-3 rounded-xl ${cfg.color}`}>
+    <div className={`flex items-center justify-between px-4 py-3 rounded-bv ${cfg.color}`}>
       <div className="flex items-center gap-2">
         <Icon className="w-4 h-4" />
         <span className="text-sm font-bold">{cfg.label}</span>
@@ -131,6 +133,12 @@ function StatusBadge({ status, count }: { status: string; count: number }) {
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const role = (user?.role || '').toLowerCase();
+  const isOwner = role === 'admin' || role === 'superadmin';
+  const isManager = role === 'manager' || isOwner;
+  const isCashier = role === 'cashier';
+  const isAgent = role === 'agent' || role === 'loan_officer' || role === 'credit_officer';
+  const [nplSummary, setNplSummary] = useState<any>(null);
   const [stats, setStats]             = useState<any>(null);
   const [loanBreakdown, setLoanBreakdown] = useState<any[]>([]);
   const [recentPayments, setRecentPayments] = useState<any[]>([]);
@@ -147,14 +155,16 @@ export default function DashboardPage() {
     if (!silent) setLoading(true);
     else setRefreshing(true);
     try {
-      const [portfolio, paymentSummary, clients, allLoans, sched, alertSum] = await Promise.all([
+      const [portfolio, paymentSummary, clients, allLoans, sched, alertSum, nplRes] = await Promise.all([
         apiFetch('/reports/summary').catch(() => ({})),
         apiFetch('/payments/summary').catch(() => ({})),
         apiFetch('/clients').catch(() => []),
         apiFetch('/loans').catch(() => []),
         apiFetch('/reports/weekly-collections').catch(() => []),
         apiFetch('/schedules/alerts/summary').catch(() => ({})),
+        isManager ? apiFetch('/reports/npl').catch(() => null) : Promise.resolve(null),
       ]);
+      setNplSummary(nplRes?.summary ?? nplRes?.data?.summary ?? null);
 
       setSchedSummary(null);
       setAlertSummary(alertSum);
@@ -200,7 +210,7 @@ export default function DashboardPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [isManager]);
 
   useEffect(() => {
     load();
@@ -211,282 +221,326 @@ export default function DashboardPage() {
   const isAdmin = user?.role === 'admin' || user?.role === 'manager' || user?.role === 'superadmin';
   const methodBreakdown = Object.entries(stats?.byMethod || {}).map(([method, amount]) => ({
     method, amount: amount as number,
-    cfg: METHODS[method] || { label: method, icon: Wallet, color: 'text-gray-600 bg-gray-50' },
+    cfg: METHODS[method] || { label: method, icon: Wallet, color: 'text-bv-muted bg-bv-neutral-bg' },
   }));
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto">
-
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+    <div className="p-4 sm:p-6 max-w-bv mx-auto space-y-6">
+      {/* Header — calm, operational, HandzJ DNA */}
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-bv-border pb-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-gray-900 flex items-center gap-2 flex-wrap">
-           Welcome back, {user?.full_name || user?.username}
-            <span className="text-sm font-semibold px-2 py-0.5 bg-blue-100 text-blue-700 rounded-lg capitalize">{user?.role}</span>
+          <h1 className="text-lg font-semibold text-bv-text">
+            {user?.full_name || user?.username || 'User'}
+            <span className="ml-2 text-xs font-medium text-bv-meta capitalize">({user?.role || 'staff'})</span>
           </h1>
-          <LiveClock />
+          <p className="text-sm text-bv-muted mt-0.5">
+            {isOwner && 'Loan book control: what is still owed, what is late, and what needs your decision today.'}
+            {role === 'manager' && !isOwner && 'Branch operations: collections, arrears and work waiting on you.'}
+            {isCashier && 'Record payments, check today’s collections and your drawer.'}
+            {isAgent && 'Clients, applications and schedules in your scope.'}
+            {!isOwner && role !== 'manager' && !isCashier && !isAgent && 'Bingo Vintage workspace.'}
+          </p>
+          <div className="mt-1"><LiveClock /></div>
         </div>
-        <button onClick={() => load(true)} disabled={refreshing}
-          className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm font-semibold text-gray-500 hover:bg-gray-50 disabled:opacity-40 flex-shrink-0">
-          {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-          Refresh
-        </button>
-      </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => startGuidedTour()}
+            className="text-sm text-bv-muted border border-bv-border px-3 py-1.5 rounded-bv hover:bg-bv-hover"
+          >
+            Guided tour
+          </button>
+          <button
+            type="button"
+            onClick={() => load(true)}
+            disabled={refreshing}
+            className="text-sm text-bv-muted border border-bv-border px-3 py-1.5 rounded-bv hover:bg-bv-hover disabled:opacity-50"
+          >
+            {refreshing ? 'Refreshing…' : 'Refresh data'}
+          </button>
+        </div>
+      </header>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard title="Total Portfolio"    value={fmtM(stats?.totalPortfolioValue)} icon={DollarSign} color="bg-blue-600"   href="/dashboard/loans"    loading={loading} />
-        <StatCard title="Total Clients"      value={String(stats?.totalClients || 0)} icon={Users}      color="bg-green-600"  href="/dashboard/clients"  loading={loading} />
-        <StatCard title="Active Loans"       value={String(stats?.activeLoans || 0)}  icon={CreditCard} color="bg-violet-600" href="/dashboard/loans"    loading={loading} sub={`of ${stats?.totalLoans || 0} total`} />
-        <StatCard
-          title="Today's Collection"
-          value={fmtM(stats?.todayCollection)}
-          icon={Receipt}
-          color="bg-orange-500"
-          href="/dashboard/payments"
-          loading={loading}
-          highlight
-          sub={stats?.todayCount ? `${stats.todayCount} payment${stats.todayCount !== 1 ? 's' : ''} today` : 'Resets at midnight'}
-        />
-      </div>
-
-      {/* Today collection panel + quick actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-        {/* Collection panel */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-orange-500 rounded-xl flex items-center justify-center">
-                <Calendar className="w-4 h-4 text-white" />
-              </div>
+      {/* ── OWNER / MANAGER: position first, not four equal cards ── */}
+      {isManager && (
+        <section aria-label="Portfolio position" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="md:col-span-2 space-y-1">
+              <p className="text-xs font-medium text-bv-muted">Still owed (remaining principal on active book)</p>
+              <p className="text-3xl font-semibold text-bv-text tabular-nums">
+                {loading ? '…' : fmt(stats?.totalOutstanding)}
+              </p>
+              <p className="text-sm text-bv-muted">
+                Sum of original principal on book {loading ? '…' : fmt(stats?.totalPortfolioValue)}
+                {' · '}
+                Repayments posted (COMPLETED only) {loading ? '…' : fmt(stats?.totalCollected)}
+              </p>
+              <p className="text-xs text-bv-meta">
+                Outstanding = SUM(loans.balance) for non-cancelled loans (tenant-scoped). This is remaining principal balance, not full contractual interest due.
+              </p>
+            </div>
+            <div className="space-y-3 border-l-0 md:border-l md:border-bv-border md:pl-6">
               <div>
-                <h2 className="font-black text-gray-900 leading-tight">Today's Collection</h2>
-                <p className="text-xs text-gray-400">
-                  {new Date().toLocaleDateString('en-UG', { weekday: 'long', day: 'numeric', month: 'long' })} · resets at midnight
+                <p className="text-xs font-medium text-bv-meta">Bad book (NPL) ratio</p>
+                <p className="text-2xl font-semibold tabular-nums text-bv-text">
+                  {nplSummary?.nplRatioPercent != null
+                    ? `${Number(nplSummary.nplRatioPercent).toFixed(1)}%`
+                    : loading ? '…' : '—'}
+                </p>
+                <p className="text-xs text-bv-meta">
+                  {nplSummary?.nplLoans != null ? `${nplSummary.nplLoans} NPL loan(s). ` : ''}
+                  NPL = DEFAULTED or days_in_arrears ≥ 90 (default). Ratio = NPL balances ÷ balances of ACTIVE+DELINQUENT+DEFAULTED. As-of today (server). Delinquent status alone is not NPL.
                 </p>
               </div>
-            </div>
-            {lastUpdated && (
-              <p className="text-xs text-gray-300 hidden sm:block">Updated {lastUpdated.toLocaleTimeString()}</p>
-            )}
-          </div>
-
-          {loading ? (
-            <div className="h-28 bg-gray-50 rounded-xl animate-pulse" />
-          ) : (
-            <>
-              <p className="text-4xl font-black text-gray-900 tracking-tight mt-2">{fmt(stats?.todayCollection)}</p>
-              <p className="text-sm text-gray-400 mt-0.5 mb-3">
-                {stats?.todayCount || 0} payment{stats?.todayCount !== 1 ? 's' : ''} recorded today
-              </p>
-
-              {methodBreakdown.length > 0 ? (
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {methodBreakdown.map(({ method, amount, cfg }) => {
-                    const Icon = cfg.icon;
-                    return (
-                      <span key={method} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold ${cfg.color}`}>
-                        <Icon className="w-3.5 h-3.5" />
-                        {cfg.label}: {fmt(amount)}
-                      </span>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="mb-4 px-4 py-3 bg-orange-50 border border-orange-100 rounded-xl flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-orange-400 flex-shrink-0" />
-                  <p className="text-sm text-orange-700 font-medium">No payments yet today — record your first collection</p>
-                </div>
-              )}
-
-              <div className="border-t border-gray-50 pt-3">
-                <p className="text-xs font-black text-gray-400 uppercase tracking-wider mb-1">Last 7 Days</p>
-                <SparkBars data={last7Days} />
+              <div>
+                <p className="text-xs font-medium text-bv-meta">Marked delinquent</p>
+                <p className="text-xl font-semibold tabular-nums text-bv-danger">
+                  {loading ? '…' : (stats?.overdueLoans ?? 0)}
+                </p>
+                <p className="text-xs text-bv-meta">Count of loans with status DELINQUENT (broader than NPL).</p>
               </div>
-            </>
-          )}
-        </div>
-
-        {/* Quick Actions */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-          <div className="flex items-center gap-2 mb-4">
-            <Activity className="w-5 h-5 text-gray-400" />
-            <h2 className="font-bold text-gray-800">Quick Actions</h2>
+            </div>
           </div>
-          <div className="space-y-1.5">
-            {[
-              { label: 'New Loan Application', icon: Banknote,  href: '/dashboard/loans/create',  color: 'bg-blue-50 hover:bg-blue-100 text-blue-700',     roles: ['admin','manager','cashier','agent'] },
-              { label: 'Register Client',       icon: Users,    href: '/dashboard/clients/create', color: 'bg-green-50 hover:bg-green-100 text-green-700',  roles: ['admin','manager','cashier'] },
-              { label: 'Record Payment',        icon: Receipt,  href: '/dashboard/payments',       color: 'bg-orange-50 hover:bg-orange-100 text-orange-700', roles: ['admin','manager','cashier'] },
-              { label: 'View Schedules',        icon: Calendar, href: '/dashboard/schedules',      color: 'bg-violet-50 hover:bg-violet-100 text-violet-700', roles: ['admin','manager','cashier','agent'] },
-              { label: 'Add Bike to Inventory', icon: Bike,     href: '/dashboard/inventory/add',  color: 'bg-amber-50 hover:bg-amber-100 text-amber-700',  roles: ['admin','manager'] },
-              { label: 'View Alerts',           icon: Bell,     href: '/dashboard/alerts',         color: 'bg-red-50 hover:bg-red-100 text-red-700',        roles: ['admin','manager','cashier'] },
-              // NEW: Expenses and Reconciliation
-              { label: 'Record Expense',        icon: FileText, href: '/dashboard/expenses/new',   color: 'bg-purple-50 hover:bg-purple-100 text-purple-700', roles: ['admin','manager','cashier'] },
-              { label: 'Reconciliation',        icon: Wallet,   href: '/dashboard/finance/reconciliation', color: 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700', roles: ['admin','manager'] },
-              ...(isAdmin ? [{ label: 'Audit Logs', icon: Shield, href: '/dashboard/audit', color: 'bg-gray-50 hover:bg-gray-100 text-gray-700', roles: ['admin','manager'] }] : []),
-            ].filter(a => !a.roles || a.roles.includes(user?.role || ''))
-             .map(({ label, icon: Icon, href, color }) => (
-              <Link key={href} href={href}
-                className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-colors font-semibold text-sm ${color}`}>
-                <Icon className="w-4 h-4 flex-shrink-0" />{label}
-              </Link>
-            ))}
-          </div>
-        </div>
-      </div>
 
-      {/* Alert banners */}
-      {(alertSummary?.unread > 0 || schedSummary?.dueToday > 0 || schedSummary?.overdue > 0) && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {schedSummary?.dueToday > 0 && (
-            <Link href="/dashboard/alerts" className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-2xl p-4 hover:bg-blue-100 transition-colors">
-              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center flex-shrink-0"><Zap className="w-5 h-5 text-white" /></div>
-              <div><p className="font-bold text-blue-900">{schedSummary.dueToday} due today</p><p className="text-xs text-blue-600">Collect now →</p></div>
+          <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm border-t border-bv-border pt-3">
+            <Link href="/dashboard/reports" className="text-bv-accent font-medium underline-offset-2 hover:underline">
+              Open full reports (NPL, aging, daily till, weekly MD)
             </Link>
-          )}
-          {schedSummary?.overdue > 0 && (
-            <Link href="/dashboard/alerts" className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-2xl p-4 hover:bg-red-100 transition-colors">
-              <div className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center flex-shrink-0"><AlertCircle className="w-5 h-5 text-white" /></div>
-              <div><p className="font-bold text-red-900">{schedSummary.overdue} overdue</p><p className="text-xs text-red-600">{fmt(schedSummary.overdueAmount)} outstanding</p></div>
+            <Link href="/dashboard/loans?status=DELINQUENT" className="text-bv-muted hover:text-bv-text hover:underline">
+              View delinquent loans
             </Link>
-          )}
-          {alertSummary?.unread > 0 && (
-            <Link href="/dashboard/alerts" className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl p-4 hover:bg-amber-100 transition-colors">
-              <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center flex-shrink-0"><Bell className="w-5 h-5 text-white" /></div>
-              <div><p className="font-bold text-amber-900">{alertSummary.unread} unread alert{alertSummary.unread !== 1 ? 's' : ''}</p><p className="text-xs text-amber-700">View inbox →</p></div>
+            <Link href="/dashboard/finance/reconciliation" className="text-bv-muted hover:text-bv-text hover:underline">
+              Reconciliation
             </Link>
-          )}
-        </div>
+          </div>
+        </section>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-
-        {/* Loan status */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2"><BarChart3 className="w-5 h-5 text-gray-400" /><h2 className="font-bold text-gray-800">Loan Status</h2></div>
-            <Link href="/dashboard/loans" className="text-xs text-blue-500 hover:underline font-semibold">View all</Link>
+      {/* Needs attention — ranked exceptions, not decorative widgets */}
+      {isManager && (
+        <section aria-label="Needs attention" className="border border-bv-border rounded-bv bg-bv-surface">
+          <div className="px-4 py-2 border-b border-bv-border bg-bv-hover">
+            <h2 className="text-sm font-semibold text-bv-text">Decide or follow up</h2>
           </div>
-          {loading ? (
-            <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-12 bg-gray-50 rounded-xl animate-pulse" />)}</div>
-          ) : loanBreakdown.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-8">No loans yet</p>
-          ) : (
-            <div className="space-y-2">{loanBreakdown.map(({ status, count }) => <StatusBadge key={status} status={status} count={count} />)}</div>
-          )}
-        </div>
+          <ul className="divide-y divide-bv-border text-sm">
+            <li className="px-4 py-3 flex justify-between gap-4 items-center hover:bg-bv-hover">
+              <span className="text-bv-text">
+                Loans awaiting approval
+                <span className="block text-xs text-bv-meta">Requires manager/admin decision</span>
+              </span>
+              <span className="font-semibold tabular-nums text-bv-text">{stats?.pendingLoans ?? 0}</span>
+              <Link href="/dashboard/loans?status=PENDING_APPROVAL" className="text-bv-accent text-xs font-medium whitespace-nowrap">Open</Link>
+            </li>
+            <li className="px-4 py-3 flex justify-between gap-4 items-center hover:bg-bv-hover">
+              <span className="text-bv-text">
+                Delinquent book
+                <span className="block text-xs text-bv-meta">Status DELINQUENT on loans</span>
+              </span>
+              <span className="font-semibold tabular-nums text-bv-danger">{stats?.overdueLoans ?? 0}</span>
+              <Link href="/dashboard/reports" className="text-bv-accent text-xs font-medium whitespace-nowrap">Reports</Link>
+            </li>
+            <li className="px-4 py-3 flex justify-between gap-4 items-center hover:bg-bv-hover">
+              <span className="text-bv-text">
+                Unread schedule alerts
+                <span className="block text-xs text-bv-meta">From alerts summary API</span>
+              </span>
+              <span className="font-semibold tabular-nums text-bv-text">{alertSummary?.unread ?? 0}</span>
+              <Link href="/dashboard/alerts" className="text-bv-accent text-xs font-medium whitespace-nowrap">Alerts</Link>
+            </li>
+          </ul>
+        </section>
+      )}
 
-        {/* Pending approvals */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-yellow-500" />
-              <h2 className="font-bold text-gray-800">Pending Approvals</h2>
-              {(stats?.pendingLoans || 0) > 0 && <span className="text-xs bg-yellow-100 text-yellow-700 font-black px-2 py-0.5 rounded-full">{stats?.pendingLoans}</span>}
-            </div>
-            <Link href="/dashboard/loans" className="text-xs text-blue-500 hover:underline font-semibold">Review</Link>
+      {/* ── CASHIER: payment-first ── */}
+      {isCashier && (
+        <section className="space-y-4">
+          <div>
+            <p className="text-xs font-medium text-bv-muted">Collected today</p>
+            <p className="text-3xl font-semibold tabular-nums text-bv-text">
+              {loading ? '…' : fmt(stats?.todayCollection)}
+            </p>
+            <p className="text-sm text-bv-muted">{stats?.todayCount || 0} payment(s) · Africa/Kampala day · excludes REVERSED</p>
           </div>
-          {loading ? (
-            <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-14 bg-gray-50 rounded-xl animate-pulse" />)}</div>
-          ) : pendingLoans.length === 0 ? (
-            <div className="text-center py-8"><CheckCircle className="w-8 h-8 text-green-300 mx-auto mb-2" /><p className="text-sm text-gray-400">No pending approvals</p></div>
-          ) : (
-            <div className="space-y-2">
-              {pendingLoans.map((loan: any) => {
-                const fn = loan.client?.firstName || loan.client?.first_name || '';
-                const ln = loan.client?.lastName  || loan.client?.last_name  || '';
-                const clientNameStr = `${fn} ${ln}`.trim() || `Client #${loan.clientId || loan.client_id || '?'}`;
-                return (
-                  <Link key={loan.id} href={`/dashboard/loans/${loan.id}`}
-                    className="flex items-center justify-between p-3 rounded-xl bg-yellow-50 hover:bg-yellow-100 transition-colors border border-yellow-100">
-                    <div>
-                      <p className="text-sm font-bold text-gray-800">{clientNameStr}</p>
-                      <p className="text-xs text-gray-400">{loan.loanNumber || loan.loan_number}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-yellow-700">{fmtM(Number(loan.principalAmount || loan.principal_amount || 0))}</p>
-                      <p className="text-xs text-gray-400 capitalize">{loan.loanType || loan.loan_type || 'cash'}</p>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Today's payments list */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-emerald-500" />
-              <h2 className="font-bold text-gray-800">Today's Payments</h2>
-              {recentPayments.length > 0 && <span className="text-xs bg-emerald-100 text-emerald-700 font-black px-2 py-0.5 rounded-full">{recentPayments.length}</span>}
-            </div>
-            <Link href="/dashboard/payments" className="text-xs text-blue-500 hover:underline font-semibold">View all</Link>
+          <div className="flex flex-wrap gap-3">
+            <Link href="/dashboard/payments" className="inline-flex items-center px-4 py-2 bg-bv-action hover:bg-bv-action-hover text-white text-sm font-medium rounded-bv">
+              Record payment
+            </Link>
+            <Link href="/dashboard/my-drawer" className="inline-flex items-center px-4 py-2 border border-bv-border text-sm font-medium rounded-bv text-bv-text hover:bg-bv-hover">
+              My drawer
+            </Link>
+            <Link href="/dashboard/schedules" className="inline-flex items-center px-4 py-2 border border-bv-border text-sm font-medium rounded-bv text-bv-text hover:bg-bv-hover">
+              Schedules due
+            </Link>
           </div>
-          {loading ? (
-            <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-12 bg-gray-50 rounded-xl animate-pulse" />)}</div>
-          ) : recentPayments.length === 0 ? (
-            <div className="text-center py-6">
-              <Receipt className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-              <p className="text-sm text-gray-400 font-semibold">No payments today</p>
-              <p className="text-xs text-gray-300 mt-0.5">Counter resets at midnight</p>
-              <Link href="/dashboard/payments"
-                className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors">
-                <Plus className="w-3.5 h-3.5" /> Record Payment
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-              {recentPayments.map((p: any, i: number) => {
-                const pm = p.paymentMethod || p.payment_method || 'CASH';
-                const mcfg = METHODS[pm] || { label: pm, icon: Wallet, color: 'text-gray-600 bg-gray-50' };
-                const Icon = mcfg.icon;
-                const cn = p.loan?.client
-                  ? `${p.loan.client.firstName || p.loan.client.first_name || ''} ${p.loan.client.lastName || p.loan.client.last_name || ''}`.trim()
-                  : `Loan #${p.loanId || p.loan_id}`;
-                const time = (p.paymentDate || p.payment_date)
-                  ? new Date(p.paymentDate || p.payment_date).toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit' })
-                  : '';
-                return (
-                  <div key={p.id || i} className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-gray-50 hover:bg-emerald-50 transition-colors">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${mcfg.color}`}>
-                        <Icon className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-gray-800 truncate">{cn}</p>
-                        <p className="text-xs text-gray-400">{time}{time && ' · '}{p.receiptNumber || p.receipt_number || '—'}</p>
-                      </div>
-                    </div>
-                    <p className="text-sm font-black text-emerald-700 flex-shrink-0 ml-2">{fmt(p.amount)}</p>
-                  </div>
-                );
-              })}
+          {methodBreakdown.length > 0 && (
+            <div className="text-sm text-bv-muted">
+              <p className="text-xs font-medium text-bv-meta mb-1">By method today</p>
+              <ul className="space-y-1">
+                {methodBreakdown.map(({ method, amount, cfg }) => (
+                  <li key={method} className="flex justify-between max-w-xs">
+                    <span>{cfg.label}</span>
+                    <span className="tabular-nums font-medium text-bv-text">{fmt(amount)}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
-        </div>
-      </div>
+        </section>
+      )}
 
-      {/* Overdue warning */}
-      {isAdmin && (stats?.overdueLoans || 0) > 0 && (
-        <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-2xl px-5 py-4">
-          <div className="flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+      {/* ── AGENT: work queue ── */}
+      {isAgent && (
+        <section className="space-y-4">
+          <div className="grid grid-cols-2 gap-4 max-w-md">
             <div>
-              <p className="font-bold text-red-800 text-sm">{stats?.overdueLoans} overdue loan{(stats?.overdueLoans || 0) > 1 ? 's' : ''} need attention</p>
-              <p className="text-xs text-red-500 mt-0.5">Review and take action to prevent further defaults</p>
+              <p className="text-xs text-bv-meta">Clients</p>
+              <p className="text-2xl font-semibold tabular-nums text-bv-text">{stats?.totalClients ?? 0}</p>
+            </div>
+            <div>
+              <p className="text-xs text-bv-meta">Pending applications</p>
+              <p className="text-2xl font-semibold tabular-nums text-bv-text">{stats?.pendingLoans ?? 0}</p>
             </div>
           </div>
-          <Link href="/dashboard/loans?status=DELINQUENT"
-            className="flex items-center gap-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold transition-colors flex-shrink-0">
-            Review <ArrowUpRight className="w-4 h-4" />
-          </Link>
-        </div>
+          <div className="flex flex-wrap gap-3">
+            <Link href="/dashboard/clients" className="text-sm font-medium text-bv-accent hover:underline">Clients</Link>
+            <Link href="/dashboard/loans/create" className="text-sm font-medium text-bv-accent hover:underline">New application</Link>
+            <Link href="/dashboard/schedules" className="text-sm font-medium text-bv-accent hover:underline">Schedules</Link>
+          </div>
+        </section>
       )}
 
+      {/* Today for managers (secondary, not competing with portfolio) */}
+      {isManager && (
+        <section className="text-sm space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold text-bv-text mb-2">Collected today</h2>
+            <p className="text-xl font-semibold tabular-nums text-bv-text">
+              {loading ? '…' : fmt(stats?.todayCollection)}
+              <span className="text-sm font-normal text-bv-meta ml-2">{stats?.todayCount || 0} payments</span>
+            </p>
+            <p className="text-xs text-bv-meta mt-1">
+              Africa/Kampala business day · payment status not REVERSED · from payments summary API.
+            </p>
+          </div>
+          {/* Operational targets — bullet charts */}
+          <div className="bg-bv-surface border border-bv-border rounded-bv p-4 space-y-4 max-w-xl">
+            <h3 className="text-xs font-semibold text-bv-meta uppercase tracking-wide">Performance vs target</h3>
+            <BulletChart
+              label="Today collections"
+              actual={Number(stats?.todayCollection || 0)}
+              target={Math.max(Number(stats?.todayCollection || 0) * 1.15, 1)}
+              format={(n) => fmt(n)}
+              ranges={[0.7, 1.0]}
+            />
+            <BulletChart
+              label="NPL ratio (lower is better)"
+              actual={Number(nplSummary?.nplRatioPercent ?? 0)}
+              target={5}
+              format={(n) => `${n.toFixed(1)}%`}
+              ranges={[1.0, 1.5]}
+              invert
+            />
+            <BulletChart
+              label="Active loans on book"
+              actual={Number(stats?.activeLoans || 0)}
+              target={Math.max(Number(stats?.activeLoans || 0), 1)}
+              format={(n) => n.toLocaleString()}
+              ranges={[0.8, 1.0]}
+            />
+          </div>
+        </section>
+      )}
+
+      {/* Loan book snapshot — compact table not icon badges */}
+      {(isManager || isAgent) && loanBreakdown.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold text-bv-text mb-2">Loan book by status</h2>
+          <table className="w-full max-w-lg text-sm border border-bv-border rounded-bv overflow-hidden bg-bv-surface">
+            <thead className="bg-bv-hover text-left text-xs text-bv-muted">
+              <tr>
+                <th className="px-3 py-2 font-medium">Status</th>
+                <th className="px-3 py-2 font-medium text-right">Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loanBreakdown.map(({ status, count }) => (
+                <tr key={status} className="border-t border-bv-border hover:bg-bv-hover">
+                  <td className="px-3 py-2 text-bv-text">{status.replace(/_/g, ' ')}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-medium text-bv-text">{count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {/* Pending approvals list for decision-makers */}
+      {isManager && pendingLoans.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold text-bv-text mb-2">Pending approval (sample)</h2>
+          <ul className="border border-bv-border divide-y divide-bv-border text-sm max-w-2xl rounded-bv overflow-hidden bg-bv-surface">
+            {pendingLoans.map((loan: any) => (
+              <li key={loan.id} className="px-3 py-2 flex justify-between gap-2 hover:bg-bv-hover">
+                <span className="text-bv-text truncate">
+                  {loan.loanNumber || loan.loan_number || `#${loan.id}`}
+                </span>
+                <span className="tabular-nums text-bv-muted flex-shrink-0">
+                  {fmtM(loan.principalAmount || loan.principal_amount || 0)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <Link href="/dashboard/loans?status=PENDING_APPROVAL" className="text-xs text-bv-accent mt-2 inline-block hover:underline">
+            Review all pending
+          </Link>
+        </section>
+      )}
+
+      {/* Recent payments — for cashier & manager */}
+      {(isCashier || isManager) && recentPayments.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold text-bv-text mb-2">Payments today</h2>
+          <ul className="border border-bv-border divide-y divide-bv-border text-sm max-w-2xl rounded-bv overflow-hidden bg-bv-surface">
+            {recentPayments.slice(0, 8).map((p: any) => (
+              <li key={p.id} className="px-3 py-2 flex justify-between gap-2 hover:bg-bv-hover">
+                <span className="text-bv-muted truncate">
+                  {p.receiptNumber || p.receipt_number || p.id}
+                </span>
+                <span className="tabular-nums font-medium text-bv-text">{fmt(p.amount)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Sparse actions — role filtered, no colour rainbow */}
+      <section className="border-t border-bv-border pt-4">
+        <h2 className="text-sm font-semibold text-bv-text mb-2">Go to</h2>
+        <ul className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+          {[
+            { label: 'Record payment', href: '/dashboard/payments', roles: ['admin', 'manager', 'cashier'] },
+            { label: 'New loan', href: '/dashboard/loans/create', roles: ['admin', 'manager', 'agent', 'cashier'] },
+            { label: 'Register client', href: '/dashboard/clients/create', roles: ['admin', 'manager', 'cashier'] },
+            { label: 'Schedules', href: '/dashboard/schedules', roles: ['admin', 'manager', 'cashier', 'agent'] },
+            { label: 'Reports', href: '/dashboard/reports', roles: ['admin', 'manager'] },
+            { label: 'My drawer', href: '/dashboard/my-drawer', roles: ['admin', 'manager', 'cashier'] },
+            { label: 'Reconciliation', href: '/dashboard/finance/reconciliation', roles: ['admin', 'manager'] },
+            { label: 'Audit log', href: '/dashboard/audit', roles: ['admin'] },
+          ]
+            .filter((a) => a.roles.includes(role) || (isOwner && a.roles.includes('admin')))
+            .map((a) => (
+              <li key={a.href}>
+                <Link href={a.href} className="text-bv-accent hover:underline font-medium">
+                  {a.label}
+                </Link>
+              </li>
+            ))}
+        </ul>
+      </section>
+
+      {lastUpdated && (
+        <p className="text-xs text-bv-meta">Data loaded {lastUpdated.toLocaleTimeString()}</p>
+      )}
     </div>
   );
 }

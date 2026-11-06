@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Branch } from './entities/branch.entity';
@@ -27,14 +27,22 @@ export class BranchesService {
     return this.branchRepo.save(branch);
   }
 
-  async update(id: number, data: Partial<Branch>): Promise<Branch> {
+  async update(id: number, data: Partial<Branch>, callerTenantId?: number): Promise<Branch> {
     const branch = await this.findOne(id);
+    // Phase 3: prevent cross-tenant branch modification
+    if (callerTenantId && branch.tenantId && branch.tenantId !== callerTenantId) {
+      throw new ForbiddenException('You do not have permission to modify this branch');
+    }
     Object.assign(branch, data);
     return this.branchRepo.save(branch);
   }
 
-  async remove(id: number): Promise<{ success: boolean }> {
-    await this.findOne(id);
+  async remove(id: number, callerTenantId?: number): Promise<{ success: boolean }> {
+    const branch = await this.findOne(id);
+    // Phase 3: prevent cross-tenant branch deletion
+    if (callerTenantId && branch.tenantId && branch.tenantId !== callerTenantId) {
+      throw new ForbiddenException('You do not have permission to delete this branch');
+    }
     await this.branchRepo.delete(id);
     return { success: true };
   }

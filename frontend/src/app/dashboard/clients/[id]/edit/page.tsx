@@ -36,7 +36,7 @@ export default function EditClientPage({ params }: any) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        <span className="ml-3 text-gray-600">Loading client data...</span>
+        <span className="ml-3 text-bv-muted">Loading client data...</span>
       </div>
     );
   }
@@ -46,7 +46,7 @@ export default function EditClientPage({ params }: any) {
     return (
       <div className="p-6 max-w-5xl mx-auto">
         <h1 className="text-2xl font-bold mb-6">Client Not Found</h1>
-        <p className="text-gray-600 mb-4">
+        <p className="text-bv-muted mb-4">
           The client you are trying to edit does not exist or could not be loaded.
         </p>
         <button
@@ -64,25 +64,25 @@ export default function EditClientPage({ params }: any) {
     <div className="p-6 max-w-5xl mx-auto">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-bv-text">
             Edit Client Profile
           </h1>
-          <p className="text-gray-600">
+          <p className="text-bv-muted">
             Update information for {client.full_name || 'this client'}
           </p>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-bv-meta mt-1">
             Client ID: {client.id}
           </p>
         </div>
         <button
           onClick={() => router.back()}
-          className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+          className="px-4 py-2 border border-bv-border rounded-lg hover:bg-bv-hover"
         >
           Cancel
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="bg-bv-surface rounded-xl shadow-sm border border-bv-border overflow-hidden">
         <div className="p-6">
           <ClientForm
             isEdit={true}

@@ -11,7 +11,7 @@ export const loanApi = {
   getLoans:    ()                       => api.get<Loan[]>('/loans'),
   getLoan:     (id: number | string)    => api.get<Loan>(`/loans/${id}`),
   applyCash:   (payload: ApplyLoanRequest) => api.post<Loan>('/loans/apply', payload),
-  applyBike:   (payload: any)           => api.post('/loans/apply', payload),
+  applyBike:   (payload: CreateBikeLoanRequest) => api.post<Loan>('/loans/create-bike-loan', payload),
 
   // Task 4.4: aligned to AdminApprovalDto — action:'approve'/'reject' + reason?
   approveLoan: (id: number | string, reason?: string) =>

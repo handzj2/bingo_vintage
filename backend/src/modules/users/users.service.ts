@@ -140,12 +140,16 @@ export class UsersService {
     return this.usersRepository.findOne({ where: { username } });
   }
 
-  async update(id: number, rawDto: UpdateUserDto): Promise<User> {
+  async update(id: number, rawDto: UpdateUserDto, callerTenantId?: number): Promise<User> {
     // Security: block modification of superadmin accounts by tenant admins
     const target = await this.usersRepository.findOne({ where: { id } });
     if (!target) throw new Error('User not found');
     if (target.tenantId == null) {
       throw new Error('Superadmin accounts cannot be modified through this endpoint');
+    }
+    // Phase 3: prevent cross-tenant user modification
+    if (callerTenantId && target.tenantId && target.tenantId !== callerTenantId) {
+      throw new Error('You do not have permission to modify a user from a different tenant');
     }
     const updateUserDto = sanitiseDto(rawDto);
     const user = await this.findOne(id);

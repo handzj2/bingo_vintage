@@ -11,18 +11,6 @@ import {
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/lib/api/client';
-import { Button } from '@/components/ui/Button';
-import { input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import type { Client } from '@/shared/api-types';
 
@@ -63,7 +51,6 @@ interface DBClient {
 
 // Helper function to convert API response to Client type
 const apiClientToClient = (dbClient: DBClient): Client => {
-  // Format address as a string if we have city or state
   const address = dbClient.city || dbClient.state || dbClient.country ? 
     `${dbClient.city || ''}${dbClient.city && dbClient.state ? ', ' : ''}${dbClient.state || ''}${(dbClient.city || dbClient.state) && dbClient.country ? ', ' : ''}${dbClient.country || ''}`.trim() :
     dbClient.address || '';
@@ -87,7 +74,7 @@ const apiClientToClient = (dbClient: DBClient): Client => {
     postal_code: dbClient.postalCode || '',
     occupation: dbClient.occupation || '',
     employment_status: dbClient.employmentStatus || '',
-    monthly_income: dbClient.monthlyIncome ? parseFloat(dbClient.monthlyIncome) : 0,   // ✅ fixed
+    monthly_income: dbClient.monthlyIncome ? parseFloat(dbClient.monthlyIncome) : 0,
     tax_id: undefined,
     bank_name: dbClient.bankName || '',
     account_number: dbClient.accountNumber || '',
@@ -102,7 +89,6 @@ const apiClientToClient = (dbClient: DBClient): Client => {
     verified: false,
     created_at: dbClient.createdAt || new Date().toISOString(),
     updated_at: dbClient.updatedAt || new Date().toISOString(),
-    // Optional fields from Client type
     nationality: undefined,
     account_balance: undefined,
     verification_method: undefined,
@@ -125,15 +111,15 @@ export default function ClientsPage() {
   const role      = (user?.role ?? '').toLowerCase();
   const isAdmin   = role === 'admin' || role === 'superadmin';
   const canEdit   = isAdmin || role === 'manager' || can('client.edit');
-  const canDelete = isAdmin; // client deletion is admin/superadmin only
+  const canDelete = isAdmin;
   const [clients, setClients] = useState<Client[]>([]);
   const [filteredClients, setFilteredClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'inactive' | 'kyc_complete' | 'kyc_incomplete'>('all');
 
-  // Fetch clients from real API
   useEffect(() => {
     fetchClients();
   }, []);
@@ -145,10 +131,9 @@ export default function ClientsPage() {
   const fetchClients = async () => {
     try {
       setLoading(true);
+      setLoadError('');
       const response = await api.get('/clients') as { success: boolean; data?: DBClient[]; message?: string };
 
-      // Backend now returns a plain array (matches every other list endpoint).
-      // api.get() wraps it once in {success, data} — response.data is the array directly.
       if (response.success && Array.isArray(response.data)) {
         const formattedClients = response.data.map(apiClientToClient);
         setClients(formattedClients);
@@ -158,6 +143,7 @@ export default function ClientsPage() {
       }
     } catch (error: any) {
       console.error('Failed to fetch clients:', error);
+      setLoadError(error?.message || 'Could not load clients. Check connection and try again.');
       toast.error('Failed to load clients from database');
       setClients([]);
       setFilteredClients([]);
@@ -190,7 +176,6 @@ export default function ClientsPage() {
 
   const handleDeleteClient = async (id: string) => {
     try {
-      // Check if api has a delete method, if not use post or patch with delete action
       const response = await (api as any).delete(`/clients/${id}`);
       if (response.success) {
         setClients(clients.filter(client => client.id !== id));
@@ -205,12 +190,10 @@ export default function ClientsPage() {
     }
   };
 
-  // KYC Progress Calculation - Updated to match new Client type structure
   const getKYCProgress = (client: Client): number => {
     let completedFields = 0;
-    let totalFields = 20; // Reduced to match actual required fields
+    const totalFields = 20;
     
-    // Core Info (9 required fields)
     const coreFields = [
       client.first_name, client.last_name, client.email, client.phone, client.nin,
       client.date_of_birth, client.gender, client.next_of_kin_name, client.next_of_kin_phone
@@ -219,17 +202,14 @@ export default function ClientsPage() {
       field !== undefined && field !== null && field !== ''
     ).length;
     
-    // Address Info (at least some address info)
     const addressFields = [client.address, client.city, client.state, client.country];
     const hasAddress = addressFields.some(field => field && field !== '');
     if (hasAddress) completedFields += 1;
     
-    // Employment Info
     if (client.occupation || client.employment_status || client.monthly_income) {
       completedFields += 1;
     }
     
-    // Banking Info
     if (client.bank_name || client.account_number) {
       completedFields += 1;
     }
@@ -237,29 +217,26 @@ export default function ClientsPage() {
     return Math.round((completedFields / totalFields) * 100);
   };
 
-  const getKYCStatus = (client: Client): { text: string; color: string; icon: any; variant: "default" | "secondary" | "destructive" | "outline" } => {
+  const getKYCStatus = (client: Client): { text: string; cls: string; icon: any } => {
     const progress = getKYCProgress(client);
     
     if (progress >= 90) {
       return { 
         text: 'KYC Complete', 
-        color: 'bg-green-100 text-green-800 border-green-200',
+        cls: 'bg-bv-success-bg text-bv-success',
         icon: ShieldCheck,
-        variant: "default" as const
       };
     } else if (progress >= 50) {
       return { 
         text: 'KYC Partial', 
-        color: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+        cls: 'bg-bv-warning-bg text-bv-warning',
         icon: Shield,
-        variant: "secondary" as const
       };
     } else {
       return { 
         text: 'KYC Incomplete', 
-        color: 'bg-red-100 text-red-800 border-red-200',
+        cls: 'bg-bv-danger-bg text-bv-danger',
         icon: ShieldAlert,
-        variant: "destructive" as const
       };
     }
   };
@@ -270,14 +247,13 @@ export default function ClientsPage() {
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
+    return new Date(dateString).toLocaleDateString('en-UG', {
       day: 'numeric',
       month: 'short',
       year: 'numeric'
     });
   };
 
-  // KYC Stats
   const kycStats = {
     complete: clients.filter(client => isClientKYCComplete(client)).length,
     partial: clients.filter(client => {
@@ -290,166 +266,65 @@ export default function ClientsPage() {
       : 0
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-4 sm:p-6 max-w-bv mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-bv-border pb-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Client Management</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage your borrower database and client information
+          <h1 className="text-lg font-semibold text-bv-text">Clients</h1>
+          <p className="text-sm text-bv-muted mt-0.5">
+            Borrower records for lending. Register a client before creating a loan.
           </p>
         </div>
-        <Button onClick={() => router.push('/dashboard/clients/create')}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add New Client
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => fetchClients()}
+            disabled={loading}
+            className="text-sm text-bv-muted border border-bv-border px-3 py-1.5 rounded-bv hover:bg-bv-hover disabled:opacity-50"
+          >
+            {loading ? 'Refreshing…' : 'Refresh'}
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push('/dashboard/clients/create')}
+            className="text-sm font-medium text-white bg-bv-action px-3 py-1.5 rounded-bv hover:bg-bv-action-hover"
+          >
+            Register client
+          </button>
+        </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-blue-100 rounded-lg mr-4">
-                <User className="h-6 w-6 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Clients</p>
-                <p className="text-2xl font-bold">{clients.length}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {loadError && (
+        <div className="border border-bv-danger/30 bg-bv-danger-bg text-bv-danger text-sm px-3 py-2 rounded-bv flex flex-wrap items-center justify-between gap-2">
+          <span>{loadError}</span>
+          <button type="button" onClick={() => fetchClients()} className="font-medium underline">Retry</button>
+        </div>
+      )}
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-green-100 rounded-lg mr-4">
-                <CheckCircle className="h-6 w-6 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Active Clients</p>
-                <p className="text-2xl font-bold">
-                  {clients.filter(c => c.status === 'active').length}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-yellow-100 rounded-lg mr-4">
-                <Shield className="h-6 w-6 text-yellow-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">KYC Complete</p>
-                <p className="text-2xl font-bold">{kycStats.complete}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-red-100 rounded-lg mr-4">
-                <AlertCircle className="h-6 w-6 text-red-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">KYC Incomplete</p>
-                <p className="text-2xl font-bold">{kycStats.incomplete + kycStats.partial}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-purple-100 rounded-lg mr-4">
-                <ShieldCheck className="h-6 w-6 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">KYC Avg. Progress</p>
-                <p className="text-2xl font-bold">{kycStats.averageProgress}%</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Book counts */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm border border-bv-border rounded-bv p-4 bg-bv-surface">
+        <div>
+          <p className="text-xs text-bv-muted">Total</p>
+          <p className="text-xl font-semibold tabular-nums text-bv-text">{loading ? '…' : clients.length}</p>
+        </div>
+        <div>
+          <p className="text-xs text-bv-muted">Active</p>
+          <p className="text-xl font-semibold tabular-nums text-bv-text">
+            {loading ? '…' : clients.filter(c => c.status === 'active').length}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-bv-muted">KYC complete</p>
+          <p className="text-xl font-semibold tabular-nums text-bv-text">{loading ? '…' : kycStats.complete}</p>
+        </div>
+        <div>
+          <p className="text-xs text-bv-muted">KYC incomplete / partial</p>
+          <p className="text-xl font-semibold tabular-nums text-bv-text">
+            {loading ? '…' : (kycStats.incomplete + kycStats.partial)}
+          </p>
+        </div>
       </div>
-
-      {/* KYC Progress Breakdown */}
-      <Card>
-        <CardHeader>
-          <CardTitle>KYC Compliance Overview</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-green-800">Complete</span>
-                <span className="text-lg font-bold text-green-900">{kycStats.complete}</span>
-              </div>
-              <div className="mt-2 w-full bg-green-200 rounded-full h-2">
-                <div 
-                  className="bg-green-600 h-2 rounded-full" 
-                  style={{ width: `${clients.length > 0 ? (kycStats.complete / clients.length) * 100 : 0}%` }}
-                ></div>
-              </div>
-            </div>
-            
-            <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-yellow-800">Partial</span>
-                <span className="text-lg font-bold text-yellow-900">{kycStats.partial}</span>
-              </div>
-              <div className="mt-2 w-full bg-yellow-200 rounded-full h-2">
-                <div 
-                  className="bg-yellow-600 h-2 rounded-full" 
-                  style={{ width: `${clients.length > 0 ? (kycStats.partial / clients.length) * 100 : 0}%` }}
-                ></div>
-              </div>
-            </div>
-            
-            <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-red-800">Incomplete</span>
-                <span className="text-lg font-bold text-red-900">{kycStats.incomplete}</span>
-              </div>
-              <div className="mt-2 w-full bg-red-200 rounded-full h-2">
-                <div 
-                  className="bg-red-600 h-2 rounded-full" 
-                  style={{ width: `${clients.length > 0 ? (kycStats.incomplete / clients.length) * 100 : 0}%` }}
-                ></div>
-              </div>
-            </div>
-            
-            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium text-blue-800">Avg Progress</span>
-                <span className="text-lg font-bold text-blue-900">{kycStats.averageProgress}%</span>
-              </div>
-              <div className="mt-2 w-full bg-blue-200 rounded-full h-2">
-                <div 
-                  className="bg-blue-600 h-2 rounded-full" 
-                  style={{ width: `${kycStats.averageProgress}%` }}
-                ></div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v: string) => setActiveTab(v as any)}>
@@ -468,227 +343,207 @@ export default function ClientsPage() {
         </TabsList>
       </Tabs>
 
-      {/* Search and Filter */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Search clients by name, email, phone, or ID..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <div className="w-full md:w-64">
-              <div className="flex items-center">
-                <Filter className="h-5 w-5 text-muted-foreground mr-2" />
-                <select
-                  className="w-full px-3 py-2 border rounded-md text-sm bg-background"
-                >
-                  <option value="">Sort by: Newest</option>
-                  <option value="name">Name A-Z</option>
-                  <option value="kyc">KYC Progress</option>
-                </select>
-              </div>
+      {/* Search bar */}
+      <div className="flex flex-col md:flex-row gap-3">
+        <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-bv-meta pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search by name, phone, NIN or ID…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 text-sm bg-bv-surface border border-bv-border rounded-bv text-bv-text placeholder:text-bv-meta focus:outline-none focus:ring-1 focus:ring-bv-action"
+          />
+        </div>
+        <div className="flex items-center gap-2 w-full md:w-56">
+          <Filter className="h-4 w-4 text-bv-meta flex-shrink-0" />
+          <select
+            className="flex-1 px-3 py-2 text-sm bg-bv-surface border border-bv-border rounded-bv text-bv-text focus:outline-none focus:ring-1 focus:ring-bv-action"
+          >
+            <option value="">Sort: Newest</option>
+            <option value="name">Name A–Z</option>
+            <option value="kyc">KYC Progress</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Clients table */}
+      <div className="bg-bv-surface border border-bv-border rounded-bv overflow-x-auto">
+        {loading ? (
+          <div className="p-12 text-center flex flex-col items-center gap-3">
+            <div className="h-10 w-10 animate-spin rounded-full border-[3px] border-bv-border border-t-bv-action" role="status" aria-label="Loading" />
+            <p className="text-sm font-semibold text-bv-text">Bingo Vintage <span className="text-bv-meta font-normal">· loading clients</span></p>
+          </div>
+        ) : filteredClients.length === 0 ? (
+          <div className="p-12 text-center max-w-md mx-auto">
+            <p className="text-sm font-semibold text-bv-text">No clients to show</p>
+            <p className="mt-1 text-sm text-bv-muted">
+              {search || activeTab !== 'all'
+                ? 'Nothing matches the current search or tab. Clear search or choose All.'
+                : 'No clients in this tenant yet. Register a borrower before creating a loan.'}
+            </p>
+            <div className="mt-4 flex flex-wrap justify-center gap-3">
+              {(search || activeTab !== 'all') && (
+                <button type="button" onClick={() => { setSearch(''); setActiveTab('all'); }}
+                  className="text-sm border border-bv-border px-3 py-1.5 rounded-bv hover:bg-bv-hover text-bv-muted">
+                  Clear filters
+                </button>
+              )}
+              <button type="button" onClick={() => router.push('/dashboard/clients/create')}
+                className="text-sm font-medium text-white bg-bv-action px-3 py-1.5 rounded-bv hover:bg-bv-action-hover">
+                Register client
+              </button>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-bv-hover border-b border-bv-border">
+              <tr>
+                <th className="px-3 py-2 text-left text-xs font-medium text-bv-muted">Name</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-bv-muted hidden md:table-cell">Phone</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-bv-muted hidden lg:table-cell">NIN</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-bv-muted hidden lg:table-cell">KYC</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-bv-muted">Status</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-bv-muted hidden md:table-cell">Created</th>
+                <th className="px-3 py-2 text-right text-xs font-medium text-bv-muted">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredClients.map((client) => {
+                const kycStatus = getKYCStatus(client);
+                const KYCIcon = kycStatus.icon;
+                const progress = getKYCProgress(client);
 
-      {/* Clients Table */}
-      <Card>
-        <div className="overflow-x-auto">
-          {filteredClients.length === 0 ? (
-            <div className="p-12 text-center">
-              <User className="h-16 w-16 mx-auto text-muted-foreground" />
-              <h3 className="mt-4 text-lg font-medium text-foreground">No clients found</h3>
-              <p className="mt-2 text-muted-foreground">
-                {search ? 'Try a different search term' : 'Get started by adding your first client'}
-              </p>
-              {!search && (
-                <Button 
-                  onClick={() => router.push('/dashboard/clients/create')}
-                  className="mt-6"
-                >
-                  <Plus className="h-5 w-5 mr-2" />
-                  Add New Client
-                </Button>
-              )}
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Client</TableHead>
-                  <TableHead className="hidden md:table-cell">Contact Info</TableHead>
-                  <TableHead className="hidden lg:table-cell">KYC Status</TableHead>
-                  <TableHead className="hidden xl:table-cell">KYC Progress</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="hidden md:table-cell">Created</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredClients.map((client) => {
-                  const kycStatus = getKYCStatus(client);
-                  const KYCStatusIcon = kycStatus.icon;
-                  const progress = getKYCProgress(client);
-                  
-                  return (
-                    <TableRow key={client.id} className="hover:bg-muted/50">
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center font-semibold text-primary">
-                            {client.first_name?.[0]}{client.last_name?.[0]}
-                          </div>
-                          <div>
-                            <div className="font-medium">{client.first_name} {client.last_name}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {client.occupation || 'No occupation'}
-                            </div>
-                            {client.address && (
-                              <div className="text-xs text-muted-foreground truncate max-w-xs">
-                                {client.address}
-                              </div>
-                            )}
-                          </div>
+                return (
+                  <tr key={client.id} className="hover:bg-bv-hover border-t border-bv-border">
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-8 rounded-full bg-bv-hover flex items-center justify-center text-xs font-semibold text-bv-muted flex-shrink-0">
+                          {client.first_name?.[0]}{client.last_name?.[0]}
                         </div>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <div className="space-y-1">
-                          <div className="flex items-center text-sm">
-                            <Phone className="h-3 w-3 mr-2 text-muted-foreground" />
-                            {client.phone || 'N/A'}
-                          </div>
-                          <div className="flex items-center text-sm text-muted-foreground">
-                            <Mail className="h-3 w-3 mr-2" />
-                            {client.email || 'N/A'}
-                          </div>
+                        <div>
+                          <p className="font-medium text-bv-text">{client.first_name} {client.last_name}</p>
+                          <p className="text-xs text-bv-meta">{client.occupation || '—'}</p>
                         </div>
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell">
-                        <Badge variant={kycStatus.variant} className="flex items-center gap-1 w-fit">
-                          <KYCStatusIcon className="h-3 w-3" />
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-bv-muted hidden md:table-cell tabular-nums">
+                      {client.phone || '—'}
+                    </td>
+                    <td className="px-3 py-2 text-bv-muted font-mono text-xs hidden lg:table-cell">
+                      {client.nin || '—'}
+                    </td>
+                    <td className="px-3 py-2 hidden lg:table-cell">
+                      <div className="space-y-1">
+                        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${kycStatus.cls}`}>
+                          <KYCIcon className="h-3 w-3" />
                           {kycStatus.text}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="hidden xl:table-cell">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <div className="w-24 bg-gray-200 rounded-full h-2">
-                              <div 
-                                className={`h-2 rounded-full ${
-                                  progress >= 90 ? 'bg-green-500' :
-                                  progress >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                                }`}
-                                style={{ width: `${progress}%` }}
-                              ></div>
-                            </div>
-                            <span className="text-sm font-medium">{progress}%</span>
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-20 bg-bv-border rounded-full h-1.5">
+                            <div
+                              className={`h-1.5 rounded-full ${
+                                progress >= 90 ? 'bg-bv-success' :
+                                progress >= 50 ? 'bg-bv-warning' : 'bg-bv-danger'
+                              }`}
+                              style={{ width: `${progress}%` }}
+                            />
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            {progress >= 90 ? 'Eligible for loans' :
-                             progress >= 50 ? 'Needs more info' : 'Complete KYC required'}
-                          </div>
+                          <span className="text-xs tabular-nums text-bv-meta">{progress}%</span>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={client.status === 'active' ? 'default' : 'secondary'}>
-                          {client.status || 'pending'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <div className="flex items-center text-sm text-muted-foreground">
-                          <Calendar className="h-3 w-3 mr-2" />
-                          {formatDate(client.created_at)}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => router.push(`/dashboard/clients/${client.id}`)}
-                            title="View Details"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          {canEdit && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                      </div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full ${
+                        client.status === 'active'
+                          ? 'bg-bv-success-bg text-bv-success'
+                          : 'bg-bv-hover text-bv-muted'
+                      }`}>
+                        {client.status || 'pending'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-bv-meta text-xs hidden md:table-cell">
+                      {formatDate(client.created_at)}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/dashboard/clients/${client.id}`)}
+                          title="View"
+                          className="p-1.5 rounded hover:bg-bv-hover text-bv-meta"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        {canEdit && (
+                          <button
+                            type="button"
                             onClick={() => router.push(`/dashboard/clients/${client.id}/edit`)}
                             title="Edit"
+                            className="p-1.5 rounded hover:bg-bv-hover text-bv-meta"
                           >
                             <Edit className="h-4 w-4" />
-                          </Button>
-                          )}
-                          {!isClientKYCComplete(client) && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => router.push(`/dashboard/clients/${client.id}/edit`)}
-                              title="Complete KYC"
-                            >
-                              <Shield className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {canDelete && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
+                          </button>
+                        )}
+                        {!isClientKYCComplete(client) && (
+                          <button
+                            type="button"
+                            onClick={() => router.push(`/dashboard/clients/${client.id}/edit`)}
+                            title="Complete KYC"
+                            className="p-1.5 rounded hover:bg-bv-hover text-bv-meta"
+                          >
+                            <Shield className="h-4 w-4" />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            type="button"
                             onClick={() => setDeleteConfirm(client.id)}
                             title="Delete"
+                            className="p-1.5 rounded hover:bg-bv-danger-bg text-bv-danger"
                           >
                             <Trash2 className="h-4 w-4" />
-                          </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </div>
-      </Card>
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete confirmation modal */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-background rounded-lg shadow-xl max-w-md w-full">
+          <div className="bg-bv-surface rounded-bv shadow-xl max-w-md w-full border border-bv-border">
             <div className="p-6">
-              <div className="flex items-center justify-center w-12 h-12 mx-auto bg-red-100 rounded-full">
-                <AlertCircle className="h-6 w-6 text-red-600" />
+              <div className="flex items-center justify-center w-12 h-12 mx-auto bg-bv-danger-bg rounded-full">
+                <AlertCircle className="h-6 w-6 text-bv-danger" />
               </div>
               <div className="mt-4 text-center">
-                <h3 className="text-lg font-semibold text-foreground">Delete Client</h3>
-                <p className="mt-2 text-sm text-muted-foreground">
+                <h3 className="text-lg font-semibold text-bv-text">Delete Client</h3>
+                <p className="mt-2 text-sm text-bv-muted">
                   Are you sure you want to delete this client? This action cannot be undone.
                 </p>
               </div>
-              <div className="mt-6 flex justify-center space-x-4">
-                <Button
-                  variant="outline"
+              <div className="mt-6 flex justify-center gap-3">
+                <button
+                  type="button"
                   onClick={() => setDeleteConfirm(null)}
+                  className="px-4 py-2 text-sm border border-bv-border rounded-bv hover:bg-bv-hover text-bv-muted"
                 >
                   Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={async () => {
-                    await handleDeleteClient(deleteConfirm);
-                  }}
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => { await handleDeleteClient(deleteConfirm); }}
+                  className="px-4 py-2 text-sm font-medium rounded-bv bg-bv-danger-bg text-bv-danger border border-bv-danger/30 hover:bg-bv-danger hover:text-white"
                 >
                   Delete
-                </Button>
+                </button>
               </div>
             </div>
           </div>

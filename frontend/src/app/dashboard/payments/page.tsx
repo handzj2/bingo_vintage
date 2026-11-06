@@ -1,5 +1,9 @@
 'use client';
 
+import AllocationPreview from '@/features/payments/components/AllocationPreview';
+
+import toast from 'react-hot-toast';
+
 /**
  * Payments Page
  *
@@ -69,18 +73,18 @@ const clientName = (c: any) => c ? `${c.firstName || c.first_name || ''} ${c.las
 const loanNum = (p: any) => p.loan?.loanNumber || p.loan?.loan_number || `#${p.loanId || p.loan_id}`;
 
 const METHODS: Record<string, { label: string; icon: any; color: string; bg: string }> = {
-  CASH:          { label: 'Cash',          icon: Wallet,     color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200' },
-  Momo:          { label: 'MTN MoMo',      icon: Smartphone, color: 'text-yellow-700',  bg: 'bg-yellow-50 border-yellow-200'  },
-  BANK_TRANSFER: { label: 'Bank Transfer', icon: Building2,  color: 'text-blue-700',    bg: 'bg-blue-50 border-blue-200'      },
-  Airtelmoney:   { label: 'Airtel Money',  icon: CreditCard, color: 'text-red-700',     bg: 'bg-red-50 border-red-200'        },
+  CASH:          { label: 'Cash',          icon: Wallet,     color: 'text-bv-success',  bg: 'bg-bv-success-bg border-bv-border' },
+  Momo:          { label: 'MTN MoMo',      icon: Smartphone, color: 'text-bv-warning',  bg: 'bg-bv-warning-bg border-yellow-200'  },
+  BANK_TRANSFER: { label: 'Bank Transfer', icon: Building2,  color: 'text-bv-accent',    bg: 'bg-bv-info-bg border-blue-200'      },
+  Airtelmoney:   { label: 'Airtel Money',  icon: CreditCard, color: 'text-bv-danger',     bg: 'bg-bv-danger-bg border-bv-danger/30'        },
 };
 
 const STATUS_CFG: Record<string, { label: string; color: string; dot: string }> = {
-  COMPLETED:          { label: 'Completed',     color: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
-  PENDING:            { label: 'Pending',        color: 'bg-yellow-100 text-yellow-700',   dot: 'bg-yellow-400'  },
-  REVERSED:           { label: 'Reversed',       color: 'bg-gray-100 text-gray-500',       dot: 'bg-gray-400'    },
+  COMPLETED:          { label: 'Completed',     color: 'bg-bv-success-bg text-bv-success', dot: 'bg-bv-success' },
+  PENDING:            { label: 'Pending',        color: 'bg-bv-warning-bg text-bv-warning',   dot: 'bg-yellow-400'  },
+  REVERSED:           { label: 'Reversed',       color: 'bg-bv-hover text-bv-meta',       dot: 'bg-gray-400'    },
   REVERSAL_REQUESTED: { label: 'Rev. Requested', color: 'bg-orange-100 text-orange-700',   dot: 'bg-orange-400'  },
-  FAILED:             { label: 'Failed',         color: 'bg-red-100 text-red-700',         dot: 'bg-red-500'     },
+  FAILED:             { label: 'Failed',         color: 'bg-bv-danger-bg text-bv-danger',         dot: 'bg-bv-danger'     },
 };
 
 // ── Modal Shell ───────────────────────────────────────────────
@@ -88,14 +92,14 @@ function Modal({ title, subtitle, onClose, children, wide }: any) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className={`bg-white rounded-2xl shadow-2xl w-full ${wide ? 'max-w-2xl' : 'max-w-lg'} max-h-[92vh] overflow-y-auto flex flex-col`}>
-        <div className="flex items-start justify-between px-6 py-5 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl z-10">
+      <div className={`bg-bv-surface rounded-2xl shadow-2xl w-full ${wide ? 'max-w-2xl' : 'max-w-lg'} max-h-[92vh] overflow-y-auto flex flex-col`}>
+        <div className="flex items-start justify-between px-6 py-5 border-b border-bv-border sticky top-0 bg-bv-surface rounded-t-2xl z-10">
           <div>
-            <h3 className="text-lg font-black text-gray-900">{title}</h3>
-            {subtitle && <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
+            <h3 className="text-lg font-black text-bv-text">{title}</h3>
+            {subtitle && <p className="text-sm text-bv-meta mt-0.5">{subtitle}</p>}
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition-colors ml-4 flex-shrink-0">
-            <X className="w-4 h-4 text-gray-500" />
+          <button onClick={onClose} className="p-2 hover:bg-bv-hover rounded-xl transition-colors ml-4 flex-shrink-0">
+            <X className="w-4 h-4 text-bv-meta" />
           </button>
         </div>
         <div className="p-6 flex-1">{children}</div>
@@ -135,7 +139,8 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
     apiFetch('/cash-drawers?status=open')
       .then(r => {
         const list = Array.isArray(r) ? r : (Array.isArray(r?.data) ? r.data : []);
-        setDrawers(list);
+        // Null-safe: only keep drawers with a valid id
+        setDrawers(list.filter((d: any) => d && d.id != null));
       })
       .catch(() => setDrawers([]));
   }, []);
@@ -222,9 +227,12 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
         }),
       });
       setSuccess(result);
+      toast.success('Payment recorded');
       setTimeout(() => { onSaved(); }, 2200);
     } catch (e: any) {
-      setError(e.message || 'Failed to record payment');
+      const msg = e.message || 'Failed to record payment';
+      setError(msg);
+      toast.error(msg);
     } finally { setSubmitting(false); }
   };
 
@@ -232,19 +240,19 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
   if (success) return (
     <Modal title="" onClose={onClose}>
       <div className="py-8 text-center">
-        <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <BadgeCheck className="w-10 h-10 text-emerald-600" />
+        <div className="w-20 h-20 bg-bv-success-bg rounded-full flex items-center justify-center mx-auto mb-4">
+          <BadgeCheck className="w-10 h-10 text-bv-success" />
         </div>
-        <h3 className="text-xl font-black text-gray-900">Payment Recorded!</h3>
-        <p className="text-sm text-gray-500 mt-1">Transaction saved successfully</p>
-        <div className="mt-5 bg-gray-50 rounded-2xl p-4 text-left space-y-2.5">
+        <h3 className="text-lg font-semibold text-bv-text">Payment recorded</h3>
+        <p className="text-sm text-bv-muted mt-1">Receipt saved. Balance updated on the loan.</p>
+        <div className="mt-5 bg-bv-hover rounded-2xl p-4 text-left space-y-2.5">
           {[
-            ['Receipt', <span key="r" className="font-mono font-black text-gray-900">{success.receiptNumber}</span>],
-            ['Amount', <span key="a" className="font-black text-emerald-700">{fmt(form.amount)}</span>],
-            ['New Balance', <span key="b" className="font-black text-gray-900">{fmt(success.newBalance)}</span>],
+            ['Receipt', <span key="r" className="font-mono font-black text-bv-text">{success.receiptNumber}</span>],
+            ['Amount', <span key="a" className="font-black text-bv-success">{fmt(form.amount)}</span>],
+            ['New Balance', <span key="b" className="font-black text-bv-text">{fmt(success.newBalance)}</span>],
           ].map(([label, val]: any) => (
             <div key={label} className="flex justify-between items-center text-sm">
-              <span className="text-gray-500">{label}</span>{val}
+              <span className="text-bv-meta">{label}</span>{val}
             </div>
           ))}
         </div>
@@ -254,8 +262,8 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
             <ReceiptButton paymentId={success.payment.id} variant="primary" />
           )}
           <button onClick={onClose}
-            className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-black transition-all">
-            Done ✓
+            className="flex-1 py-2.5 bg-bv-action hover:bg-bv-action-hover text-white rounded-lg text-sm font-medium">
+            Done
           </button>
         </div>
       </div>
@@ -263,19 +271,19 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
   );
 
   return (
-    <Modal title="Record Payment" subtitle="Enter payment details below" onClose={onClose} wide>
+    <Modal title="Record payment" subtitle="Select client and loan, then enter amount and method. Cash requires an open drawer." onClose={onClose} wide>
       {/* Step tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl">
+      <div className="flex gap-1 mb-6 bg-bv-hover p-1 rounded-xl">
         {[{ n: 1, label: '1. Select Client' }, { n: 2, label: '2. Payment Details' }].map(({ n, label }) => (
           <button key={n} onClick={() => n === 1 && setStep(1)}
-            className={`flex-1 py-2 rounded-lg text-xs font-black transition-all ${step === n ? 'bg-white shadow text-blue-700' : 'text-gray-400'}`}>
+            className={`flex-1 py-2 rounded-lg text-xs font-black transition-all ${step === n ? 'bg-bv-surface shadow text-bv-accent' : 'text-bv-meta'}`}>
             {step > n ? `✓ ${label.slice(3)}` : label}
           </button>
         ))}
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl mb-4">
+        <div className="flex items-center gap-2 bg-bv-danger-bg border border-bv-danger/30 text-bv-danger text-sm px-4 py-3 rounded-xl mb-4">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
         </div>
       )}
@@ -284,43 +292,43 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
       {step === 1 && (
         <div className="space-y-4">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input className="w-full pl-9 pr-4 py-3 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-bv-meta" />
+            <input className="w-full pl-9 pr-4 py-3 text-sm border border-bv-border rounded-xl focus:outline-none focus:ring-2 focus:ring-bv-action"
               placeholder="Search by name or phone..." value={clientSearch}
               onChange={e => setClientSearch(e.target.value)} autoFocus />
           </div>
-          <div className="max-h-72 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50">
+          <div className="max-h-72 overflow-y-auto border border-bv-border rounded-xl divide-y divide-gray-50">
             {loading ? (
               <div className="py-12 flex flex-col items-center gap-2">
-                <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-                <p className="text-sm text-gray-400">Loading clients...</p>
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-bv-border border-t-bv-action" role="status" />
+                <p className="text-sm font-semibold text-bv-text">Bingo Vintage <span className="text-bv-meta font-normal">· loading</span></p>
               </div>
             ) : filteredClients.length === 0 ? (
-              <p className="py-12 text-center text-sm text-gray-400">{clientSearch ? 'No clients match' : 'No clients with active loans'}</p>
+              <p className="py-12 text-center text-sm text-bv-meta">{clientSearch ? 'No clients match' : 'No clients with active loans'}</p>
             ) : filteredClients.map(c => {
               const loans = allLoans.filter(l => l.client?.id === c.id);
               const bal = loans.reduce((s: number, l: any) => s + Number(l.balance || 0), 0);
               return (
                 <button key={c.id} onClick={() => { setSelectedClient(c); setStep(2); }}
-                  className="w-full text-left px-4 py-4 hover:bg-blue-50 transition-colors flex items-center justify-between">
+                  className="w-full text-left px-4 py-4 hover:bg-bv-info-bg transition-colors flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-black text-sm">
                       {(c.firstName || c.first_name || '?').charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <p className="font-bold text-gray-900">{clientName(c)}</p>
-                      <p className="text-xs text-gray-400">{c.phone} · {loans.length} loan{loans.length !== 1 ? 's' : ''}</p>
+                      <p className="font-bold text-bv-text">{clientName(c)}</p>
+                      <p className="text-xs text-bv-meta">{c.phone} · {loans.length} loan{loans.length !== 1 ? 's' : ''}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs font-black text-red-600">{fmt(bal)}</p>
-                    <p className="text-xs text-gray-400">balance</p>
+                    <p className="text-xs font-black text-bv-danger">{fmt(bal)}</p>
+                    <p className="text-xs text-bv-meta">balance</p>
                   </div>
                 </button>
               );
             })}
           </div>
-          <button onClick={onClose} className="w-full py-3 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancel</button>
+          <button onClick={onClose} className="w-full py-3 border border-bv-border rounded-xl text-sm font-semibold text-bv-muted hover:bg-bv-hover">Cancel</button>
         </div>
       )}
 
@@ -328,52 +336,52 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
       {step === 2 && selectedClient && (
         <div className="space-y-5">
           {/* Client bar */}
-          <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+          <div className="flex items-center justify-between bg-bv-info-bg border border-blue-100 rounded-xl px-4 py-3">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-black text-sm">
+              <div className="w-9 h-9 rounded-full bg-bv-action flex items-center justify-center text-white font-black text-sm">
                 {(selectedClient.firstName || selectedClient.first_name || '?').charAt(0).toUpperCase()}
               </div>
               <div>
-                <p className="font-black text-gray-900 text-sm">{clientName(selectedClient)}</p>
-                <p className="text-xs text-gray-500">{selectedClient.phone}</p>
+                <p className="font-black text-bv-text text-sm">{clientName(selectedClient)}</p>
+                <p className="text-xs text-bv-meta">{selectedClient.phone}</p>
               </div>
             </div>
             <button onClick={() => { setSelectedClient(null); setSelectedLoan(null); setStep(1); }}
-              className="text-xs text-blue-600 font-bold hover:underline">Change</button>
+              className="text-xs text-bv-accent font-bold hover:underline">Change</button>
           </div>
 
           {/* Loan picker */}
           <div>
-            <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Select Loan *</label>
+            <label className="block text-xs font-black text-bv-meta uppercase tracking-wider mb-2">Select Loan *</label>
             <div className="space-y-2">
               {clientLoans.map((l: any) => {
                 const sel = selectedLoan?.id === l.id;
                 return (
                   <button key={l.id} onClick={() => setSelectedLoan(sel ? null : l)}
-                    className={`w-full text-left px-4 py-3.5 rounded-xl border-2 transition-all ${sel ? 'border-blue-600 bg-blue-50' : 'border-gray-100 hover:border-gray-200'}`}>
+                    className={`w-full text-left px-4 py-3.5 rounded-xl border-2 transition-all ${sel ? 'border-blue-600 bg-bv-info-bg' : 'border-bv-border hover:border-bv-border'}`}>
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="flex items-center gap-2">
-                          <p className="font-black text-gray-900 text-sm">{l.loanNumber || l.loan_number}</p>
-                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${l.loanType === 'bike' ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                          <p className="font-black text-bv-text text-sm">{l.loanNumber || l.loan_number}</p>
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${l.loanType === 'bike' ? 'bg-orange-100 text-orange-700' : 'bg-bv-success-bg text-bv-success'}`}>
                             {l.loanType === 'bike' ? '🏍 Bike' : '💵 Cash'}
                           </span>
                         </div>
-                        <p className="text-xs text-gray-500 mt-0.5">Balance: <span className="font-black text-red-600">{fmt(l.balance)}</span></p>
+                        <p className="text-xs text-bv-meta mt-0.5">Balance: <span className="font-black text-bv-danger">{fmt(l.balance)}</span></p>
                       </div>
-                      <div className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${sel ? 'border-blue-600 bg-blue-600' : 'border-gray-300'}`}>
-                        {sel && <div className="w-2 h-2 bg-white rounded-full" />}
+                      <div className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${sel ? 'border-blue-600 bg-bv-action' : 'border-bv-border'}`}>
+                        {sel && <div className="w-2 h-2 bg-bv-surface rounded-full" />}
                       </div>
                     </div>
                     {sel && nextDue && (
                       <div className="mt-3 pt-3 border-t border-blue-200 space-y-2">
                         <div className="flex justify-between text-xs">
-                          <span className="text-blue-600 font-semibold">Next: Instalment #{nextDue.installmentNumber}</span>
-                          <span className="font-black text-blue-700">{fmt(suggestedAmount)} remaining</span>
+                          <span className="text-bv-accent font-semibold">Next: Instalment #{nextDue.installmentNumber}</span>
+                          <span className="font-black text-bv-accent">{fmt(suggestedAmount)} remaining</span>
                         </div>
                         {nextDue.dueDate && <p className="text-xs text-blue-500">Due: {fmtDate(nextDue.dueDate)}</p>}
                         <button onClick={e => { e.stopPropagation(); setForm(f => ({ ...f, amount: String(suggestedAmount) })); }}
-                          className="w-full py-1.5 bg-blue-600 text-white rounded-lg text-xs font-black hover:bg-blue-700 transition-colors">
+                          className="w-full py-1.5 bg-bv-action text-white rounded-lg text-xs font-black hover:bg-bv-action-hover transition-colors">
                           Use {fmt(suggestedAmount)} (suggested)
                         </button>
                       </div>
@@ -386,23 +394,33 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
 
           {/* Amount */}
           <div>
-            <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Amount (UGX) *</label>
+            <label className="block text-xs font-black text-bv-meta uppercase tracking-wider mb-2">Amount (UGX) *</label>
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">UGX</span>
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-bv-meta font-bold text-sm">UGX</span>
               <input type="number" min="0"
-                className="w-full border-2 border-gray-200 rounded-xl pl-14 pr-4 py-3.5 text-2xl font-black focus:outline-none focus:border-blue-500 transition-colors"
+                className="w-full border-2 border-bv-border rounded-xl pl-14 pr-4 py-3.5 text-2xl font-black focus:outline-none focus:border-bv-action transition-colors"
                 placeholder="0" value={form.amount}
                 onChange={e => setForm({ ...form, amount: e.target.value })} />
             </div>
-            {selectedLoan && suggestedAmount > 0 && String(Math.round(Number(form.amount))) !== String(suggestedAmount) && (
+            
+
+          {selectedLoan && (
+            <AllocationPreview
+              loanId={selectedLoan.id}
+              amount={form.amount}
+              apiBase={typeof API_URL !== 'undefined' ? API_URL : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api')}
+              authToken={typeof window !== 'undefined' ? localStorage.getItem('token') || localStorage.getItem('access_token') || localStorage.getItem('accessToken') : null}
+            />
+          )}
+{selectedLoan && suggestedAmount > 0 && String(Math.round(Number(form.amount))) !== String(suggestedAmount) && (
               <button type="button"
                 onClick={() => setForm(f => ({ ...f, amount: String(suggestedAmount) }))}
-                className="mt-1.5 flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-200 rounded-lg text-xs font-bold text-blue-700 hover:bg-blue-100 transition-colors">
+                className="mt-1.5 flex items-center gap-1.5 px-3 py-1 bg-bv-info-bg border border-blue-200 rounded-lg text-xs font-bold text-bv-accent hover:bg-bv-info-bg transition-colors">
                 💡 Suggested: {fmt(suggestedAmount)} — click to apply
               </button>
             )}
             {selectedLoan && form.amount && Number(form.amount) > 0 && (
-              <p className={`text-xs mt-1.5 font-semibold ${Number(form.amount) > Number(selectedLoan.balance) ? 'text-orange-600' : 'text-emerald-600'}`}>
+              <p className={`text-xs mt-1.5 font-semibold ${Number(form.amount) > Number(selectedLoan.balance) ? 'text-bv-warning' : 'text-bv-success'}`}>
                 {Number(form.amount) > Number(selectedLoan.balance)
                   ? `⚠️ Exceeds balance by ${fmt(Number(form.amount) - Number(selectedLoan.balance))}`
                   : `✓ New balance: ${fmt(Number(selectedLoan.balance) - Number(form.amount))}`}
@@ -412,14 +430,14 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
 
           {/* Payment method */}
           <div>
-            <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Payment Method *</label>
+            <label className="block text-xs font-black text-bv-meta uppercase tracking-wider mb-2">Payment Method *</label>
             <div className="grid grid-cols-2 gap-2">
               {Object.entries(METHODS).map(([val, cfg]) => {
                 const Icon = cfg.icon;
                 const active = form.payment_method === val;
                 return (
                   <button key={val} onClick={() => setForm({ ...form, payment_method: val })}
-                    className={`flex items-center gap-2.5 px-3 py-3 rounded-xl border-2 text-sm font-bold transition-all ${active ? `${cfg.bg} ${cfg.color} border-current` : 'border-gray-100 text-gray-500 hover:border-gray-200'}`}>
+                    className={`flex items-center gap-2.5 px-3 py-3 rounded-xl border-2 text-sm font-bold transition-all ${active ? `${cfg.bg} ${cfg.color} border-current` : 'border-bv-border text-bv-meta hover:border-bv-border'}`}>
                     <Icon className="w-4 h-4 flex-shrink-0" />{cfg.label}
                   </button>
                 );
@@ -429,22 +447,22 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
 
           {/* Cash drawer — required for every payment method (business rule) */}
           <div>
-            <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Cash Drawer *</label>
+            <label className="block text-xs font-black text-bv-meta uppercase tracking-wider mb-2">Cash Drawer *</label>
             <select
               value={form.cash_drawer_id}
               onChange={e => setForm({ ...form, cash_drawer_id: e.target.value })}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-medium"
+              className="w-full border border-bv-border rounded-xl px-3 py-2.5 text-sm font-medium"
             >
               <option value="">Select an open drawer…</option>
               {drawers.map((d: any) => (
                 <option key={d.id} value={d.id}>
                   Drawer #{d.id}
-                  {d.user?.username ? ` — ${d.user.username}` : ''}
+                  {d.user?.username ? ` — ${d.user.username}` : d.user?.fullName ? ` — ${d.user.fullName}` : ''}
                 </option>
               ))}
             </select>
             {drawers.length === 0 && (
-              <p className="text-xs text-amber-600 mt-1">
+              <p className="text-xs text-bv-warning mt-1">
                 No open drawers found. Open a drawer first before recording this payment.
               </p>
             )}
@@ -453,58 +471,58 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
           {/* Date + Time */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Payment Date *</label>
+              <label className="block text-xs font-black text-bv-meta uppercase tracking-wider mb-2">Payment Date *</label>
               <input type="date"
-                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:border-blue-500"
+                className="w-full border-2 border-bv-border rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:border-bv-action"
                 value={form.payment_date} onChange={e => setForm({ ...form, payment_date: e.target.value })} />
             </div>
             <div>
-              <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Time</label>
+              <label className="block text-xs font-black text-bv-meta uppercase tracking-wider mb-2">Time</label>
               <input type="time"
-                className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:border-blue-500"
+                className="w-full border-2 border-bv-border rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:border-bv-action"
                 value={form.payment_time} onChange={e => setForm({ ...form, payment_time: e.target.value })} />
             </div>
           </div>
 
           {/* FIX 2: Receipt number — now optional */}
           <div>
-            <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-black text-bv-meta uppercase tracking-wider mb-2">
               Receipt Number
-              <span className="ml-1 text-gray-400 font-normal normal-case">(optional — auto-generated if blank)</span>
+              <span className="ml-1 text-bv-meta font-normal normal-case">(optional — auto-generated if blank)</span>
             </label>
             <input
-              className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm font-mono font-bold focus:outline-none focus:border-blue-500"
+              className="w-full border-2 border-bv-border rounded-xl px-4 py-2.5 text-sm font-mono font-bold focus:outline-none focus:border-bv-action"
               placeholder="Auto-generated if blank  e.g. BV-2026-A3F9C21B"
               value={form.receipt_number}
               onChange={e => setForm({ ...form, receipt_number: e.target.value })}
             />
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-bv-meta mt-1">
               Leave blank to auto-generate · or enter a physical receipt book number
             </p>
           </div>
 
           {/* Collected by */}
           <div>
-            <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Collected By</label>
-            <input className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500"
+            <label className="block text-xs font-black text-bv-meta uppercase tracking-wider mb-2">Collected By</label>
+            <input className="w-full border-2 border-bv-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-bv-action"
               placeholder="Staff name (optional)" value={form.collected_by}
               onChange={e => setForm({ ...form, collected_by: e.target.value })} />
           </div>
 
           {/* Notes */}
           <div>
-            <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Notes</label>
+            <label className="block text-xs font-black text-bv-meta uppercase tracking-wider mb-2">Notes</label>
             <textarea rows={2}
-              className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500 resize-none"
+              className="w-full border-2 border-bv-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-bv-action resize-none"
               placeholder="e.g. Week 3 instalment..." value={form.notes}
               onChange={e => setForm({ ...form, notes: e.target.value })} />
           </div>
 
           <div className="flex gap-3 pt-1">
             <button onClick={() => { setStep(1); setSelectedLoan(null); setLoanSchedule(null); }}
-              className="flex-1 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50">← Back</button>
+              className="flex-1 py-3 border-2 border-bv-border rounded-xl text-sm font-bold text-bv-muted hover:bg-bv-hover">← Back</button>
             <button onClick={handleSubmit} disabled={submitting || !selectedLoan || !form.amount || Number(form.amount) <= 0 || !form.cash_drawer_id}
-              className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl text-sm font-black flex items-center justify-center gap-2 transition-colors shadow-lg shadow-blue-200">
+              className="flex-1 py-3 bg-bv-action hover:bg-bv-action-hover disabled:opacity-40 text-white rounded-xl text-sm font-black flex items-center justify-center gap-2 transition-colors shadow-lg shadow-blue-200">
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
               {submitting ? 'Recording...' : 'Record Payment'}
             </button>
@@ -518,7 +536,7 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
 // ── Payment Detail Modal ──────────────────────────────────────
 function PaymentDetailModal({ payment, onClose, onReverse }: { payment: any; onClose: () => void; onReverse: () => void }) {
   const pm = payment.paymentMethod || payment.payment_method;
-  const method = METHODS[pm] || { label: pm, icon: Wallet, color: 'text-gray-600', bg: 'bg-gray-50 border-gray-200' };
+  const method = METHODS[pm] || { label: pm, icon: Wallet, color: 'text-bv-muted', bg: 'bg-bv-hover border-bv-border' };
   const Icon = method.icon;
   const isReversed = payment.status === 'REVERSED';
   const payDate = payment.paymentDate || payment.payment_date || payment.createdAt;
@@ -526,7 +544,7 @@ function PaymentDetailModal({ payment, onClose, onReverse }: { payment: any; onC
   const receipt = payment.receiptNumber || payment.receipt_number;
 
   const rows = [
-    ['Receipt Number', <span key="rn" className="font-mono font-black text-gray-900">{receipt}</span>],
+    ['Receipt Number', <span key="rn" className="font-mono font-black text-bv-text">{receipt}</span>],
     ['Loan', loanNum(payment)],
     ['Client', cn || '—'],
     ['Payment Method', <span key="pm" className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${method.bg} ${method.color}`}><Icon className="w-3.5 h-3.5" />{method.label}</span>],
@@ -536,7 +554,7 @@ function PaymentDetailModal({ payment, onClose, onReverse }: { payment: any; onC
     ['Notes', payment.notes || '—'],
     ...(isReversed ? [
       ['Reversed At', fmtDate(payment.reversedAt || payment.reversed_at)],
-      ['Reversal Reason', <span key="rr" className="text-red-600">{payment.reversalReason || payment.reversal_reason}</span>],
+      ['Reversal Reason', <span key="rr" className="text-bv-danger">{payment.reversalReason || payment.reversal_reason}</span>],
       ['Reversed By', payment.reversedBy || payment.reversed_by || '—'],
     ] : []),
   ];
@@ -544,19 +562,19 @@ function PaymentDetailModal({ payment, onClose, onReverse }: { payment: any; onC
   return (
     <Modal title="Transaction Detail" subtitle={`Receipt: ${receipt}`} onClose={onClose}>
       <div className="space-y-5">
-        <div className={`rounded-2xl p-6 text-center ${isReversed ? 'bg-gray-50' : 'bg-gradient-to-br from-emerald-50 to-green-100'}`}>
-          <p className={`text-4xl font-black tracking-tight ${isReversed ? 'line-through text-gray-400' : 'text-emerald-700'}`}>
+        <div className={`rounded-2xl p-6 text-center ${isReversed ? 'bg-bv-hover' : 'bg-bv-success-bg'}`}>
+          <p className={`text-4xl font-black tracking-tight ${isReversed ? 'line-through text-bv-meta' : 'text-bv-success'}`}>
             {fmt(payment.amount)}
           </p>
-          <p className="text-sm text-gray-500 mt-1">Payment Amount</p>
-          {isReversed && <span className="mt-2 inline-block px-3 py-1 bg-red-100 text-red-700 text-xs font-black rounded-full">REVERSED</span>}
+          <p className="text-sm text-bv-meta mt-1">Payment Amount</p>
+          {isReversed && <span className="mt-2 inline-block px-3 py-1 bg-bv-danger-bg text-bv-danger text-xs font-black rounded-full">REVERSED</span>}
         </div>
 
         <div className="space-y-0 divide-y divide-gray-50">
           {rows.map(([label, val]: any) => (
             <div key={String(label)} className="flex items-start justify-between gap-4 py-3">
-              <span className="text-xs font-bold text-gray-400 uppercase tracking-wide flex-shrink-0 pt-0.5 w-32">{label}</span>
-              <span className="text-sm text-gray-800 text-right flex-1">{val}</span>
+              <span className="text-xs font-bold text-bv-meta uppercase tracking-wide flex-shrink-0 pt-0.5 w-32">{label}</span>
+              <span className="text-sm text-bv-text text-right flex-1">{val}</span>
             </div>
           ))}
         </div>
@@ -607,7 +625,7 @@ function ReverseModal({ payment, onClose, onSaved, isAdmin }: {
         });
       }
       onSaved(); onClose();
-    } catch (e: any) { setError(e.message || 'Failed'); }
+    } catch (e: any) { const msg = e.message || 'Failed'; setError(msg); toast.error(msg); }
     finally { setLoading(false); }
   };
 
@@ -634,17 +652,17 @@ function ReverseModal({ payment, onClose, onSaved, isAdmin }: {
             Your request goes to admin for approval. The payment stays active until they approve it.
           </div>
         )}
-        {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-xl">{error}</p>}
+        {error && <p className="text-sm text-bv-danger bg-bv-danger-bg px-3 py-2 rounded-xl">{error}</p>}
         <div>
-          <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">
-            Reason * <span className="text-gray-400 font-normal normal-case">(min 10 characters)</span>
+          <label className="block text-xs font-black text-bv-meta uppercase tracking-wider mb-2">
+            Reason * <span className="text-bv-meta font-normal normal-case">(min 10 characters)</span>
           </label>
-          <textarea rows={3} className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-orange-400 resize-none"
+          <textarea rows={3} className="w-full border-2 border-bv-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-orange-400 resize-none"
             placeholder="Min 10 characters..." value={reason} onChange={e => setReason(e.target.value)} />
-          <p className="text-xs text-gray-400 mt-1">{reason.length}/10 min</p>
+          <p className="text-xs text-bv-meta mt-1">{reason.length}/10 min</p>
         </div>
         <div className="flex gap-3">
-          <button onClick={onClose} className="flex-1 py-3 border-2 border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50">Cancel</button>
+          <button onClick={onClose} className="flex-1 py-3 border-2 border-bv-border rounded-xl text-sm font-bold text-bv-muted hover:bg-bv-hover">Cancel</button>
           <button onClick={handle} disabled={loading || reason.trim().length < 10}
             className="flex-1 py-3 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white rounded-xl text-sm font-black transition-colors">
             {loading ? 'Processing...' : btnLabel}
@@ -672,6 +690,7 @@ function PaymentsPageInner() {
   // whatever page of `payments` happens to be loaded. See PAY-003.
   const [todaySummary, setTodaySummary] = useState<{ todayAmount: number; todayCount: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const searchParams = useSearchParams();
   const initialLoanId = searchParams.get('loanId') ? Number(searchParams.get('loanId')) : null;
   const [showRecord, setShowRecord] = useState(false);
@@ -687,6 +706,7 @@ function PaymentsPageInner() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
     try {
       // Backend is cursor-paginated: { items, nextCursor, count }.
       // Default limit is 50 — request the hard-cap max (100) so the
@@ -710,7 +730,11 @@ function PaymentsPageInner() {
           todayCount:  Number(summary?.todayCount  ?? 0),
         });
       } catch (e) { console.error('Failed to load payment summary:', e); }
-    } catch (e) { console.error(e); }
+    } catch (e: any) {
+      console.error(e);
+      setLoadError(e?.message || 'Could not load payments. Check connection and try again.');
+      setPayments([]);
+    }
     finally { setLoading(false); }
   }, []);
 
@@ -751,106 +775,126 @@ function PaymentsPageInner() {
   const paginated  = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
-      <div className="max-w-7xl mx-auto space-y-5">
+    <div className="min-h-screen bg-bv-hover p-4 sm:p-6">
+      <div className="max-w-bv mx-auto space-y-5">
 
-        {/* Header */}
-        <div className="flex items-center justify-between">
+        {/* Header — operational, not marketing */}
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-bv-border pb-4">
           <div>
-            <h1 className="text-2xl font-black text-gray-900 flex items-center gap-2.5">
-              <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center">
-                <Banknote className="w-5 h-5 text-white" />
-              </div>
-              Payments
-            </h1>
-            <p className="text-sm text-gray-500 mt-0.5">{stats.count} transactions · {fmt(stats.total)} total collected</p>
+            <h1 className="text-lg font-semibold text-bv-text">Payments</h1>
+            <p className="text-sm text-bv-muted mt-0.5">
+              Record collections and review receipts. Today&apos;s total excludes reversed payments (Kampala business day on the server).
+            </p>
           </div>
-          <div className="flex gap-2">
-            <button onClick={load} className="p-2.5 border border-gray-200 bg-white rounded-xl hover:bg-gray-50 transition-colors">
-              <RefreshCw className={`w-4 h-4 text-gray-500 ${loading ? 'animate-spin' : ''}`} />
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={load} disabled={loading}
+              className="text-sm text-bv-muted border border-bv-border px-3 py-1.5 rounded hover:bg-bv-hover disabled:opacity-50">
+              {loading ? 'Refreshing…' : 'Refresh'}
             </button>
-            <button onClick={() => setShowRecord(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-black shadow-lg shadow-blue-200 transition-colors">
-              <Plus className="w-4 h-4" /> Record Payment
+            <button type="button" onClick={() => setShowRecord(true)}
+              className="text-sm font-medium text-white bg-bv-action px-3 py-1.5 rounded hover:bg-bv-action-hover">
+              Record payment
             </button>
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[
-            { label: 'Total Collected', value: fmt(stats.total), icon: TrendingUp, color: 'text-blue-600',    bg: 'bg-blue-50'    },
-            { label: 'Collected Today', value: fmt(stats.today), icon: Calendar,   color: 'text-emerald-600', bg: 'bg-emerald-50' },
-            { label: 'Transactions',   value: stats.count,       icon: Receipt,    color: 'text-violet-600',  bg: 'bg-violet-50'  },
-            { label: 'Reversed',       value: stats.reversed,    icon: RotateCcw,  color: 'text-orange-600',  bg: 'bg-orange-50'  },
-          ].map(({ label, value, icon: Icon, color, bg }) => (
-            <div key={label} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{label}</span>
-                <div className={`w-8 h-8 ${bg} rounded-lg flex items-center justify-center`}>
-                  <Icon className={`w-4 h-4 ${color}`} />
-                </div>
-              </div>
-              <p className={`text-xl font-black ${color}`}>{value}</p>
-            </div>
-          ))}
+        {/* Figures — hierarchy, not four equal colourful cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm border border-bv-border rounded-md p-4 bg-bv-surface">
+          <div>
+            <p className="text-xs text-bv-muted">Collected today</p>
+            <p className="text-2xl font-semibold tabular-nums text-bv-text">{fmt(stats.today)}</p>
+            <p className="text-xs text-bv-meta">{todaySummary?.todayCount ?? '—'} payment(s) · from server summary</p>
+          </div>
+          <div>
+            <p className="text-xs text-bv-muted">In this list (non-reversed)</p>
+            <p className="text-xl font-semibold tabular-nums text-bv-text">{fmt(stats.total)}</p>
+            <p className="text-xs text-bv-meta">{stats.count} row(s) loaded (max 100)</p>
+          </div>
+          <div>
+            <p className="text-xs text-bv-muted">Reversed in list</p>
+            <p className="text-xl font-semibold tabular-nums text-bv-text">{stats.reversed}</p>
+            <p className="text-xs text-bv-meta">Shown struck through; not in today total</p>
+          </div>
         </div>
+
+        {loadError && (
+          <div className="border border-bv-danger/30 bg-bv-danger-bg text-bv-danger text-sm px-3 py-2 rounded-md flex flex-wrap items-center justify-between gap-2">
+            <span>{loadError}</span>
+            <button type="button" onClick={load} className="font-medium underline">Retry</button>
+          </div>
+        )}
 
         {/* Filters */}
-        <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+        <div className="bg-bv-surface border border-bv-border rounded-2xl p-4 shadow-sm">
           <div className="flex flex-wrap gap-3 items-center">
             <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-bv-meta" />
+              <input className="w-full pl-9 pr-4 py-2.5 text-sm border border-bv-border rounded-xl focus:outline-none focus:ring-2 focus:ring-bv-action"
                 placeholder="Receipt, loan, client..." value={search}
                 onChange={e => { setSearch(e.target.value); setPage(1); }} />
             </div>
-            <select className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium"
+            <select className="px-3 py-2.5 text-sm border border-bv-border rounded-xl focus:outline-none focus:ring-2 focus:ring-bv-action bg-bv-surface font-medium"
               value={methodFilter} onChange={e => { setMethodFilter(e.target.value); setPage(1); }}>
               <option value="ALL">All Methods</option>
               {Object.entries(METHODS).map(([v, c]) => <option key={v} value={v}>{c.label}</option>)}
             </select>
-            <select className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium"
+            <select className="px-3 py-2.5 text-sm border border-bv-border rounded-xl focus:outline-none focus:ring-2 focus:ring-bv-action bg-bv-surface font-medium"
               value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}>
               <option value="ALL">All Status</option>
               {Object.entries(STATUS_CFG).map(([v, c]) => <option key={v} value={v}>{c.label}</option>)}
             </select>
             <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-gray-400" />
-              <input type="date" className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              <Calendar className="w-4 h-4 text-bv-meta" />
+              <input type="date" className="px-3 py-2.5 text-sm border border-bv-border rounded-xl focus:outline-none focus:ring-2 focus:ring-bv-action"
                 value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} />
-              <span className="text-gray-400">—</span>
-              <input type="date" className="px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              <span className="text-bv-meta">—</span>
+              <input type="date" className="px-3 py-2.5 text-sm border border-bv-border rounded-xl focus:outline-none focus:ring-2 focus:ring-bv-action"
                 value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} />
             </div>
             {(search || methodFilter !== 'ALL' || statusFilter !== 'ALL' || dateFrom || dateTo) && (
               <button onClick={() => { setSearch(''); setMethodFilter('ALL'); setStatusFilter('ALL'); setDateFrom(''); setDateTo(''); setPage(1); }}
-                className="text-sm text-red-500 font-semibold hover:bg-red-50 px-3 py-2 rounded-xl transition-colors">Clear</button>
+                className="text-sm text-bv-danger font-semibold hover:bg-bv-danger-bg px-3 py-2 rounded-xl transition-colors">Clear</button>
             )}
-            <span className="text-xs text-gray-400 ml-auto">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
+            <span className="text-xs text-bv-meta ml-auto">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
           </div>
         </div>
 
         {/* Table */}
-        <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+        <div className="bg-bv-surface border border-bv-border rounded-2xl shadow-sm overflow-hidden">
           {loading ? (
             <div className="py-24 text-center">
-              <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-3" />
-              <p className="text-sm text-gray-400">Loading payments...</p>
+              <div className="h-10 w-10 animate-spin rounded-full border-[3px] border-bv-border border-t-bv-action mx-auto" role="status" aria-label="Bingo Vintage loading" />
+              <p className="text-sm font-semibold text-bv-text mt-3">Bingo Vintage <span className="text-bv-meta font-normal">· loading payments</span></p>
             </div>
           ) : paginated.length === 0 ? (
-            <div className="py-24 text-center">
-              <Banknote className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-              <p className="font-black text-gray-400 text-lg">No payments found</p>
-              <p className="text-sm text-gray-300 mt-1">Adjust your filters or record a new payment</p>
+            <div className="py-16 px-4 text-center max-w-md mx-auto">
+              <p className="text-sm font-semibold text-bv-text">No payments to show</p>
+              <p className="text-sm text-bv-muted mt-1">
+                {search || methodFilter !== 'ALL' || statusFilter !== 'ALL' || dateFrom || dateTo
+                  ? 'Nothing matches the current filters. Clear filters or change the date range.'
+                  : 'No payments loaded yet. Record a collection when a client pays, or refresh after posting.'}
+              </p>
+              <div className="mt-4 flex flex-wrap justify-center gap-3">
+                {(search || methodFilter !== 'ALL' || statusFilter !== 'ALL' || dateFrom || dateTo) && (
+                  <button type="button"
+                    onClick={() => { setSearch(''); setMethodFilter('ALL'); setStatusFilter('ALL'); setDateFrom(''); setDateTo(''); setPage(1); }}
+                    className="text-sm border border-bv-border px-3 py-1.5 rounded hover:bg-bv-hover">
+                    Clear filters
+                  </button>
+                )}
+                <button type="button" onClick={() => setShowRecord(true)}
+                  className="text-sm font-medium text-white bg-bv-action px-3 py-1.5 rounded hover:bg-bv-action-hover">
+                  Record payment
+                </button>
+              </div>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50">
+                  <tr className="border-b border-bv-border bg-bv-hover">
                     {['Receipt #', 'Client / Loan', 'Amount', 'Method', 'Date & Time', 'Collected By', 'Status', ''].map(h => (
-                      <th key={h} className="text-left px-4 py-3.5 text-xs font-black text-gray-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                      <th key={h} className="text-left px-4 py-3.5 text-xs font-black text-bv-meta uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -866,30 +910,30 @@ function PaymentsPageInner() {
 
                     return (
                       <tr key={p.id}
-                        className={`hover:bg-blue-50/30 transition-colors cursor-pointer ${isReversed ? 'opacity-50' : ''}`}
+                        className={`hover:bg-bv-info-bg/30 transition-colors cursor-pointer ${isReversed ? 'opacity-50' : ''}`}
                         onClick={() => setDetailPayment(p)}>
                         <td className="px-4 py-3.5">
-                          <span className="font-mono text-xs font-black bg-gray-100 text-gray-700 px-2.5 py-1 rounded-lg">{receipt}</span>
+                          <span className="font-mono text-xs font-black bg-bv-hover text-bv-muted px-2.5 py-1 rounded-lg">{receipt}</span>
                         </td>
                         <td className="px-4 py-3.5">
-                          <p className="font-bold text-gray-900">{cn || '—'}</p>
-                          <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+                          <p className="font-bold text-bv-text">{cn || '—'}</p>
+                          <p className="text-xs text-bv-meta mt-0.5 flex items-center gap-1">
                             <ArrowUpRight className="w-3 h-3" />{loanNum(p)}
                           </p>
                         </td>
                         <td className="px-4 py-3.5">
-                          <p className={`font-black text-base ${isReversed ? 'line-through text-gray-400' : 'text-gray-900'}`}>{fmt(p.amount)}</p>
+                          <p className={`font-black text-base ${isReversed ? 'line-through text-bv-meta' : 'text-bv-text'}`}>{fmt(p.amount)}</p>
                         </td>
                         <td className="px-4 py-3.5">
                           {method
                             ? <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${method.bg} ${method.color}`}><method.icon className="w-3 h-3" />{method.label}</span>
-                            : <span className="text-xs text-gray-500">{pm}</span>}
+                            : <span className="text-xs text-bv-meta">{pm}</span>}
                         </td>
                         <td className="px-4 py-3.5">
-                          <p className="font-semibold text-gray-800">{fmtDate(payDate)}</p>
-                          <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1"><Clock className="w-3 h-3" />{fmtTime(payDate)}</p>
+                          <p className="font-semibold text-bv-text">{fmtDate(payDate)}</p>
+                          <p className="text-xs text-bv-meta mt-0.5 flex items-center gap-1"><Clock className="w-3 h-3" />{fmtTime(payDate)}</p>
                         </td>
-                        <td className="px-4 py-3.5 text-sm text-gray-500">{p.collectedBy || p.collected_by || '—'}</td>
+                        <td className="px-4 py-3.5 text-sm text-bv-meta">{p.collectedBy || p.collected_by || '—'}</td>
                         <td className="px-4 py-3.5">
                           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${status.color}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />{status.label}
@@ -898,7 +942,7 @@ function PaymentsPageInner() {
                         <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
                           <div className="flex gap-1 items-center">
                             <button onClick={() => setDetailPayment(p)} title="View"
-                              className="p-1.5 hover:bg-blue-50 text-blue-500 rounded-lg transition-colors">
+                              className="p-1.5 hover:bg-bv-info-bg text-blue-500 rounded-lg transition-colors">
                               <Eye className="w-3.5 h-3.5" />
                             </button>
                             {/* FIX 4: Print Receipt icon button in table row */}
@@ -921,20 +965,20 @@ function PaymentsPageInner() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between bg-gray-50/50">
-              <p className="text-xs text-gray-400">
+            <div className="px-4 py-3 border-t border-bv-border flex items-center justify-between bg-bv-hover/50">
+              <p className="text-xs text-bv-meta">
                 {(page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, filtered.length)} of {filtered.length}
               </p>
               <div className="flex items-center gap-1">
                 <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                  className="p-1.5 rounded-lg hover:bg-gray-200 disabled:opacity-30"><ChevronLeft className="w-4 h-4" /></button>
+                  className="p-1.5 rounded-lg hover:bg-bv-border disabled:opacity-30"><ChevronLeft className="w-4 h-4" /></button>
                 {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                   const n = Math.max(1, Math.min(page - 2, totalPages - 4)) + i;
                   return <button key={n} onClick={() => setPage(n)}
-                    className={`w-8 h-8 rounded-lg text-xs font-bold ${n === page ? 'bg-blue-600 text-white' : 'hover:bg-gray-200 text-gray-600'}`}>{n}</button>;
+                    className={`w-8 h-8 rounded-lg text-xs font-bold ${n === page ? 'bg-bv-action text-white' : 'hover:bg-bv-border text-bv-muted'}`}>{n}</button>;
                 })}
                 <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                  className="p-1.5 rounded-lg hover:bg-gray-200 disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
+                  className="p-1.5 rounded-lg hover:bg-bv-border disabled:opacity-30"><ChevronRight className="w-4 h-4" /></button>
               </div>
             </div>
           )}

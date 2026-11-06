@@ -10,13 +10,17 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { Permissions } from '../auth/decorators/permissions.decorator';
+import { AuditService } from '../audit/audit.service';
 
 @ApiTags('expenses')
 @ApiBearerAuth()
 @Controller('expenses')
 @UseGuards(JwtAuthGuard, PermissionGuard)
 export class ExpensesController {
-  constructor(private readonly expensesService: ExpensesService) {}
+  constructor(
+    private readonly expensesService: ExpensesService,
+    private readonly auditService: AuditService,
+  ) {}
 
   // ── STATIC routes MUST come before parameterised :id routes ─────────────
   // BUG: original file registered GET :id before GET categories.
@@ -92,15 +96,39 @@ export class ExpensesController {
   @Patch(':id/approve')
   @RequirePermission('expense.approve')
   @ApiOperation({ summary: 'Approve an expense' })
-  approve(@Param('id', ParseIntPipe) id: number, @Request() req) {
-    return this.expensesService.approve(id, req.user);
+  async approve(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    const result = await this.expensesService.approve(id, req.user);
+    // Phase 3 — Area 6: audit expense approval
+    try {
+      await this.auditService.logAction({
+        action:      'EXPENSE_APPROVED',
+        tableName:   'expenses',
+        recordId:    id,
+        user:        req.user?.username ?? req.user?.email ?? String(req.user?.id),
+        description: `Expense #${id} approved by ${req.user?.username ?? req.user?.id}`,
+        tenantId:    req.user?.tenantId,
+      });
+    } catch (_) { /* non-fatal */ }
+    return result;
   }
 
   @Patch(':id/reject')
   @RequirePermission('expense.approve')
   @ApiOperation({ summary: 'Reject an expense' })
-  reject(@Param('id', ParseIntPipe) id: number, @Request() req) {
-    return this.expensesService.reject(id, req.user);
+  async reject(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    const result = await this.expensesService.reject(id, req.user);
+    // Phase 3 — Area 6: audit expense rejection
+    try {
+      await this.auditService.logAction({
+        action:      'EXPENSE_REJECTED',
+        tableName:   'expenses',
+        recordId:    id,
+        user:        req.user?.username ?? req.user?.email ?? String(req.user?.id),
+        description: `Expense #${id} rejected by ${req.user?.username ?? req.user?.id}`,
+        tenantId:    req.user?.tenantId,
+      });
+    } catch (_) { /* non-fatal */ }
+    return result;
   }
 
   @Delete(':id')

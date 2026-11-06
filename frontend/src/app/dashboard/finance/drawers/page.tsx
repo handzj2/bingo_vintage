@@ -32,7 +32,7 @@ export default function DrawerOverviewPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-3 text-gray-400">
+        <div className="flex flex-col items-center gap-3 text-bv-meta">
           <Loader2 className="w-8 h-8 animate-spin" />
           <p className="text-sm font-medium">Loading...</p>
         </div>
@@ -45,18 +45,15 @@ export default function DrawerOverviewPage() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="flex flex-col items-center gap-4 text-center max-w-sm">
-          <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center">
-            <ShieldAlert className="w-8 h-8 text-red-500" />
-          </div>
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Access Restricted</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              Drawer overview is available to managers and administrators only.
+            <h2 className="text-base font-semibold text-bv-text">Access restricted</h2>
+            <p className="text-sm text-bv-muted mt-1">
+              Drawer overview is for managers and administrators. Cashiers use My drawer.
             </p>
           </div>
           <button
             onClick={() => router.back()}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+            className="px-4 py-2 text-sm font-medium text-bv-muted bg-bv-surface border border-bv-border rounded-lg hover:bg-bv-hover"
           >
             Go back
           </button>
@@ -71,11 +68,11 @@ export default function DrawerOverviewPage() {
 
   // ── Main content ──────────────────────────────────────────────────────────
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div className="border-b border-gray-200 pb-4">
-        <h1 className="text-2xl font-bold text-gray-900">Cash Drawers</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Live balances and today&apos;s transaction counts for every cashier currently on shift.
+    <div className="p-4 sm:p-6 max-w-bv mx-auto space-y-6">
+      <div className="border-b border-bv-border pb-4">
+        <h1 className="text-lg font-semibold text-bv-text">Cash drawers</h1>
+        <p className="text-sm text-bv-muted mt-0.5">
+          Branch view of open drawers, floats and today&apos;s activity. Cashiers open their own drawer under My drawer.
         </p>
       </div>
       <DrawerOverview branchId={isBranchScoped ? user?.branchId : undefined} />

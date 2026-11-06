@@ -3,37 +3,10 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 /**
  * Migration 024 — Loan Products: extended fields
  *
- * loan_products already exists (confirmed live, 15 columns, currently
- * empty — no tenant has been given a product through any process yet).
- * This migration adds six new columns needed for the product-driven
- * roadmap, without renaming or removing anything already there.
+ * Adds: code, category, interest_type, calculation_method,
+ * requires_approval, sort_order.
  *
- *   code               — short stable identifier, distinct from the
- *                         human-editable `name`. Backfilled from
- *                         product_type for the (currently zero) existing
- *                         rows, since no rows exist this is a no-op today
- *                         but keeps the migration correct if it's ever run
- *                         against a database that already has data.
- *   category           — groups products for future cross-product rules
- *                         (e.g. "a Side Loan requires an active loan in
- *                         the cash category") without hardcoding any
- *                         specific product's name or id in that rule.
- *   interest_type      — FLAT / REDUCING. Declared now; only FLAT has a
- *                         real calculation anywhere in this codebase.
- *                         Enabling REDUCING requires its own approved
- *                         business rules and a new calculation
- *                         implementation — not part of this migration.
- *   calculation_method — free-text slot for how a product's schedule is
- *                         actually computed (e.g. 'monthly_flat',
- *                         'weekly_flat') — lets LoansService resolve
- *                         behavior from data instead of branching on
- *                         product_type.
- *   requires_approval  — whether loans of this product need an explicit
- *                         approval step before disbursement. Defaults to
- *                         true, matching every existing loan-creation
- *                         path's current behavior (all loans currently
- *                         start PENDING_APPROVAL).
- *   sort_order         — display ordering for product-selection UIs.
+ * Backfill uses loan_type (foundation schema column), not product_type.
  */
 export class LoanProductExtendedFields1700000000024 implements MigrationInterface {
   name = 'LoanProductExtendedFields1700000000024';
@@ -57,7 +30,7 @@ export class LoanProductExtendedFields1700000000024 implements MigrationInterfac
         END IF;
       END $$;
     `);
-    await queryRunner.query(`UPDATE loan_products SET code = product_type::text WHERE code IS NULL;`);
+    await queryRunner.query(`UPDATE loan_products SET code = loan_type::text WHERE code IS NULL;`);
 
     await queryRunner.query(`
       DO $$ BEGIN
@@ -69,7 +42,7 @@ export class LoanProductExtendedFields1700000000024 implements MigrationInterfac
         END IF;
       END $$;
     `);
-    await queryRunner.query(`UPDATE loan_products SET category = product_type::text WHERE category IS NULL;`);
+    await queryRunner.query(`UPDATE loan_products SET category = loan_type::text WHERE category IS NULL;`);
 
     await queryRunner.query(`
       DO $$ BEGIN
@@ -94,7 +67,7 @@ export class LoanProductExtendedFields1700000000024 implements MigrationInterfac
     `);
     await queryRunner.query(`
       UPDATE loan_products SET calculation_method =
-        CASE WHEN product_type = 'bike' THEN 'weekly_flat' ELSE 'monthly_flat' END
+        CASE WHEN loan_type = 'bike' THEN 'weekly_flat' ELSE 'monthly_flat' END
       WHERE calculation_method IS NULL;
     `);
 

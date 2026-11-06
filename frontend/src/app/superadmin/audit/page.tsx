@@ -39,7 +39,7 @@ export default function AuditLogsPage() {
   return (
     <div className="p-8">
       <h1 className="text-2xl font-black text-white mb-1">Audit Logs</h1>
-      <p className="text-gray-400 text-sm mb-6">{total.toLocaleString()} total entries across all tenants</p>
+      <p className="text-bv-meta text-sm mb-6">{total.toLocaleString()} total entries across all tenants</p>
 
       {error && (
         <div className="mb-4 p-4 bg-red-900/30 border border-red-700 rounded-xl text-red-300 text-sm">{error}</div>
@@ -47,10 +47,10 @@ export default function AuditLogsPage() {
 
       <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="border-b border-gray-700 bg-gray-900/50">
+          <thead className="border-b border-gray-700 bg-bv-action/50">
             <tr>
               {['Action', 'Actor', 'Resource', 'Description', 'Tenant', 'Time'].map(h => (
-                <th key={h} className="text-left py-3 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">{h}</th>
+                <th key={h} className="text-left py-3 px-4 text-xs font-bold text-bv-meta uppercase tracking-wider">{h}</th>
               ))}
             </tr>
           </thead>
@@ -64,18 +64,18 @@ export default function AuditLogsPage() {
                   return (
                     <tr key={l.id ?? i} className="hover:bg-gray-700/30 transition-colors">
                       <td className="py-3 px-4">
-                        <span className={`px-2 py-0.5 rounded text-xs font-bold font-mono ${ACTION_COLORS[action] ?? 'bg-gray-700 text-gray-300'}`}>
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold font-mono ${ACTION_COLORS[action] ?? 'bg-gray-700 text-bv-meta'}`}>
                           {action || l.action}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-gray-300 text-xs">{l.user ?? l.username ?? '—'}</td>
-                      <td className="py-3 px-4 text-gray-400 text-xs font-mono">
+                      <td className="py-3 px-4 text-bv-meta text-xs">{l.user ?? l.username ?? '—'}</td>
+                      <td className="py-3 px-4 text-bv-meta text-xs font-mono">
                         {l.tableName ?? l.table_name ?? '—'}
                         {(l.recordId ?? l.record_id) ? ` #${l.recordId ?? l.record_id}` : ''}
                       </td>
-                      <td className="py-3 px-4 text-gray-300 text-xs max-w-xs truncate">{l.description ?? '—'}</td>
-                      <td className="py-3 px-4 text-gray-500 text-xs">{l.tenantId ?? l.tenant_id ?? '—'}</td>
-                      <td className="py-3 px-4 text-xs text-gray-500 whitespace-nowrap">
+                      <td className="py-3 px-4 text-bv-meta text-xs max-w-xs truncate">{l.description ?? '—'}</td>
+                      <td className="py-3 px-4 text-bv-meta text-xs">{l.tenantId ?? l.tenant_id ?? '—'}</td>
+                      <td className="py-3 px-4 text-xs text-bv-meta whitespace-nowrap">
                         {new Date(l.createdAt ?? l.created_at).toLocaleString()}
                       </td>
                     </tr>
@@ -85,13 +85,13 @@ export default function AuditLogsPage() {
           </tbody>
         </table>
         {!loading && logs.length === 0 && (
-          <div className="text-center text-gray-500 py-16">No audit logs found</div>
+          <div className="text-center text-bv-meta py-16">No audit logs found</div>
         )}
       </div>
 
       {/* Pagination */}
       <div className="flex gap-3 mt-5 items-center justify-between">
-        <span className="text-sm text-gray-400">
+        <span className="text-sm text-bv-meta">
           Page {page} of {totalPages} · {total.toLocaleString()} entries
         </span>
         <div className="flex gap-2">

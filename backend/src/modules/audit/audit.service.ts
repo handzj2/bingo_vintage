@@ -13,6 +13,7 @@ interface LogActionParams {
   oldValues?: any;
   newValues?: any;
   metadata?: any;  // ✅ Fixed: Supports administrative reversal reasons
+  tenantId?: number; // Phase 3: required for all tenant-scoped audit events
 }
 
 @Injectable()
@@ -45,7 +46,9 @@ export class AuditService {
       description: params.description,
       oldValues: typeof params.oldValues === 'string' ? params.oldValues : JSON.stringify(params.oldValues),
       newValues: typeof params.newValues === 'string' ? params.newValues : JSON.stringify(params.newValues),
-      metadata: params.metadata ? JSON.stringify(params.metadata) : null, // ✅ Store metadata if provided
+      metadata: params.metadata ? JSON.stringify(params.metadata) : null,
+      // Phase 3: persist tenantId on every audit record for tenant-scoped log filtering
+      tenantId: params.tenantId ?? null,
     });
     return await this.auditRepo.save(entry);
   }

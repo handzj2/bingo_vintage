@@ -29,6 +29,7 @@ Thumbs.db
 # IDEbackend/.env
 backend/.env.railway
 frontend/.env.local
+frontend/.env.railway
 
 backend/dist/
 frontend/.next/

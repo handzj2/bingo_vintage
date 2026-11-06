@@ -205,8 +205,8 @@ function RecordCard({ rec }: { rec: any }) {
   const pct = rec.totalAmount > 0 ? Math.round((rec.totalPaid / rec.totalAmount) * 100) : 0;
 
   return (
-    <div className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
-      rec.status === 'COMPLETED' ? 'border-emerald-200' : 'border-gray-100'
+    <div className={`bg-bv-surface rounded-2xl border shadow-sm overflow-hidden ${
+      rec.status === 'COMPLETED' ? 'border-emerald-200' : 'border-bv-border'
     }`}>
       <button
         className="w-full flex items-center gap-3 px-4 py-3.5 text-left"
@@ -217,33 +217,33 @@ function RecordCard({ rec }: { rec: any }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-black text-gray-900 text-sm">{rec.clientName || '—'}</p>
+            <p className="font-black text-bv-text text-sm">{rec.clientName || '—'}</p>
             <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${
-              rec.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
+              rec.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' : 'bg-bv-info-bg text-bv-accent'
             }`}>{rec.status}</span>
           </div>
-          <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400 mt-0.5">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-bv-meta mt-0.5">
             {rec.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{rec.phone}</span>}
             {rec.plate && <span className="font-mono bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded">{rec.plate}</span>}
             <span>{fmt(rec.totalAmount)}</span>
             {rec.termWeeks && <span>{rec.termWeeks}wk</span>}
-            <span className="text-gray-300">·</span>
+            <span className="text-bv-meta">·</span>
             <span>{rec._paymentCount} payment rows</span>
           </div>
         </div>
-        {open ? <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
-               : <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+        {open ? <ChevronUp className="w-4 h-4 text-bv-meta flex-shrink-0" />
+               : <ChevronDown className="w-4 h-4 text-bv-meta flex-shrink-0" />}
       </button>
 
       {/* Progress */}
       <div className="px-4 pb-3">
-        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-bv-hover rounded-full overflow-hidden">
           <div
             className="h-full rounded-full transition-all"
             style={{ width: `${pct}%`, background: pct >= 100 ? '#10b981' : '#3b82f6' }}
           />
         </div>
-        <div className="flex justify-between text-xs text-gray-400 mt-1">
+        <div className="flex justify-between text-xs text-bv-meta mt-1">
           <span>{fmt(rec.totalPaid)} paid</span>
           <span className="font-semibold">{pct}%</span>
           <span>{fmt(rec.balance)} left</span>
@@ -266,49 +266,49 @@ function RecordCard({ rec }: { rec: any }) {
               ['Balance',      fmt(rec.balance)],
               ['Area/Stage',   rec.address],
             ] as [string,string][]).filter(([, v]) => v && v !== 'UGX 0').map(([label, val]) => (
-              <div key={label} className="bg-gray-50 rounded-xl p-2">
-                <p className="text-gray-400 text-xs">{label}</p>
-                <p className="font-semibold text-gray-800 truncate text-xs">{val}</p>
+              <div key={label} className="bg-bv-hover rounded-xl p-2">
+                <p className="text-bv-meta text-xs">{label}</p>
+                <p className="font-semibold text-bv-text truncate text-xs">{val}</p>
               </div>
             ))}
           </div>
 
           {rec.guarantors?.length > 0 && (
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
-              <p className="text-xs font-bold text-blue-700 mb-1">Guarantors</p>
+            <div className="bg-bv-info-bg border border-blue-100 rounded-xl p-3">
+              <p className="text-xs font-bold text-bv-accent mb-1">Guarantors</p>
               {rec.guarantors.map((g: string, i: number) => (
-                <p key={i} className="text-xs text-blue-600">{g}</p>
+                <p key={i} className="text-xs text-bv-accent">{g}</p>
               ))}
             </div>
           )}
 
           {rec.payments?.length > 0 && (
             <div>
-              <p className="text-xs font-bold text-gray-600 mb-2">
+              <p className="text-xs font-bold text-bv-muted mb-2">
                 Payment entries ({rec.payments.length})
               </p>
-              <div className="max-h-44 overflow-y-auto rounded-xl border border-gray-100">
+              <div className="max-h-44 overflow-y-auto rounded-xl border border-bv-border">
                 <table className="w-full text-xs">
-                  <thead className="bg-gray-50 sticky top-0">
+                  <thead className="bg-bv-hover sticky top-0">
                     <tr>
-                      <th className="px-3 py-2 text-left text-gray-500 font-semibold">Date</th>
-                      <th className="px-3 py-2 text-right text-gray-500 font-semibold">Paid</th>
-                      <th className="px-3 py-2 text-right text-gray-500 font-semibold">Fine</th>
-                      <th className="px-3 py-2 text-right text-gray-500 font-semibold">Balance</th>
+                      <th className="px-3 py-2 text-left text-bv-meta font-semibold">Date</th>
+                      <th className="px-3 py-2 text-right text-bv-meta font-semibold">Paid</th>
+                      <th className="px-3 py-2 text-right text-bv-meta font-semibold">Fine</th>
+                      <th className="px-3 py-2 text-right text-bv-meta font-semibold">Balance</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {rec.payments.slice(0, 25).map((p: any, i: number) => (
-                      <tr key={i} className="hover:bg-gray-50">
-                        <td className="px-3 py-1.5 text-gray-600">{fmtD(p.date)}</td>
+                      <tr key={i} className="hover:bg-bv-hover">
+                        <td className="px-3 py-1.5 text-bv-muted">{fmtD(p.date)}</td>
                         <td className="px-3 py-1.5 text-right font-semibold text-emerald-700">{fmt(p.amountPaid)}</td>
-                        <td className="px-3 py-1.5 text-right text-red-600">{p.fine > 0 ? fmt(p.fine) : '—'}</td>
-                        <td className="px-3 py-1.5 text-right text-gray-600">{p.balance > 0 ? fmt(p.balance) : '✓'}</td>
+                        <td className="px-3 py-1.5 text-right text-bv-danger">{p.fine > 0 ? fmt(p.fine) : '—'}</td>
+                        <td className="px-3 py-1.5 text-right text-bv-muted">{p.balance > 0 ? fmt(p.balance) : '✓'}</td>
                       </tr>
                     ))}
                     {rec.payments.length > 25 && (
                       <tr>
-                        <td colSpan={4} className="px-3 py-2 text-center text-gray-400 italic">
+                        <td colSpan={4} className="px-3 py-2 text-center text-bv-meta italic">
                           + {rec.payments.length - 25} more entries
                         </td>
                       </tr>
@@ -397,21 +397,21 @@ export default function HistoricalImportPage() {
   const reset = () => { setRecords([]); setStep('upload'); setResult(null); };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-bv-hover">
 
       {/* Header */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm">
+      <div className="bg-bv-surface border-b border-bv-border sticky top-0 z-20 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-3">
-          <button onClick={() => router.back()} className="p-2 rounded-xl hover:bg-gray-100 text-gray-500">
+          <button onClick={() => router.back()} className="p-2 rounded-xl hover:bg-bv-hover text-bv-meta">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-3 flex-1">
-            <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
-              <FileSpreadsheet className="w-5 h-5 text-blue-600" />
+            <div className="w-10 h-10 bg-bv-info-bg rounded-xl flex items-center justify-center">
+              <FileSpreadsheet className="w-5 h-5 text-bv-accent" />
             </div>
             <div>
-              <h1 className="text-lg font-black text-gray-900">Historical Loan Import</h1>
-              <p className="text-xs text-gray-400">
+              <h1 className="text-lg font-black text-bv-text">Historical Loan Import</h1>
+              <p className="text-xs text-bv-meta">
                 {xlsxReady ? 'Upload Bingo Vintage Excel files — one file per client' : 'Loading Excel engine…'}
               </p>
             </div>
@@ -429,7 +429,7 @@ export default function HistoricalImportPage() {
               step === s            ? 'bg-blue-600 text-white'
               : step === 'done' || (step === 'preview' && s === 'upload')
                                     ? 'bg-emerald-100 text-emerald-700'
-                                    : 'bg-gray-100 text-gray-400'
+                                    : 'bg-bv-hover text-bv-meta'
             }`}>{lbl}</div>
           ))}
         </div>
@@ -443,9 +443,9 @@ export default function HistoricalImportPage() {
               onDragLeave={() => setDrag(false)}
               onClick={() => xlsxReady && inputRef.current?.click()}
               className={`border-2 border-dashed rounded-2xl p-14 text-center transition-all ${
-                !xlsxReady    ? 'border-gray-100 bg-gray-50 cursor-not-allowed opacity-60'
-                : drag        ? 'border-blue-400 bg-blue-50 cursor-copy'
-                              : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50 cursor-pointer'
+                !xlsxReady    ? 'border-bv-border bg-bv-hover cursor-not-allowed opacity-60'
+                : drag        ? 'border-blue-400 bg-bv-info-bg cursor-copy'
+                              : 'border-bv-border hover:border-blue-300 hover:bg-bv-hover cursor-pointer'
               }`}
             >
               <input
@@ -458,11 +458,11 @@ export default function HistoricalImportPage() {
               />
               {parsing
                 ? <Loader2 className="w-12 h-12 text-blue-400 animate-spin mx-auto mb-4" />
-                : <Upload className="w-12 h-12 text-gray-300 mx-auto mb-4" />}
-              <p className="text-lg font-bold text-gray-700 mb-1">
+                : <Upload className="w-12 h-12 text-bv-meta mx-auto mb-4" />}
+              <p className="text-lg font-bold text-bv-muted mb-1">
                 {parsing ? 'Parsing files…' : 'Drop Excel files here'}
               </p>
-              <p className="text-sm text-gray-400 mb-5">
+              <p className="text-sm text-bv-meta mb-5">
                 One .xlsx file per client, in the standard Bingo Vintage format
               </p>
               {!parsing && (
@@ -506,15 +506,15 @@ export default function HistoricalImportPage() {
             {/* Summary stats */}
             <div className="grid grid-cols-3 gap-3">
               {([
-                ['Records',   records.length,                                  'bg-blue-500'   ],
+                ['Records',   records.length,                                  'bg-bv-info-bg0'   ],
                 ['Completed', records.filter(r => r.status === 'COMPLETED').length, 'bg-emerald-500'],
                 ['Active',    records.filter(r => r.status !== 'COMPLETED').length, 'bg-orange-500' ],
               ] as [string, number, string][]).map(([label, val, cls]) => (
-                <div key={label} className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3 shadow-sm">
+                <div key={label} className="bg-bv-surface rounded-2xl border border-bv-border p-4 flex items-center gap-3 shadow-sm">
                   <div className={`w-9 h-9 ${cls} rounded-xl flex items-center justify-center flex-shrink-0`}>
                     <span className="text-white font-black text-sm">{val}</span>
                   </div>
-                  <p className="text-sm font-semibold text-gray-700">{label}</p>
+                  <p className="text-sm font-semibold text-bv-muted">{label}</p>
                 </div>
               ))}
             </div>
@@ -522,7 +522,7 @@ export default function HistoricalImportPage() {
             {/* Add more */}
             <button
               onClick={() => inputRef.current?.click()}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-semibold"
+              className="flex items-center gap-2 px-4 py-2.5 bg-bv-surface border border-bv-border hover:bg-bv-hover text-bv-muted rounded-xl text-sm font-semibold"
             >
               <Upload className="w-4 h-4" /> Add more files
             </button>
@@ -535,12 +535,12 @@ export default function HistoricalImportPage() {
             </div>
 
             {/* Sticky submit bar */}
-            <div className="sticky bottom-4 z-10 bg-white/95 backdrop-blur-sm border border-gray-200 rounded-2xl p-4 shadow-lg flex items-center justify-between gap-4">
+            <div className="sticky bottom-4 z-10 bg-bv-surface/95 backdrop-blur-sm border border-bv-border rounded-2xl p-4 shadow-lg flex items-center justify-between gap-4">
               <div>
-                <p className="font-bold text-gray-900">
+                <p className="font-bold text-bv-text">
                   {records.length} record{records.length !== 1 ? 's' : ''} ready
                 </p>
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-bv-meta">
                   Full payment history will be imported and marked per instalment
                 </p>
               </div>
@@ -559,36 +559,36 @@ export default function HistoricalImportPage() {
 
         {/* ── DONE STEP ───────────────────────────────────────── */}
         {step === 'done' && result && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center space-y-5">
+          <div className="bg-bv-surface rounded-2xl border border-bv-border shadow-sm p-10 text-center space-y-5">
             {result.success > 0
               ? <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" />
               : <AlertTriangle className="w-16 h-16 text-red-400 mx-auto" />}
 
             <div>
-              <h2 className="text-2xl font-black text-gray-900 mb-1">
+              <h2 className="text-lg font-semibold text-bv-text mb-1">
                 {result.success > 0 ? 'Import Complete!' : 'Import Failed'}
               </h2>
-              <p className="text-gray-500 text-sm">{result.message}</p>
+              <p className="text-bv-meta text-sm">{result.message}</p>
             </div>
 
             <div className="grid grid-cols-3 gap-3 max-w-xs mx-auto">
               {([
                 ['Imported', result.success,              'text-emerald-600'],
                 ['Skipped',  result.skipped,              'text-amber-600'  ],
-                ['Errors',   result.errors?.length || 0,  'text-red-600'    ],
+                ['Errors',   result.errors?.length || 0,  'text-bv-danger'    ],
               ] as [string,number,string][]).map(([label, val, cls]) => (
-                <div key={label} className="bg-gray-50 rounded-xl p-3">
+                <div key={label} className="bg-bv-hover rounded-xl p-3">
                   <p className={`text-2xl font-black ${cls}`}>{val}</p>
-                  <p className="text-xs text-gray-500">{label}</p>
+                  <p className="text-xs text-bv-meta">{label}</p>
                 </div>
               ))}
             </div>
 
             {result.errors?.length > 0 && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-left max-w-lg mx-auto">
-                <p className="font-bold text-red-700 text-sm mb-2">Errors</p>
+              <div className="bg-bv-danger-bg border border-bv-danger/30 rounded-xl p-4 text-left max-w-lg mx-auto">
+                <p className="font-bold text-bv-danger text-sm mb-2">Errors</p>
                 {result.errors.map((e: any, i: number) => (
-                  <p key={i} className="text-xs text-red-600 mb-1">
+                  <p key={i} className="text-xs text-bv-danger mb-1">
                     <strong>{e.client}:</strong> {e.error}
                   </p>
                 ))}
@@ -597,7 +597,7 @@ export default function HistoricalImportPage() {
 
             <div className="flex gap-3 justify-center">
               <button onClick={reset}
-                className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-semibold text-sm">
+                className="px-5 py-2.5 bg-bv-hover hover:bg-bv-border text-bv-muted rounded-xl font-semibold text-sm">
                 Import more
               </button>
               <button onClick={() => router.push('/dashboard/loans')}

@@ -53,6 +53,28 @@ export class PaymentAllocation {
   })
   amountApplied: number;
 
+  /** Portion of amount_applied that cleared instalment (amount_due). */
+  @Column({
+    name: 'instalment_applied',
+    type: 'decimal',
+    precision: 12,
+    scale: 2,
+    default: 0,
+    transformer: new ColumnNumericTransformer(),
+  })
+  instalmentApplied: number;
+
+  /** Portion of amount_applied that cleared penalty_amount. */
+  @Column({
+    name: 'penalty_applied',
+    type: 'decimal',
+    precision: 12,
+    scale: 2,
+    default: 0,
+    transformer: new ColumnNumericTransformer(),
+  })
+  penaltyApplied: number;
+
   // The schedule row's status immediately before this allocation was
   // applied — what reversal restores it to (subject to the same
   // overdue-by-due-date recheck reversePayment() already does today).

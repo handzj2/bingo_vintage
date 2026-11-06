@@ -23,8 +23,8 @@ export default function SuperAdminDashboard() {
 
   const cards = stats ? [
     { label: 'Active Tenants', value: stats.tenants,     color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20' },
-    { label: 'Total Users',    value: stats.users,       color: 'text-blue-400',   bg: 'bg-blue-500/10   border-blue-500/20'   },
-    { label: 'Total Loans',    value: stats.totalLoans,  color: 'text-green-400',  bg: 'bg-green-500/10  border-green-500/20'  },
+    { label: 'Total Users',    value: stats.users,       color: 'text-blue-400',   bg: 'bg-bv-info-bg0/10   border-blue-500/20'   },
+    { label: 'Total Loans',    value: stats.totalLoans,  color: 'text-green-400',  bg: 'bg-bv-success-bg0/10  border-green-500/20'  },
     { label: 'Active Loans',   value: stats.activeLoans, color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/20' },
   ] : [];
 
@@ -32,7 +32,7 @@ export default function SuperAdminDashboard() {
     <div className="p-8">
       <div className="mb-8">
         <h1 className="text-2xl font-black text-white">Platform Overview</h1>
-        <p className="text-gray-400 text-sm mt-1">Super Admin Console — full cross-tenant visibility</p>
+        <p className="text-bv-meta text-sm mt-1">Super Admin Console — full cross-tenant visibility</p>
       </div>
 
       {error && (
@@ -51,7 +51,7 @@ export default function SuperAdminDashboard() {
           {cards.map(c => (
             <div key={c.label} className={`rounded-xl p-6 border ${c.bg}`}>
               <div className={`text-3xl font-black ${c.color}`}>{c.value ?? 0}</div>
-              <div className="text-xs text-gray-400 mt-1 font-medium">{c.label}</div>
+              <div className="text-xs text-bv-meta mt-1 font-medium">{c.label}</div>
             </div>
           ))}
         </div>
@@ -67,7 +67,7 @@ export default function SuperAdminDashboard() {
           <a key={href} href={href}
             className={`bg-gray-800 border border-gray-700 ${color} rounded-xl p-6 transition-colors group block`}>
             <div className={`text-base font-bold mb-1 ${accent}`}>{title} →</div>
-            <div className="text-sm text-gray-400">{desc}</div>
+            <div className="text-sm text-bv-meta">{desc}</div>
           </a>
         ))}
       </div>

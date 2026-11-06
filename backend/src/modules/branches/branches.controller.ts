@@ -52,14 +52,14 @@ export class BranchesController {
   @ApiOperation({ summary: 'Update a branch (admin only)' })
   update(@Param('id', ParseIntPipe) id: number, @Body() data: any, @Request() req: AuthRequest) {
     this.assertAdmin(req);
-    return this.branchesService.update(id, data);
+    return this.branchesService.update(id, data, req.user?.tenantId);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a branch (admin only)' })
   remove(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
     this.assertAdmin(req);
-    return this.branchesService.remove(id);
+    return this.branchesService.remove(id, req.user?.tenantId);
   }
 
   // Phase 2: delegate to shared helper — no more raw user.role reads

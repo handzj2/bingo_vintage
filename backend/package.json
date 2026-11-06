@@ -12,7 +12,8 @@
     "migration:revert": "typeorm-ts-node-commonjs -d data-source.ts migration:revert",
     "migration:show": "typeorm-ts-node-commonjs -d data-source.ts migration:show",
     "migration:generate": "typeorm-ts-node-commonjs -d data-source.ts migration:generate",
-    "migration:run:prod": "node -e \"require('./dist/data-source').AppDataSource.initialize().then(ds => ds.runMigrations()).then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); })\""
+    "migration:run:prod": "node -e \"require('./dist/data-source').AppDataSource.initialize().then(ds => ds.runMigrations()).then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); })\"",
+    "seed:admin": "node scripts/seed-admin.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.22",

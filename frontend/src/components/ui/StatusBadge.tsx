@@ -10,25 +10,25 @@ type Status =
 
 const STATUS_MAP: Record<string, { label: string; className: string }> = {
   // Loan statuses
-  ACTIVE:           { label: 'Active',           className: 'bg-green-100 text-green-700 border-green-200'   },
-  PENDING:          { label: 'Pending',           className: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+  ACTIVE:           { label: 'Active',           className: 'bg-bv-success-bg text-bv-success border-green-200'   },
+  PENDING:          { label: 'Pending',           className: 'bg-bv-warning-bg text-bv-warning border-yellow-200' },
   PENDING_APPROVAL: { label: 'Pending Approval',  className: 'bg-orange-100 text-orange-700 border-orange-200' },
-  COMPLETED:        { label: 'Completed',         className: 'bg-blue-100 text-blue-700 border-blue-200'     },
-  DEFAULTED:        { label: 'Defaulted',         className: 'bg-red-100 text-red-700 border-red-200'        },
+  COMPLETED:        { label: 'Completed',         className: 'bg-bv-info-bg text-bv-accent border-blue-200'     },
+  DEFAULTED:        { label: 'Defaulted',         className: 'bg-bv-danger-bg text-bv-danger border-bv-danger/30'        },
   DELINQUENT:       { label: 'Delinquent',        className: 'bg-rose-100 text-rose-700 border-rose-200'     },
-  CANCELLED:        { label: 'Cancelled',         className: 'bg-gray-100 text-gray-600 border-gray-200'     },
+  CANCELLED:        { label: 'Cancelled',         className: 'bg-bv-hover text-bv-muted border-bv-border'     },
   // Payment statuses
   REVERSED:         { label: 'Reversed',          className: 'bg-purple-100 text-purple-700 border-purple-200' },
-  FAILED:           { label: 'Failed',            className: 'bg-red-100 text-red-700 border-red-200'        },
+  FAILED:           { label: 'Failed',            className: 'bg-bv-danger-bg text-bv-danger border-bv-danger/30'        },
   // Expense statuses
-  approved:         { label: 'Approved',          className: 'bg-green-100 text-green-700 border-green-200'  },
-  pending:          { label: 'Pending',           className: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
-  rejected:         { label: 'Rejected',          className: 'bg-red-100 text-red-700 border-red-200'        },
+  approved:         { label: 'Approved',          className: 'bg-bv-success-bg text-bv-success border-green-200'  },
+  pending:          { label: 'Pending',           className: 'bg-bv-warning-bg text-bv-warning border-yellow-200' },
+  rejected:         { label: 'Rejected',          className: 'bg-bv-danger-bg text-bv-danger border-bv-danger/30'        },
   // Bike statuses
-  AVAILABLE:        { label: 'Available',         className: 'bg-green-100 text-green-700 border-green-200'  },
-  LOANED:           { label: 'Loaned',            className: 'bg-blue-100 text-blue-700 border-blue-200'     },
-  MAINTENANCE:      { label: 'Maintenance',       className: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
-  SOLD:             { label: 'Sold',              className: 'bg-gray-100 text-gray-600 border-gray-200'     },
+  AVAILABLE:        { label: 'Available',         className: 'bg-bv-success-bg text-bv-success border-green-200'  },
+  LOANED:           { label: 'Loaned',            className: 'bg-bv-info-bg text-bv-accent border-blue-200'     },
+  MAINTENANCE:      { label: 'Maintenance',       className: 'bg-bv-warning-bg text-bv-warning border-yellow-200' },
+  SOLD:             { label: 'Sold',              className: 'bg-bv-hover text-bv-muted border-bv-border'     },
 };
 
 interface StatusBadgeProps {
@@ -39,7 +39,7 @@ interface StatusBadgeProps {
 export default function StatusBadge({ status, className }: StatusBadgeProps) {
   const config = STATUS_MAP[status] ?? {
     label:     status ?? '—',
-    className: 'bg-gray-100 text-gray-600 border-gray-200',
+    className: 'bg-bv-hover text-bv-muted border-bv-border',
   };
 
   return (

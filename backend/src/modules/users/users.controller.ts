@@ -22,7 +22,8 @@ export class UsersController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new user (Admin only)' })
-  create(@Body() createUserDto: CreateUserDto) {
+  create(@Body() createUserDto: CreateUserDto, @Request() req: AuthRequest) {
+    assertAdmin(req.user, 'Admin access required to create users');
     return this.usersService.create(createUserDto);
   }
 
@@ -47,8 +48,9 @@ export class UsersController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update user profile' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() updateUserDto: UpdateUserDto) {
-    return this.usersService.update(id, updateUserDto);
+  update(@Param('id', ParseIntPipe) id: number, @Body() updateUserDto: UpdateUserDto, @Request() req: AuthRequest) {
+    // Phase 3: pass caller's tenantId so cross-tenant modification is blocked in the service
+    return this.usersService.update(id, updateUserDto, req.user?.tenantId);
   }
 
   @Put(':id/change-password')

@@ -60,16 +60,20 @@ export class ClientsService {
     });
   }
 
-  async findOne(id: number) {
-    const client = await this.clientRepo.findOne({ where: { id } });
+  async findOne(id: number, tenantId?: number) {
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+    const client = await this.clientRepo.findOne({ where });
     if (!client) throw new NotFoundException(`Client with ID ${id} not found`);
     return client;
   }
 
   // NEW: Get rider by ID with optional relations for detailed view
-  async getRiderById(id: number): Promise<Client> {
+  async getRiderById(id: number, tenantId?: number): Promise<Client> {
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
     const client = await this.clientRepo.findOne({
-      where: { id },
+      where,
       relations: ['loans'], // Optional: includes loans if you have the relation set up
     });
 
@@ -79,7 +83,7 @@ export class ClientsService {
     return client;
   }
 
-  async update(id: number, rawUpdateData: any) {
+  async update(id: number, rawUpdateData: any, tenantId?: number) {
     const updateData = sanitiseDto(rawUpdateData);
 
     // Strip fields that must never be merged onto the entity:
@@ -94,8 +98,8 @@ export class ClientsService {
     delete updateData.created_at;
     delete updateData.updated_at;
 
-    // 1. Check if client exists
-    const client = await this.findOne(id);
+    // 1. Check if client exists (scoped to tenant)
+    const client = await this.findOne(id, tenantId);
     
     // 2. Security Check: Prevent duplicate NIN if it's being updated
     if (updateData.nin && updateData.nin !== client.nin) {
@@ -146,7 +150,12 @@ export class ClientsService {
   }
 
   // NEW: Delete rider by ID - vital for corrections since transactions cannot be edited once saved [cite: 2026-01-10]
-  async delete(id: number): Promise<void> {
+  async delete(id: number, tenantId?: number): Promise<void> {
+    // Phase 3: verify the client belongs to the caller's tenant before deleting
+    if (tenantId) {
+      const existing = await this.clientRepo.findOne({ where: { id, tenantId } as any });
+      if (!existing) throw new NotFoundException(`Rider with ID ${id} not found`);
+    }
     const result = await this.clientRepo.delete(id);
     if (result.affected === 0) {
       throw new NotFoundException(`Rider with ID ${id} not found`);

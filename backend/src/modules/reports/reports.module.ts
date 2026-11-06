@@ -8,9 +8,12 @@ import { LoanSchedule } from '../schedules/entities/schedule.entity';
 import { CashDrawer } from '../cash-drawers/entities/cash-drawer.entity';
 import { Expense } from '../expenses/entities/expense.entity';
 import { Reconciliation } from '../reconciliation/entities/reconciliation.entity';
+import { WeeklySignOff } from './entities/weekly-sign-off.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Payment, Loan, LoanSchedule, CashDrawer, Expense, Reconciliation])],
+  imports: [TypeOrmModule.forFeature([
+    Payment, Loan, LoanSchedule, CashDrawer, Expense, Reconciliation, WeeklySignOff,
+  ])],
   controllers: [ReportsController],
   providers: [ReportsService],
   exports: [ReportsService],

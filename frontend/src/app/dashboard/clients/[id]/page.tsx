@@ -4,9 +4,6 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { getClientById } from '@/features/clients/client.api';
 import type { Client } from '@/shared/api-types';
-import { Button } from '@/components/ui/Button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { 
   ArrowLeft, Pencil, Loader2, User, Phone, Mail, MapPin, 
   Briefcase, Banknote, Users, Building, FileText, Shield,
@@ -46,18 +43,28 @@ export default function ViewClientPage() {
     return (
       <div className="p-6">
         <div className="flex justify-center items-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <Loader2 className="h-8 w-8 animate-spin text-bv-meta" />
         </div>
       </div>
     );
   }
 
-  if (!client) return null;
+  if (!client) {
+    return (
+      <div className="p-6 max-w-bv mx-auto">
+        <p className="text-sm font-semibold text-bv-text">Client not found</p>
+        <p className="text-sm text-bv-muted mt-1">The record may have been removed or you do not have access.</p>
+        <a href="/dashboard/clients" className="inline-block mt-4 text-sm font-medium text-bv-accent hover:underline">
+          Back to clients
+        </a>
+      </div>
+    );
+  }
 
   const formatDate = (dateString: string | undefined) => {
     if (!dateString) return '-';
     try {
-      return new Date(dateString).toLocaleDateString('en-KE', {
+      return new Date(dateString).toLocaleDateString('en-UG', {
         day: 'numeric',
         month: 'long',
         year: 'numeric'
@@ -69,7 +76,7 @@ export default function ViewClientPage() {
 
   const formatCurrency = (amount: number | undefined) => {
     if (amount === undefined || amount === null) return 'UGX 0';
-    return new Intl.NumberFormat('en-KE', {
+    return new Intl.NumberFormat('en-UG', {
       style: 'currency',
       currency: 'UGX',
       minimumFractionDigits: 0,
@@ -78,241 +85,159 @@ export default function ViewClientPage() {
 
   const DetailItem = ({ label, value }: { label: string; value: string | number | null | undefined }) => (
     <div className="py-2">
-      <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
-      <dd className="text-sm font-semibold mt-1">{value ?? '-'}</dd>
+      <dt className="text-xs font-medium text-bv-meta">{label}</dt>
+      <dd className="text-sm font-semibold text-bv-text mt-0.5">{value ?? '-'}</dd>
     </div>
   );
 
+  const tabs: { key: string; label: string }[] = [
+    { key: 'overview',    label: 'Overview'    },
+    { key: 'loans',       label: 'Loans'       },
+    { key: 'personal',    label: 'Personal'    },
+    { key: 'contact',     label: 'Contact'     },
+    { key: 'employment',  label: 'Employment'  },
+    { key: 'banking',     label: 'Banking'     },
+    { key: 'kin',         label: 'Next of Kin' },
+    { key: 'business',    label: 'Business'    },
+    { key: 'references',  label: 'References'  },
+    { key: 'system',      label: 'System'      },
+  ];
+
   return (
-    <div className="p-6">
-      {/* Header with back button */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => router.push('/dashboard/clients')}
-              className="mr-4"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">
-                {client.first_name} {client.last_name}
-              </h1>
-              <p className="text-muted-foreground">Client Details</p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => router.push('/dashboard/clients')}
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
-            </Button>
-            <Button onClick={() => router.push(`/dashboard/clients/${params?.id}/edit`)}>
-              <Pencil className="mr-2 h-4 w-4" />
-              Edit
-            </Button>
-          </div>
+    <div className="p-4 sm:p-6 max-w-bv mx-auto space-y-6">
+      {/* Page header */}
+      <div className="border-b border-bv-border pb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs text-bv-meta mb-1">
+            <button type="button" onClick={() => router.push('/dashboard/clients')} className="hover:underline text-bv-accent">Clients</button>
+            {' / '}Profile
+          </p>
+          <h1 className="text-lg font-semibold text-bv-text">
+            {client.first_name} {client.last_name}
+          </h1>
+          <p className="text-sm text-bv-muted mt-0.5">
+            Borrower profile, KYC and linked loans. Use Edit to change registered details.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => router.push('/dashboard/clients')}
+            className="text-sm border border-bv-border px-3 py-1.5 rounded-bv hover:bg-bv-hover text-bv-muted"
+          >
+            Back to list
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push(`/dashboard/clients/${params?.id}/edit`)}
+            className="text-sm font-medium px-3 py-1.5 rounded-bv bg-bv-action hover:bg-bv-action-hover text-white flex items-center gap-1.5"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Edit
+          </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Main Content */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Tabs Navigation */}
-          <Card>
-            <div className="border-b">
-              <nav className="flex -mb-px">
-                <button
-                  onClick={() => setActiveTab('overview')}
-                  className={`py-4 px-6 text-sm font-medium border-b-2 ${
-                    activeTab === 'overview'
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'
-                  }`}
-                >
-                  Overview
-                </button>
-                <button
-                  onClick={() => setActiveTab('loans' as any)}
-                  className={`py-4 px-6 text-sm font-medium border-b-2 ${
-                    activeTab === ('loans' as any)
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'
-                  }`}
-                >
-                  Loans
-                </button>
-                <button
-                  onClick={() => setActiveTab('personal')}
-                  className={`py-4 px-6 text-sm font-medium border-b-2 ${
-                    activeTab === 'personal'
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'
-                  }`}
-                >
-                  Personal
-                </button>
-                <button
-                  onClick={() => setActiveTab('contact')}
-                  className={`py-4 px-6 text-sm font-medium border-b-2 ${
-                    activeTab === 'contact'
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'
-                  }`}
-                >
-                  Contact
-                </button>
-                <button
-                  onClick={() => setActiveTab('employment')}
-                  className={`py-4 px-6 text-sm font-medium border-b-2 ${
-                    activeTab === 'employment'
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'
-                  }`}
-                >
-                  Employment
-                </button>
-                <button
-                  onClick={() => setActiveTab('banking')}
-                  className={`py-4 px-6 text-sm font-medium border-b-2 ${
-                    activeTab === 'banking'
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'
-                  }`}
-                >
-                  Banking
-                </button>
-                <button
-                  onClick={() => setActiveTab('kin')}
-                  className={`py-4 px-6 text-sm font-medium border-b-2 ${
-                    activeTab === 'kin'
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'
-                  }`}
-                >
-                  Next of Kin
-                </button>
-                <button
-                  onClick={() => setActiveTab('business')}
-                  className={`py-4 px-6 text-sm font-medium border-b-2 ${
-                    activeTab === 'business'
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'
-                  }`}
-                >
-                  Business
-                </button>
-                <button
-                  onClick={() => setActiveTab('references')}
-                  className={`py-4 px-6 text-sm font-medium border-b-2 ${
-                    activeTab === 'references'
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'
-                  }`}
-                >
-                  References
-                </button>
-                <button
-                  onClick={() => setActiveTab('system')}
-                  className={`py-4 px-6 text-sm font-medium border-b-2 ${
-                    activeTab === 'system'
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'
-                  }`}
-                >
-                  System
-                </button>
+        {/* Left column — tabs */}
+        <div className="lg:col-span-2 space-y-0">
+          {/* Tab nav */}
+          <div className="bg-bv-surface border border-bv-border rounded-bv overflow-hidden">
+            <div className="border-b border-bv-border overflow-x-auto">
+              <nav className="flex min-w-max">
+                {tabs.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setActiveTab(key as any)}
+                    className={`px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                      activeTab === key
+                        ? 'border-bv-action text-bv-accent'
+                        : 'border-transparent text-bv-muted hover:text-bv-text'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </nav>
             </div>
 
-            <CardContent className="p-6">
-              {/* Overview Tab */}
+            <div className="p-5">
+              {/* Overview */}
               {activeTab === 'overview' && (
-                <div className="space-y-6">
-                  {/* Client Profile Card */}
-                  <div className="space-y-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center">
-                        <div className="h-20 w-20 bg-primary/10 rounded-full flex items-center justify-center">
-                          <span className="text-2xl font-bold text-primary">
-                            {client.first_name?.[0] || '?'}{client.last_name?.[0] || '?'}
-                          </span>
-                        </div>
-                        <div className="ml-6">
-                          <h2 className="text-2xl font-bold">
-                            {client.first_name} {client.last_name}
-                          </h2>
-                          <p className="text-muted-foreground">Client since {formatDate(client.created_at)}</p>
-                          <div className="flex items-center mt-2">
-                            <Badge variant={client.status === 'active' ? 'default' : 'secondary'} className="mr-2">
-                              {client.status}
-                            </Badge>
-                            <Badge variant={client.verified ? 'default' : 'secondary'}>
-                              {client.verified ? 'Verified' : 'Not Verified'}
-                            </Badge>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-lg font-bold">
-                          Credit Score
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {client.credit_score || 'N/A'}
-                        </div>
+                <div className="space-y-5">
+                  {/* Avatar + name + badges */}
+                  <div className="flex items-start gap-4">
+                    <div className="h-16 w-16 bg-bv-hover rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-xl font-bold text-bv-muted">
+                        {client.first_name?.[0] || '?'}{client.last_name?.[0] || '?'}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-base font-semibold text-bv-text">
+                        {client.first_name} {client.last_name}
+                      </h2>
+                      <p className="text-xs text-bv-meta mt-0.5">Client since {formatDate(client.created_at)}</p>
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                          client.status === 'active'
+                            ? 'bg-bv-success-bg text-bv-success'
+                            : 'bg-bv-hover text-bv-muted'
+                        }`}>
+                          {client.status || 'unknown'}
+                        </span>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                          client.verified
+                            ? 'bg-bv-success-bg text-bv-success'
+                            : 'bg-bv-warning-bg text-bv-warning'
+                        }`}>
+                          {client.verified ? 'Verified' : 'Not Verified'}
+                        </span>
                       </div>
                     </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-xs text-bv-meta">Credit Score</p>
+                      <p className="text-sm font-semibold text-bv-text tabular-nums">{client.credit_score ?? 'N/A'}</p>
+                    </div>
+                  </div>
 
-                    {/* Quick Stats */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <Card>
-                        <CardContent className="p-4">
-                          <p className="text-sm text-muted-foreground">Monthly Income</p>
-                          <p className="text-lg font-bold">{formatCurrency(client.monthly_income)}</p>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="p-4">
-                          <p className="text-sm text-muted-foreground">Loan Limit</p>
-                          <p className="text-lg font-bold">{formatCurrency(client.loan_limit)}</p>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="p-4">
-                          <p className="text-sm text-muted-foreground">Account Balance</p>
-                          <p className="text-lg font-bold">{formatCurrency(client.account_balance)}</p>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="p-4">
-                          <p className="text-sm text-muted-foreground">Sync Status</p>
-                          <p className="text-lg font-bold capitalize">{client.sync_status || 'N/A'}</p>
-                        </CardContent>
-                      </Card>
+                  {/* Quick stats inline row */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 border border-bv-border rounded-bv p-3 bg-bv-surface">
+                    <div>
+                      <p className="text-xs text-bv-meta">Monthly Income</p>
+                      <p className="text-sm font-semibold text-bv-text tabular-nums">{formatCurrency(client.monthly_income)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-bv-meta">Loan Limit</p>
+                      <p className="text-sm font-semibold text-bv-text tabular-nums">{formatCurrency(client.loan_limit)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-bv-meta">Account Balance</p>
+                      <p className="text-sm font-semibold text-bv-text tabular-nums">{formatCurrency(client.account_balance)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-bv-meta">Sync Status</p>
+                      <p className="text-sm font-semibold text-bv-text capitalize">{client.sync_status ?? 'N/A'}</p>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Loans Tab */}
+              {/* Loans */}
               {(activeTab as any) === 'loans' && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-gray-900">Loan History</h3>
+                    <h3 className="font-semibold text-bv-text text-sm">Loan History</h3>
                     <button
+                      type="button"
                       onClick={() => router.push(`/dashboard/loans/create?clientId=${params?.id}`)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-bv-action text-white rounded-bv text-xs font-medium hover:bg-bv-action-hover"
                     >
                       <Plus className="w-3.5 h-3.5" /> New Loan
                     </button>
                   </div>
                   {(!(client as any).loans || (client as any).loans.length === 0) ? (
-                    <div className="text-center py-10 text-muted-foreground">
+                    <div className="text-center py-10 text-bv-meta">
                       <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
                       <p className="text-sm">No loans found for this client</p>
                     </div>
@@ -321,38 +246,38 @@ export default function ViewClientPage() {
                       {((client as any).loans as any[]).map((loan: any) => {
                         const status = (loan.status || '').toUpperCase();
                         const statusCls: Record<string, string> = {
-                          ACTIVE: 'bg-green-100 text-green-700',
-                          DELINQUENT: 'bg-red-100 text-red-700',
-                          COMPLETED: 'bg-blue-100 text-blue-700',
-                          PENDING_APPROVAL: 'bg-yellow-100 text-yellow-700',
-                          REJECTED: 'bg-gray-100 text-gray-600',
+                          ACTIVE: 'bg-bv-success-bg text-bv-success',
+                          DELINQUENT: 'bg-bv-danger-bg text-bv-danger',
+                          COMPLETED: 'bg-bv-info-bg text-bv-accent',
+                          PENDING_APPROVAL: 'bg-bv-warning-bg text-bv-warning',
+                          REJECTED: 'bg-bv-hover text-bv-muted',
                         };
-                        const fmt = (n: any) => `UGX ${Number(n || 0).toLocaleString()}`;
+                        const fmtUGX = (n: any) => `UGX ${Number(n || 0).toLocaleString()}`;
                         return (
                           <div
                             key={loan.id}
-                            className="border border-gray-100 rounded-xl p-4 hover:border-blue-200 hover:bg-blue-50/30 transition-colors cursor-pointer"
+                            className="border border-bv-border rounded-bv p-4 hover:bg-bv-hover transition-colors cursor-pointer"
                             onClick={() => router.push(`/dashboard/loans/${loan.id}`)}
                           >
                             <div className="flex items-center justify-between mb-2">
-                              <span className="font-mono text-sm font-bold text-gray-800">
+                              <span className="font-mono text-sm font-bold text-bv-text">
                                 {loan.loanNumber || loan.loan_number || `#${loan.id}`}
                               </span>
-                              <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${statusCls[status] || 'bg-gray-100 text-gray-500'}`}>
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusCls[status] || 'bg-bv-hover text-bv-meta'}`}>
                                 {status}
                               </span>
                             </div>
-                            <div className="grid grid-cols-3 gap-3 text-xs text-gray-500">
+                            <div className="grid grid-cols-3 gap-3 text-xs text-bv-meta">
                               <div>
-                                <p className="font-semibold text-gray-800">{fmt(loan.principalAmount ?? loan.principal_amount)}</p>
+                                <p className="font-semibold text-bv-text tabular-nums">{fmtUGX(loan.principalAmount ?? loan.principal_amount)}</p>
                                 <p>Principal</p>
                               </div>
                               <div>
-                                <p className="font-semibold text-gray-800">{fmt(loan.balance)}</p>
+                                <p className="font-semibold text-bv-text tabular-nums">{fmtUGX(loan.balance)}</p>
                                 <p>Balance</p>
                               </div>
                               <div>
-                                <p className="font-semibold text-gray-800">{loan.loanType || loan.loan_type || 'CASH'}</p>
+                                <p className="font-semibold text-bv-text">{loan.loanType || loan.loan_type || 'CASH'}</p>
                                 <p>Type</p>
                               </div>
                             </div>
@@ -364,281 +289,240 @@ export default function ViewClientPage() {
                 </div>
               )}
 
-              {/* Personal Tab */}
+              {/* Personal */}
               {activeTab === 'personal' && (
-                <div className="space-y-6">
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold flex items-center">
-                      <User className="h-5 w-5 mr-2 text-muted-foreground" />
-                      Personal Information
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <DetailItem label="First Name" value={client.first_name} />
-                      <DetailItem label="Last Name" value={client.last_name} />
-                      <DetailItem label="Full Name" value={client.full_name} />
-                      <DetailItem label="Gender" value={client.gender} />
-                      <DetailItem label="Date of Birth" value={formatDate(client.date_of_birth)} />
-                      <DetailItem label="Marital Status" value={client.marital_status} />
-                      <DetailItem label="Nationality" value={client.nationality} />
-                      <DetailItem label="NIN" value={client.nin} />
-                      <DetailItem label="ID Number" value={client.id_number} />
-                      <DetailItem label="Tax ID" value={client.tax_id} />
-                    </div>
-                  </div>
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-bv-text flex items-center gap-2">
+                    <User className="h-4 w-4 text-bv-meta" />
+                    Personal Information
+                  </h3>
+                  <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+                    <DetailItem label="First Name" value={client.first_name} />
+                    <DetailItem label="Last Name" value={client.last_name} />
+                    <DetailItem label="Full Name" value={client.full_name} />
+                    <DetailItem label="Gender" value={client.gender} />
+                    <DetailItem label="Date of Birth" value={formatDate(client.date_of_birth)} />
+                    <DetailItem label="Marital Status" value={client.marital_status} />
+                    <DetailItem label="Nationality" value={client.nationality} />
+                    <DetailItem label="NIN" value={client.nin} />
+                    <DetailItem label="ID Number" value={client.id_number} />
+                    <DetailItem label="Tax ID" value={client.tax_id} />
+                  </dl>
                 </div>
               )}
 
-              {/* Contact Tab */}
+              {/* Contact */}
               {activeTab === 'contact' && (
-                <div className="space-y-6">
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold flex items-center">
-                      <Phone className="h-5 w-5 mr-2 text-muted-foreground" />
-                      Contact Information
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <DetailItem label="Phone" value={client.phone} />
-                      <DetailItem label="Alt Phone" value={client.alt_phone} />
-                      <DetailItem label="Email" value={client.email} />
-                      <DetailItem label="Address" value={client.address} />
-                      <DetailItem label="City" value={client.city} />
-                      <DetailItem label="State" value={client.state} />
-                      <DetailItem label="Country" value={client.country} />
-                      <DetailItem label="Postal Code" value={client.postal_code} />
-                    </div>
-                  </div>
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-bv-text flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-bv-meta" />
+                    Contact Information
+                  </h3>
+                  <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+                    <DetailItem label="Phone" value={client.phone} />
+                    <DetailItem label="Alt Phone" value={client.alt_phone} />
+                    <DetailItem label="Email" value={client.email} />
+                    <DetailItem label="Address" value={client.address} />
+                    <DetailItem label="City" value={client.city} />
+                    <DetailItem label="State" value={client.state} />
+                    <DetailItem label="Country" value={client.country} />
+                    <DetailItem label="Postal Code" value={client.postal_code} />
+                  </dl>
                 </div>
               )}
 
-              {/* Employment Tab */}
+              {/* Employment */}
               {activeTab === 'employment' && (
-                <div className="space-y-6">
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold flex items-center">
-                      <Briefcase className="h-5 w-5 mr-2 text-muted-foreground" />
-                      Employment & Income
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <DetailItem label="Occupation" value={client.occupation} />
-                      <DetailItem label="Employment Status" value={client.employment_status} />
-                      <DetailItem label="Monthly Income" value={formatCurrency(client.monthly_income)} />
-                    </div>
-                  </div>
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-bv-text flex items-center gap-2">
+                    <Briefcase className="h-4 w-4 text-bv-meta" />
+                    Employment &amp; Income
+                  </h3>
+                  <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+                    <DetailItem label="Occupation" value={client.occupation} />
+                    <DetailItem label="Employment Status" value={client.employment_status} />
+                    <DetailItem label="Monthly Income" value={formatCurrency(client.monthly_income)} />
+                  </dl>
                 </div>
               )}
 
-              {/* Banking Tab */}
+              {/* Banking */}
               {activeTab === 'banking' && (
-                <div className="space-y-6">
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold flex items-center">
-                      <Banknote className="h-5 w-5 mr-2 text-muted-foreground" />
-                      Banking Details
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <DetailItem label="Bank Name" value={client.bank_name} />
-                      <DetailItem label="Account Number" value={client.account_number} />
-                      <DetailItem label="Branch" value={client.bank_branch} />
-                      <DetailItem label="Account Balance" value={formatCurrency(client.account_balance)} />
-                    </div>
-                  </div>
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-bv-text flex items-center gap-2">
+                    <Banknote className="h-4 w-4 text-bv-meta" />
+                    Banking Details
+                  </h3>
+                  <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+                    <DetailItem label="Bank Name" value={client.bank_name} />
+                    <DetailItem label="Account Number" value={client.account_number} />
+                    <DetailItem label="Branch" value={client.bank_branch} />
+                    <DetailItem label="Account Balance" value={formatCurrency(client.account_balance)} />
+                  </dl>
                 </div>
               )}
 
-              {/* Next of Kin Tab */}
+              {/* Next of Kin */}
               {activeTab === 'kin' && (
-                <div className="space-y-6">
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold flex items-center">
-                      <Users className="h-5 w-5 mr-2 text-muted-foreground" />
-                      Next of Kin
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <DetailItem label="Name" value={client.next_of_kin_name} />
-                      <DetailItem label="Phone" value={client.next_of_kin_phone} />
-                      <DetailItem label="Relationship" value={client.next_of_kin_relationship} />
-                    </div>
-                  </div>
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-bv-text flex items-center gap-2">
+                    <Users className="h-4 w-4 text-bv-meta" />
+                    Next of Kin
+                  </h3>
+                  <dl className="grid grid-cols-1 md:grid-cols-3 gap-x-6">
+                    <DetailItem label="Name" value={client.next_of_kin_name} />
+                    <DetailItem label="Phone" value={client.next_of_kin_phone} />
+                    <DetailItem label="Relationship" value={client.next_of_kin_relationship} />
+                  </dl>
                 </div>
               )}
 
-              {/* Business Tab */}
+              {/* Business */}
               {activeTab === 'business' && (
-                <div className="space-y-6">
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold flex items-center">
-                      <Building className="h-5 w-5 mr-2 text-muted-foreground" />
-                      Business Information
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <DetailItem label="Business Name" value={client.business_name} />
-                      <DetailItem label="Business Type" value={client.business_type} />
-                      <DetailItem label="Business Address" value={client.business_address} />
-                    </div>
-                  </div>
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-bv-text flex items-center gap-2">
+                    <Building className="h-4 w-4 text-bv-meta" />
+                    Business Information
+                  </h3>
+                  <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+                    <DetailItem label="Business Name" value={client.business_name} />
+                    <DetailItem label="Business Type" value={client.business_type} />
+                    <DetailItem label="Business Address" value={client.business_address} />
+                  </dl>
                 </div>
               )}
 
-              {/* References Tab */}
+              {/* References */}
               {activeTab === 'references' && (
-                <div className="space-y-6">
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold flex items-center">
-                      <Users className="h-5 w-5 mr-2 text-muted-foreground" />
-                      References
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <DetailItem label="Reference 1 Name" value={client.reference1_name} />
-                      <DetailItem label="Reference 1 Phone" value={client.reference1_phone} />
-                      <DetailItem label="Reference 2 Name" value={client.reference2_name} />
-                      <DetailItem label="Reference 2 Phone" value={client.reference2_phone} />
-                    </div>
-                  </div>
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-bv-text flex items-center gap-2">
+                    <Users className="h-4 w-4 text-bv-meta" />
+                    References
+                  </h3>
+                  <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+                    <DetailItem label="Reference 1 Name" value={client.reference1_name} />
+                    <DetailItem label="Reference 1 Phone" value={client.reference1_phone} />
+                    <DetailItem label="Reference 2 Name" value={client.reference2_name} />
+                    <DetailItem label="Reference 2 Phone" value={client.reference2_phone} />
+                  </dl>
                 </div>
               )}
 
-              {/* System Tab */}
+              {/* System */}
               {activeTab === 'system' && (
-                <div className="space-y-6">
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold flex items-center">
-                      <Shield className="h-5 w-5 mr-2 text-muted-foreground" />
-                      System Information
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <DetailItem label="Status" value={client.status} />
-                      <DetailItem label="Verified" value={client.verified ? 'Yes' : 'No'} />
-                      <DetailItem label="Verification Method" value={client.verification_method} />
-                      <DetailItem label="Sync Status" value={client.sync_status} />
-                      <DetailItem label="Credit Score" value={client.credit_score} />
-                      <DetailItem label="Loan Limit" value={formatCurrency(client.loan_limit)} />
-                      <DetailItem label="Created At" value={formatDate(client.created_at)} />
-                      <DetailItem label="Updated At" value={formatDate(client.updated_at)} />
-                    </div>
-                  </div>
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold text-bv-text flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-bv-meta" />
+                    System Information
+                  </h3>
+                  <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+                    <DetailItem label="Status" value={client.status} />
+                    <DetailItem label="Verified" value={client.verified ? 'Yes' : 'No'} />
+                    <DetailItem label="Verification Method" value={client.verification_method} />
+                    <DetailItem label="Sync Status" value={client.sync_status} />
+                    <DetailItem label="Credit Score" value={client.credit_score} />
+                    <DetailItem label="Loan Limit" value={formatCurrency(client.loan_limit)} />
+                    <DetailItem label="Created At" value={formatDate(client.created_at)} />
+                    <DetailItem label="Updated At" value={formatDate(client.updated_at)} />
+                  </dl>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
 
-        {/* Right Column - Stats & Quick Actions */}
-        <div className="space-y-6">
-          {/* Verification Status Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center">
-                <Shield className="h-5 w-5 mr-2 text-muted-foreground" />
-                Verification Status
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className={`p-4 rounded-lg ${client.verified ? 'bg-green-50 dark:bg-green-900/20' : 'bg-yellow-50 dark:bg-yellow-900/20'}`}>
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">Verification Status</span>
-                  {client.verified ? (
-                    <CheckCircle className="h-5 w-5 text-green-600" />
-                  ) : (
-                    <XCircle className="h-5 w-5 text-yellow-600" />
-                  )}
-                </div>
-                <p className="text-sm mt-2">
-                  {client.verified 
-                    ? 'Client is fully verified' 
-                    : 'Client requires verification'
-                  }
-                </p>
-              </div>
-
-              <div className="pt-4 border-t">
-                <h4 className="text-sm font-medium mb-2">Verification Details</h4>
-                <DetailItem label="Method" value={client.verification_method} />
-                <DetailItem label="Sync Status" value={client.sync_status} />
-              </div>
-            </CardContent>
-          </Card>
+        {/* Right column */}
+        <div className="space-y-4">
+          {/* Verification Status */}
+          <div className="bg-bv-surface border border-bv-border rounded-bv p-4">
+            <h3 className="text-sm font-semibold text-bv-text flex items-center gap-2 mb-3">
+              <Shield className="h-4 w-4 text-bv-meta" />
+              Verification Status
+            </h3>
+            <div className={`p-3 rounded-bv flex items-center justify-between ${client.verified ? 'bg-bv-success-bg' : 'bg-bv-warning-bg'}`}>
+              <span className={`text-sm font-medium ${client.verified ? 'text-bv-success' : 'text-bv-warning'}`}>
+                {client.verified ? 'Fully verified' : 'Requires verification'}
+              </span>
+              {client.verified
+                ? <CheckCircle className="h-4 w-4 text-bv-success" />
+                : <XCircle className="h-4 w-4 text-bv-warning" />
+              }
+            </div>
+            <div className="mt-3 pt-3 border-t border-bv-border space-y-0">
+              <DetailItem label="Method" value={client.verification_method} />
+              <DetailItem label="Sync Status" value={client.sync_status} />
+            </div>
+          </div>
 
           {/* Quick Actions */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Button
-                variant="outline"
-                className="w-full justify-start"
+          <div className="bg-bv-surface border border-bv-border rounded-bv p-4">
+            <h3 className="text-sm font-semibold text-bv-text mb-3">Quick Actions</h3>
+            <div className="space-y-2">
+              <button
+                type="button"
                 onClick={() => router.push(`/dashboard/clients/${params?.id}/edit`)}
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm border border-bv-border rounded-bv hover:bg-bv-hover text-bv-text"
               >
-                <Pencil className="mr-2 h-4 w-4" />
+                <Pencil className="h-4 w-4 text-bv-meta" />
                 Edit Client Details
-              </Button>
-              
-              <Button
-                variant="outline"
-                className="w-full justify-start"
+              </button>
+              <button
+                type="button"
                 onClick={() => router.push(`/dashboard/loans/create?clientId=${params?.id}`)}
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm border border-bv-border rounded-bv hover:bg-bv-hover text-bv-text"
               >
-                <DollarSign className="mr-2 h-4 w-4" />
+                <DollarSign className="h-4 w-4 text-bv-meta" />
                 Create New Loan
-              </Button>
-              
-              <Button
-                variant="outline"
-                className="w-full justify-start"
+              </button>
+              <button
+                type="button"
                 onClick={() => router.push(`/dashboard/payments?clientId=${params?.id}`)}
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm border border-bv-border rounded-bv hover:bg-bv-hover text-bv-text"
               >
-                <CreditCard className="mr-2 h-4 w-4" />
+                <CreditCard className="h-4 w-4 text-bv-meta" />
                 Record Payment
-              </Button>
-              
+              </button>
               {client.phone && (
-                <Button
-                  variant="outline"
-                  className="w-full justify-start"
+                <button
+                  type="button"
                   onClick={() => window.open(`tel:${client.phone}`)}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-sm border border-bv-border rounded-bv hover:bg-bv-hover text-bv-text"
                 >
-                  <Phone className="mr-2 h-4 w-4" />
+                  <Phone className="h-4 w-4 text-bv-meta" />
                   Call {client.phone}
-                </Button>
+                </button>
               )}
-
-              <Button
-                variant="outline"
-                className="w-full justify-start"
+              <button
+                type="button"
                 onClick={() => router.push(`/dashboard/schedules?clientId=${params?.id}`)}
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm border border-bv-border rounded-bv hover:bg-bv-hover text-bv-text"
               >
-                <FileText className="mr-2 h-4 w-4" />
+                <FileText className="h-4 w-4 text-bv-meta" />
                 View Schedules
-              </Button>
-            </CardContent>
-          </Card>
+              </button>
+            </div>
+          </div>
 
           {/* Client Notes */}
           {client.notes && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center">
-                  <FileText className="h-5 w-5 mr-2 text-muted-foreground" />
-                  Client Notes
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm whitespace-pre-wrap">{client.notes}</p>
-              </CardContent>
-            </Card>
+            <div className="bg-bv-surface border border-bv-border rounded-bv p-4">
+              <h3 className="text-sm font-semibold text-bv-text flex items-center gap-2 mb-2">
+                <FileText className="h-4 w-4 text-bv-meta" />
+                Client Notes
+              </h3>
+              <p className="text-sm text-bv-muted whitespace-pre-wrap">{client.notes}</p>
+            </div>
           )}
 
           {/* System Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">System Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+          <div className="bg-bv-surface border border-bv-border rounded-bv p-4">
+            <h3 className="text-sm font-semibold text-bv-text mb-2">System Information</h3>
+            <dl className="space-y-0">
               <DetailItem label="Client ID" value={client.id} />
               <DetailItem label="Created On" value={formatDate(client.created_at)} />
               <DetailItem label="Last Updated" value={formatDate(client.updated_at)} />
-            </CardContent>
-          </Card>
+            </dl>
+          </div>
         </div>
       </div>
     </div>

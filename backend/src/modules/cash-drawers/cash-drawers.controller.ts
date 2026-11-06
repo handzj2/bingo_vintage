@@ -1,6 +1,4 @@
-// patch 2026-06-21: GET / now accepts branchId/userId filters (previously
-// only GET /history did); added GET /summaries — bulk per-drawer totals
-// for the branch drawer-overview page (one card per cashier)
+// GET / accepts branchId/userId filters for the branch drawer-overview page.
 import {
   Controller, Post, Get, Body, Param, Query,
   UseGuards, Request, ParseIntPipe,
@@ -68,32 +66,7 @@ export class CashDrawerController {
 
   // Single-drawer version of getSummary — used by the "My Drawer" self-service
   // page so a cashier can see their own live balance + today's totals.
-  @Get(':id/summary')
-  @RequirePermission('drawer.view')
-  @ApiOperation({ summary: 'Today\'s transaction totals + balance for one drawer' })
-  async getDrawerSummary(@Param('id', ParseIntPipe) id: number, @Request() req) {
-    return this.drawerService.getSummary(id, req.user.tenantId);
-  }
-
-  // FIX: GET :id — also called by ReconciliationDashboard to show drawer details.
-  @Get(':id')
-  @RequirePermission('drawer.view')
-  @ApiOperation({ summary: 'Get a single cash drawer' })
-  async findOne(@Param('id', ParseIntPipe) id: number, @Request() req) {
-    return this.drawerService.findOne(id, req.user.tenantId);
-  }
-
-  @Post('close/:id')
-  @RequirePermission('drawer.manage')
-  @ApiOperation({ summary: 'Close a drawer' })
-  async close(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: CloseDrawerDto,
-    @Request() req,
-  ) {
-    return this.drawerService.close(id, req.user, dto.actualCash);
-  }
-
+  // history must be before :id so it is not mistakenly routed as an ID
   @Get('history')
   @RequirePermission('drawer.manage')
   @ApiOperation({ summary: 'Get drawer history' })
@@ -109,5 +82,33 @@ export class CashDrawerController {
       branchId ? +branchId : undefined,
       userId   ? +userId   : undefined,
     );
+  }
+
+  @Get(':id/summary')
+  @RequirePermission('drawer.view')
+  @ApiOperation({ summary: 'Today\'s transaction totals + balance for one drawer' })
+  async getDrawerSummary(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    return this.drawerService.getSummary(id, req.user.tenantId);
+  }
+
+    @Get(':id')
+  @RequirePermission('drawer.view')
+  @ApiOperation({ summary: 'Get a single cash drawer' })
+  async findOne(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    return this.drawerService.findOne(id, req.user.tenantId);
+  }
+
+  @Post('close/:id')
+  @RequirePermission('drawer.manage')
+  @ApiOperation({ summary: 'Close a drawer' })
+  async close(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CloseDrawerDto,
+    @Request() req,
+  ) {
+    return this.drawerService.close(id, req.user, dto.actualCash, {
+      forceClose: dto.forceClose,
+      forceReason: dto.forceReason,
+    });
   }
 }

@@ -97,14 +97,14 @@ export class ExpensesService {
       expense.approvedAt   = new Date();
       const saved = await manager.save(Expense, expense);
 
-      // Step 2: Ledger entry (errors swallowed — won't roll back TX)
+      // Step 2: Ledger entry — uses manager so errors propagate and roll back the TX
       await this.ledgerService.recordExpense({
         expenseId:   expense.id,
         amount:      expense.amount,
         description: expense.description,
         reference:   `EXP-${expense.id}`,
         createdBy:   user.userId,
-      });
+      }, manager);
 
       // Step 3: Deduct drawer balance — cash expenses only
       if (expense.paymentMethod === 'cash' && expense.cashDrawerId) {
@@ -112,6 +112,7 @@ export class ExpensesService {
           expense.cashDrawerId,
           Number(expense.amount),
           `Approved Expense #${expense.id}: ${expense.description}`,
+          manager,
         );
       }
 
@@ -140,7 +141,7 @@ export class ExpensesService {
   }
 
   // ── Find all (tenant-scoped) ──────────────────────────────────────────────────
-  async findAll(tenantId: number, status?: any, limit = 100, cursor?: number): Promise<{ items: Expense[]; nextCursor: number | null }> {
+  async findAll(tenantId: number, status?: any, limit = 100, cursor?: number): Promise<{ items: Expense[]; nextCursor: number | null; count: number }> {
     const qb = this.expenseRepo.createQueryBuilder('e')
       .leftJoinAndSelect('e.category',   'category')
       .leftJoinAndSelect('e.createdBy',  'createdBy')
@@ -153,9 +154,14 @@ export class ExpensesService {
     if (status) qb.andWhere('e.status = :status', { status });
     if (cursor) qb.andWhere('e.id < :cursor', { cursor });
 
-    const items = await qb.getMany();
+    // G4: fetch total count in parallel so callers get the PaginatedResponse<Expense> contract
+    const countQb = this.expenseRepo.createQueryBuilder('e')
+      .where('e.tenantId = :tenantId', { tenantId });
+    if (status) countQb.andWhere('e.status = :status', { status });
+
+    const [items, count] = await Promise.all([qb.getMany(), countQb.getCount()]);
     const nextCursor = items.length === Math.min(limit, 200) ? items[items.length - 1]?.id ?? null : null;
-    return { items, nextCursor };
+    return { items, nextCursor, count };
   }
 
   // ── Find one (tenant-scoped) ──────────────────────────────────────────────────

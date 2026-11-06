@@ -33,7 +33,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, EntityManager } from 'typeorm';
 import { LedgerEntry, LedgerTransactionType } from './entities/ledger-entry.entity';
 
 @Injectable()
@@ -86,8 +86,9 @@ export class LedgerService {
   async recordPayment(
     loan: { id: number; clientId: number; loanNumber: string; balance: number },
     payment: { id: number; amount: number; receiptNumber: string; collectedBy?: string },
+    manager?: EntityManager,
   ): Promise<void> {
-    await this.write({
+    const data = {
       loanId:          loan.id,
       clientId:        loan.clientId,
       transactionType: LedgerTransactionType.LOAN_PAYMENT,
@@ -97,7 +98,12 @@ export class LedgerService {
       description:     `Payment received — ${payment.receiptNumber}` +
                        (payment.collectedBy ? ` collected by ${payment.collectedBy}` : ''),
       reference:       payment.receiptNumber,
-    });
+    };
+    if (manager) {
+      await this.writeInTx(manager, data);
+    } else {
+      await this.write(data);
+    }
   }
 
   /**
@@ -143,8 +149,9 @@ export class LedgerService {
   async recordReversal(
     loan: { id: number; clientId: number; loanNumber: string; balance: number },
     payment: { id: number; amount: number; receiptNumber: string; reversedBy?: string },
+    manager?: EntityManager,
   ): Promise<void> {
-    await this.write({
+    const data = {
       loanId:          loan.id,
       clientId:        loan.clientId,
       transactionType: LedgerTransactionType.PAYMENT_REVERSAL,
@@ -154,7 +161,12 @@ export class LedgerService {
       description:     `Payment ${payment.receiptNumber} reversed` +
                        (payment.reversedBy ? ` by ${payment.reversedBy}` : ''),
       reference:       payment.receiptNumber,
-    });
+    };
+    if (manager) {
+      await this.writeInTx(manager, data);
+    } else {
+      await this.write(data);
+    }
   }
 
   /**
@@ -171,9 +183,9 @@ export class LedgerService {
     description: string;
     reference?: string;
     createdBy?: number;
-  }): Promise<void> {
+  }, manager?: EntityManager): Promise<void> {
     // Expenses are not tied to a specific loan or client, so loanId and clientId are omitted.
-    await this.write({
+    const payload = {
       transactionType: LedgerTransactionType.EXPENSE,
       debit:           Number(data.amount),
       credit:          0,
@@ -182,7 +194,12 @@ export class LedgerService {
       reference:       data.reference ?? `EXP-${data.expenseId}`,
       createdBy:       data.createdBy,
       // loanId and clientId are not provided – the write method will set them to null
-    });
+    };
+    if (manager) {
+      await this.writeInTx(manager, payload);
+    } else {
+      await this.write(payload);
+    }
   }
 
   /**
@@ -210,7 +227,47 @@ export class LedgerService {
     });
   }
 
-  // ── Private write helper ──────────────────────────────────────────────────
+  // ── Private write helpers ─────────────────────────────────────────────────
+
+  /**
+   * writeInTx()
+   *
+   * Persists a single ledger row using the provided EntityManager (which
+   * participates in the caller's transaction). Errors are NOT swallowed —
+   * they propagate up so the caller's transaction rolls back atomically.
+   * Only call this when you hold an active transaction and want a failed
+   * ledger write to roll back the entire operation.
+   */
+  private async writeInTx(manager: EntityManager, data: {
+    loanId?: number;
+    clientId?: number;
+    transactionType: LedgerTransactionType;
+    debit: number;
+    credit: number;
+    balanceAfter: number;
+    description?: string;
+    reference?: string;
+    createdBy?: number;
+  }): Promise<void> {
+    const entry = manager.create(LedgerEntry, {
+      loanId:          data.loanId ?? null,
+      clientId:        data.clientId ?? null,
+      transactionType: data.transactionType,
+      debit:           data.debit,
+      credit:          data.credit,
+      balanceAfter:    data.balanceAfter,
+      description:     data.description ?? null,
+      reference:       data.reference   ?? null,
+      createdBy:       data.createdBy   ?? null,
+    });
+
+    await manager.save(LedgerEntry, entry);
+
+    this.logger.debug(
+      `Ledger [${data.transactionType}] (in-tx) loan=${data.loanId ?? '—'} ` +
+      `debit=${data.debit} credit=${data.credit} ref=${data.reference ?? '—'}`,
+    );
+  }
 
   /**
    * write()

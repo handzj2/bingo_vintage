@@ -1,3 +1,4 @@
+// WARNING: This Prisma schema is a stale artefact. This project uses TypeORM. This file is NOT used in production and should be removed after confirming no CI step references it.
 // Example Consolidation of your 10+ Python models
 model Client {
   id                Int      @id @default(autoincrement())

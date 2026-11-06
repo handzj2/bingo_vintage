@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   Users, Plus, Pencil, Trash2, KeyRound, ShieldCheck, ShieldOff,
   Save, Eye, EyeOff, X, Check, UserCog, SlidersHorizontal,
-  ChevronRight, Shield, Lock, AlertTriangle, Loader2,
+  Shield, Lock, AlertTriangle, Loader2,
   ToggleLeft, ToggleRight, Info, ShieldAlert, RefreshCw,
   User, Clock, Copy, CheckCircle,
 } from 'lucide-react';
@@ -32,10 +32,10 @@ const api = {
 // Role names — IDs are loaded dynamically from /api/roles to avoid hardcoded ID assumptions
 const ROLES = ['admin', 'manager', 'cashier', 'loan_officer', 'agent'];
 const ROLE_COLORS: Record<string, string> = {
-  admin:   'bg-red-100 text-red-700 border-red-200',
-  manager: 'bg-purple-100 text-purple-700 border-purple-200',
-  cashier: 'bg-blue-100 text-blue-700 border-blue-200',
-  agent:   'bg-green-100 text-green-700 border-green-200',
+  admin:   'bg-bv-danger-bg text-bv-danger border-bv-danger/30',
+  manager: 'bg-bv-info-bg text-bv-accent border-blue-200',
+  cashier: 'bg-bv-info-bg text-bv-accent border-blue-200',
+  agent:   'bg-bv-success-bg text-bv-success border-green-200',
 };
 
 const PERMISSION_GROUPS = [
@@ -140,10 +140,10 @@ function resolvePerms(user: any): Record<string, boolean> {
 function Modal({ title, onClose, children }: any) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h3 className="font-bold text-gray-900 text-lg">{title}</h3>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-500" /></button>
+      <div className="bg-bv-surface rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-bv-border">
+          <h3 className="font-bold text-bv-text text-lg">{title}</h3>
+          <button onClick={onClose} className="p-2 hover:bg-bv-hover rounded-lg"><X className="w-5 h-5 text-bv-meta" /></button>
         </div>
         <div className="p-6">{children}</div>
       </div>
@@ -213,19 +213,19 @@ function UserFormModal({ user, onClose, onSaved }: any) {
   return (
     <Modal title={isEdit ? 'Edit User' : 'Create New User'} onClose={onClose}>
       <div className="space-y-4">
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
+        {error && <div className="bg-bv-danger-bg border border-bv-danger/30 text-bv-danger text-sm px-4 py-3 rounded-xl">{error}</div>}
         {(['full_name','username','email'] as const).map(field => (
           <div key={field}>
-            <label className="block text-sm font-semibold text-gray-700 mb-1 capitalize">{field.replace('_',' ')}</label>
+            <label className="block text-sm font-semibold text-bv-muted mb-1 capitalize">{field.replace('_',' ')}</label>
             <input type={field==='email'?'email':'text'}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+              className="w-full border border-bv-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-bv-action disabled:bg-bv-hover"
               value={(form as any)[field]} onChange={e => setForm({...form, [field]: e.target.value})}
               disabled={isEdit && field === 'username'} />
           </div>
         ))}
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">Role</label>
-          <select className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          <label className="block text-sm font-semibold text-bv-muted mb-1">Role</label>
+          <select className="w-full border border-bv-border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-bv-action"
             value={form.role} onChange={e => setForm({...form, role: e.target.value, branch_id: ''})}>
             {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase()+r.slice(1)}</option>)}
           </select>
@@ -233,13 +233,13 @@ function UserFormModal({ user, onClose, onSaved }: any) {
         {/* Branch selector — required for cashier, credit_officer, teller, branch_manager */}
         {['cashier','credit_officer','teller','branch_manager'].includes(form.role) && (
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
-              Branch <span className="text-red-500">*</span>
-              <span className="ml-1 text-xs font-normal text-gray-400">(required for {form.role} role)</span>
+            <label className="block text-sm font-semibold text-bv-muted mb-1">
+              Branch <span className="text-bv-danger">*</span>
+              <span className="ml-1 text-xs font-normal text-bv-meta">(required for {form.role} role)</span>
             </label>
             <select
-              className={`w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                !form.branch_id ? 'border-amber-300 bg-amber-50' : 'border-gray-200'
+              className={`w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-bv-action ${
+                !form.branch_id ? 'border-bv-warning bg-bv-warning-bg' : 'border-bv-border'
               }`}
               value={form.branch_id}
               onChange={e => setForm({...form, branch_id: e.target.value})}>
@@ -249,7 +249,7 @@ function UserFormModal({ user, onClose, onSaved }: any) {
               ))}
             </select>
             {availableBranches.length === 0 && (
-              <p className="text-xs text-amber-600 mt-1">
+              <p className="text-xs text-bv-warning mt-1">
                 ⚠ No branches found. Create a branch first before assigning a {form.role}.
               </p>
             )}
@@ -257,21 +257,21 @@ function UserFormModal({ user, onClose, onSaved }: any) {
         )}
         {!isEdit && (
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Password</label>
+            <label className="block text-sm font-semibold text-bv-muted mb-1">Password</label>
             <div className="relative">
               <input type={showPw ? 'text' : 'password'}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-bv-border rounded-xl px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-bv-action"
                 value={form.password} onChange={e => setForm({...form, password: e.target.value})} placeholder="Min. 6 characters" />
-              <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-bv-meta">
                 {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>
         )}
         <div className="flex gap-3 pt-2">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancel</button>
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 border border-bv-border rounded-xl text-sm font-semibold text-bv-muted hover:bg-bv-hover">Cancel</button>
           <button onClick={handleSubmit} disabled={loading}
-            className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50">
+            className="flex-1 px-4 py-2.5 bg-bv-action hover:bg-bv-action-hover text-white rounded-xl text-sm font-semibold disabled:opacity-50">
             {loading ? 'Saving...' : isEdit ? 'Save Changes' : 'Create User'}
           </button>
         </div>
@@ -303,19 +303,19 @@ function ChangePasswordModal({ user, onClose }: any) {
   return (
     <Modal title={`Change Password — ${user.username}`} onClose={onClose}>
       <div className="space-y-4">
-        {error   && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
-        {success && <div className="bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl flex items-center gap-2"><Check className="w-4 h-4" /> Password changed!</div>}
+        {error   && <div className="bg-bv-danger-bg border border-bv-danger/30 text-bv-danger text-sm px-4 py-3 rounded-xl">{error}</div>}
+        {success && <div className="bg-bv-success-bg border border-green-200 text-bv-success text-sm px-4 py-3 rounded-xl flex items-center gap-2"><Check className="w-4 h-4" /> Password changed!</div>}
         {(['currentPassword','newPassword','confirm'] as const).map(field => (
           <div key={field}>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">
+            <label className="block text-sm font-semibold text-bv-muted mb-1">
               {field === 'confirm' ? 'Confirm New Password' : field === 'newPassword' ? 'New Password' : 'Current Password'}
             </label>
             <div className="relative">
               <input type={show ? 'text' : 'password'}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-bv-border rounded-xl px-3 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-bv-action"
                 value={(form as any)[field]} onChange={e => setForm({...form, [field]: e.target.value})} />
               {field === 'newPassword' && (
-                <button type="button" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <button type="button" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-bv-meta">
                   {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               )}
@@ -323,9 +323,9 @@ function ChangePasswordModal({ user, onClose }: any) {
           </div>
         ))}
         <div className="flex gap-3 pt-2">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancel</button>
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 border border-bv-border rounded-xl text-sm font-semibold text-bv-muted hover:bg-bv-hover">Cancel</button>
           <button onClick={handleSubmit} disabled={loading}
-            className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold disabled:opacity-50">
+            className="flex-1 px-4 py-2.5 bg-bv-action hover:bg-bv-action-hover text-white rounded-xl text-sm font-semibold disabled:opacity-50">
             {loading ? 'Saving...' : 'Change Password'}
           </button>
         </div>
@@ -362,36 +362,36 @@ function PermissionsModal({ user, onClose, onSaved }: any) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+      <div className="bg-bv-surface rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-bv-border flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm border ${ROLE_COLORS[getRole(user)] || 'bg-gray-100 border-gray-200'}`}>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm border ${ROLE_COLORS[getRole(user)] || 'bg-bv-hover border-bv-border'}`}>
               {(user.fullName || user.full_name || user.username || '?').charAt(0).toUpperCase()}
             </div>
             <div>
-              <p className="font-black text-gray-900">{user.fullName || user.username}</p>
-              <p className="text-xs text-gray-400">
+              <p className="font-black text-bv-text">{user.fullName || user.username}</p>
+              <p className="text-xs text-bv-meta">
                 @{user.username} ·&nbsp;
                 <span className={`font-semibold capitalize px-1.5 py-0.5 rounded text-xs ${ROLE_COLORS[getRole(user)]}`}>{getRole(user)}</span>
                 {customised.length > 0 && <span className="ml-2 text-amber-600 font-semibold">{customised.length} custom override{customised.length > 1 ? 's' : ''}</span>}
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-500" /></button>
+          <button onClick={onClose} className="p-2 hover:bg-bv-hover rounded-lg"><X className="w-5 h-5 text-bv-meta" /></button>
         </div>
-        <div className="mx-6 mt-4 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex gap-2 flex-shrink-0">
-          <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-blue-700">
+        <div className="mx-6 mt-4 bg-bv-info-bg border border-blue-200 rounded-xl px-4 py-3 flex gap-2 flex-shrink-0">
+          <Info className="w-4 h-4 text-bv-accent flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-bv-accent">
             Toggles override this user's role defaults. <strong>Green = access granted</strong>, grey = access revoked.
-            Badges show <span className="text-green-700 font-bold">+ granted</span> (extra beyond role) or <span className="text-red-600 font-bold">− revoked</span> (removed from role).
+            Badges show <span className="text-bv-success font-bold">+ granted</span> (extra beyond role) or <span className="text-bv-danger font-bold">− revoked</span> (removed from role).
           </p>
         </div>
         <div className="overflow-y-auto flex-1 px-6 py-4 space-y-6">
           {PERMISSION_GROUPS.map(group => (
             <div key={group.group}>
-              <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-100">
+              <div className="flex items-center gap-2 mb-3 pb-2 border-b border-bv-border">
                 <span className="text-base">{group.icon}</span>
-                <h4 className="font-bold text-gray-800 text-sm">{group.group}</h4>
+                <h4 className="font-bold text-bv-text text-sm">{group.group}</h4>
               </div>
               <div className="space-y-2">
                 {group.permissions.map(p => {
@@ -401,25 +401,25 @@ function PermissionsModal({ user, onClose, onSaved }: any) {
                   return (
                     <div key={p.key}
                       className={`flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
-                        current ? 'bg-white border-gray-100' : 'bg-gray-50/60 border-dashed border-gray-200'
+                        current ? 'bg-bv-surface border-bv-border' : 'bg-bv-hover/60 border-dashed border-bv-border'
                       }`}>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`text-sm font-semibold ${current ? 'text-gray-800' : 'text-gray-400'}`}>{p.label}</span>
+                          <span className={`text-sm font-semibold ${current ? 'text-bv-text' : 'text-bv-meta'}`}>{p.label}</span>
                           {changed && (
                             <span className={`text-xs px-1.5 py-0.5 rounded-md font-bold ${
-                              current ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
+                              current ? 'bg-bv-success-bg text-bv-success' : 'bg-bv-danger-bg text-bv-danger'
                             }`}>
                               {current ? '+ granted' : '− revoked'}
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">{p.desc}</p>
+                        <p className="text-xs text-bv-meta mt-0.5">{p.desc}</p>
                       </div>
                       <button onClick={() => toggle(p.key)} className="flex-shrink-0 ml-4 transition-transform active:scale-95">
                         {current
-                          ? <ToggleRight className="w-9 h-9 text-blue-600" />
-                          : <ToggleLeft  className="w-9 h-9 text-gray-300" />
+                          ? <ToggleRight className="w-9 h-9 text-bv-accent" />
+                          : <ToggleLeft  className="w-9 h-9 text-bv-meta" />
                         }
                       </button>
                     </div>
@@ -429,14 +429,14 @@ function PermissionsModal({ user, onClose, onSaved }: any) {
             </div>
           ))}
         </div>
-        <div className="border-t border-gray-100 px-6 py-4 flex-shrink-0 bg-gray-50/50 rounded-b-2xl">
-          {error && <div className="flex items-center gap-2 text-red-600 text-sm mb-3"><AlertTriangle className="w-4 h-4" /> {error}</div>}
+        <div className="border-t border-bv-border px-6 py-4 flex-shrink-0 bg-bv-hover/50 rounded-b-2xl">
+          {error && <div className="flex items-center gap-2 text-bv-danger text-sm mb-3"><AlertTriangle className="w-4 h-4" /> {error}</div>}
           {saved && <div className="flex items-center gap-2 text-green-600 text-sm mb-3"><Check className="w-4 h-4" /> Permissions saved!</div>}
           <div className="flex gap-3">
-            <button onClick={resetToDefaults} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-white transition-colors">Reset to defaults</button>
-            <button onClick={onClose} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-white transition-colors">Cancel</button>
+            <button onClick={resetToDefaults} className="px-4 py-2.5 border border-bv-border rounded-xl text-sm font-semibold text-bv-muted hover:bg-bv-surface transition-colors">Reset to defaults</button>
+            <button onClick={onClose} className="px-4 py-2.5 border border-bv-border rounded-xl text-sm font-semibold text-bv-muted hover:bg-bv-surface transition-colors">Cancel</button>
             <button onClick={handleSave} disabled={saving}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold disabled:opacity-50 transition-colors">
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-bv-action hover:bg-bv-action-hover text-white rounded-xl text-sm font-bold disabled:opacity-50 transition-colors">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               {saving ? 'Saving...' : 'Save Permissions'}
             </button>
@@ -490,17 +490,17 @@ function UsersTab() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-lg font-bold text-gray-900">System Users</h2>
-          <p className="text-sm text-gray-500 mt-0.5">{users.length} user{users.length !== 1 ? 's' : ''} registered</p>
+          <h2 className="text-lg font-bold text-bv-text">System Users</h2>
+          <p className="text-sm text-bv-meta mt-0.5">{users.length} user{users.length !== 1 ? 's' : ''} registered</p>
         </div>
         <button onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-sm">
+          className="flex items-center gap-2 px-4 py-2.5 bg-bv-action hover:bg-bv-action-hover text-white rounded-xl text-sm font-semibold shadow-sm">
           <Plus className="w-4 h-4" /> Add User
         </button>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-40"><Loader2 className="w-7 h-7 animate-spin text-blue-500" /></div>
+        <div className="flex items-center justify-center h-40"><Loader2 className="w-7 h-7 animate-spin text-bv-accent" /></div>
       ) : (
         <div className="space-y-3">
           {users.map(u => {
@@ -509,40 +509,40 @@ function UsersTab() {
               ? Object.keys(rawPerms).length : 0;
             return (
               <div key={u.id}
-                className={`bg-white border rounded-xl p-4 flex items-center gap-4 transition-all ${!u.isActive ? 'opacity-55 border-gray-100' : 'border-gray-100 hover:shadow-sm'}`}>
+                className={`bg-bv-surface border rounded-xl p-4 flex items-center gap-4 transition-all ${!u.isActive ? 'opacity-55 border-bv-border' : 'border-bv-border hover:shadow-sm'}`}>
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                   {(u.fullName || u.username || '?').charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-gray-900 text-sm">{u.fullName || u.username}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${ROLE_COLORS[getRole(u)] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>{getRole(u)}</span>
-                    {!u.isActive && <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 border border-gray-200">Inactive</span>}
+                    <span className="font-semibold text-bv-text text-sm">{u.fullName || u.username}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${ROLE_COLORS[getRole(u)] || 'bg-bv-hover text-bv-muted border-bv-border'}`}>{getRole(u)}</span>
+                    {!u.isActive && <span className="text-xs px-2 py-0.5 rounded-full bg-bv-hover text-bv-meta border border-bv-border">Inactive</span>}
                     {customCount > 0 && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 flex items-center gap-1">
                         <Shield className="w-3 h-3" /> {customCount} custom
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-400 mt-0.5">@{u.username} · {u.email}</p>
+                  <p className="text-xs text-bv-meta mt-0.5">@{u.username} · {u.email}</p>
                 </div>
                 <div className="flex items-center gap-0.5 flex-shrink-0">
-                  <button onClick={() => setPermUser(u)} title="Edit Permissions" className="p-2 hover:bg-purple-50 hover:text-purple-600 text-gray-400 rounded-lg transition-colors"><Shield className="w-4 h-4" /></button>
-                  <button onClick={() => setEditUser(u)} title="Edit User" className="p-2 hover:bg-blue-50 hover:text-blue-600 text-gray-400 rounded-lg transition-colors"><Pencil className="w-4 h-4" /></button>
-                  <button onClick={() => setPwUser(u)} title="Change Password" className="p-2 hover:bg-amber-50 hover:text-amber-600 text-gray-400 rounded-lg transition-colors"><KeyRound className="w-4 h-4" /></button>
+                  <button onClick={() => setPermUser(u)} title="Edit Permissions" className="p-2 hover:bg-purple-50 hover:text-purple-600 text-bv-meta rounded-lg transition-colors"><Shield className="w-4 h-4" /></button>
+                  <button onClick={() => setEditUser(u)} title="Edit User" className="p-2 hover:bg-bv-info-bg hover:text-bv-accent text-bv-meta rounded-lg transition-colors"><Pencil className="w-4 h-4" /></button>
+                  <button onClick={() => setPwUser(u)} title="Change Password" className="p-2 hover:bg-amber-50 hover:text-amber-600 text-bv-meta rounded-lg transition-colors"><KeyRound className="w-4 h-4" /></button>
                   <button onClick={() => toggleActive(u)} title={u.isActive ? 'Deactivate' : 'Activate'}
-                    className={`p-2 rounded-lg transition-colors ${u.isActive ? 'hover:bg-orange-50 hover:text-orange-600' : 'hover:bg-green-50 hover:text-green-600'} text-gray-400`}>
+                    className={`p-2 rounded-lg transition-colors ${u.isActive ? 'hover:bg-orange-50 hover:text-orange-600' : 'hover:bg-bv-success-bg hover:text-green-600'} text-bv-meta`}>
                     {u.isActive ? <ShieldOff className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
                   </button>
                   {u.id !== me?.id && (
-                    <button onClick={() => setConfirmDel(u)} title="Delete user" className="p-2 hover:bg-red-50 hover:text-red-600 text-gray-400 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => setConfirmDel(u)} title="Delete user" className="p-2 hover:bg-bv-danger-bg hover:text-bv-danger text-bv-meta rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
                   )}
                 </div>
               </div>
             );
           })}
           {users.length === 0 && (
-            <div className="text-center py-16 text-gray-400">
+            <div className="text-center py-16 text-bv-meta">
               <Users className="w-12 h-12 mx-auto mb-3 opacity-20" />
               <p className="font-medium">No users yet</p>
             </div>
@@ -552,13 +552,13 @@ function UsersTab() {
 
       {confirmDel && (
         <Modal title="Delete User" onClose={() => setConfirmDel(null)}>
-          <div className="flex items-start gap-3 mb-5 bg-red-50 border border-red-200 rounded-xl p-4">
-            <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-red-700">Permanently delete <strong>{confirmDel.fullName || confirmDel.username}</strong>? Their audit history will remain but the account will be removed.</p>
+          <div className="flex items-start gap-3 mb-5 bg-bv-danger-bg border border-bv-danger/30 rounded-xl p-4">
+            <AlertTriangle className="w-5 h-5 text-bv-danger flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-bv-danger">Permanently delete <strong>{confirmDel.fullName || confirmDel.username}</strong>? Their audit history will remain but the account will be removed.</p>
           </div>
           <div className="flex gap-3">
-            <button onClick={() => setConfirmDel(null)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">Cancel</button>
-            <button onClick={() => deleteUser(confirmDel)} className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold">Delete</button>
+            <button onClick={() => setConfirmDel(null)} className="flex-1 px-4 py-2.5 border border-bv-border rounded-xl text-sm font-semibold text-bv-muted hover:bg-bv-hover">Cancel</button>
+            <button onClick={() => deleteUser(confirmDel)} className="flex-1 px-4 py-2.5 bg-bv-danger hover:bg-bv-danger text-white rounded-xl text-sm font-semibold">Delete</button>
           </div>
         </Modal>
       )}
@@ -585,11 +585,11 @@ type ResetRequest = {
 type OTPResult = { otp: string; expiresAt: string; requestId: string };
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
-  PENDING:      { bg: 'bg-yellow-50 border-yellow-200', text: 'text-yellow-800', dot: 'bg-yellow-400' },
-  APPROVED:     { bg: 'bg-blue-50 border-blue-200',     text: 'text-blue-800',   dot: 'bg-blue-500'   },
+  PENDING:      { bg: 'bg-bv-warning-bg border-yellow-200', text: 'text-bv-warning', dot: 'bg-yellow-400' },
+  APPROVED:     { bg: 'bg-bv-info-bg border-blue-200',     text: 'text-bv-accent',   dot: 'bg-bv-info-bg0'   },
   OTP_VERIFIED: { bg: 'bg-indigo-50 border-indigo-200', text: 'text-indigo-800', dot: 'bg-indigo-500' },
-  COMPLETED:    { bg: 'bg-green-50 border-green-200',   text: 'text-green-800',  dot: 'bg-green-500'  },
-  EXPIRED:      { bg: 'bg-gray-50 border-gray-200',     text: 'text-gray-600',   dot: 'bg-gray-400'   },
+  COMPLETED:    { bg: 'bg-bv-success-bg border-green-200',   text: 'text-bv-success',  dot: 'bg-bv-success-bg0'  },
+  EXPIRED:      { bg: 'bg-bv-hover border-bv-border',     text: 'text-bv-muted',   dot: 'bg-gray-400'   },
 };
 
 function PasswordResetsTab() {
@@ -648,38 +648,38 @@ function PasswordResetsTab() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+          <h2 className="text-lg font-bold text-bv-text flex items-center gap-2">
             Password Reset Requests
             {pendingCount > 0 && (
-              <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{pendingCount}</span>
+              <span className="bg-bv-danger-bg0 text-white text-xs font-bold px-2 py-0.5 rounded-full">{pendingCount}</span>
             )}
           </h2>
-          <p className="text-sm text-gray-500 mt-0.5">Review and approve staff password reset requests · auto-refreshes every 30s</p>
+          <p className="text-sm text-bv-meta mt-0.5">Review and approve staff password reset requests · auto-refreshes every 30s</p>
         </div>
-        <button onClick={load} className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl text-sm font-semibold transition-colors">
+        <button onClick={load} className="flex items-center gap-2 px-3 py-2 bg-bv-hover hover:bg-bv-border text-bv-muted rounded-xl text-sm font-semibold transition-colors">
           <RefreshCw className="w-4 h-4" /> Refresh
         </button>
       </div>
 
       {/* OTP reveal banner — shown once after admin approval */}
       {otpResult && (
-        <div className="bg-green-50 border-2 border-green-300 rounded-2xl p-5 mb-6">
+        <div className="bg-bv-success-bg border-2 border-green-300 rounded-2xl p-5 mb-6">
           <div className="flex items-start gap-3">
             <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="font-bold text-green-800 mb-1">✅ 6-Digit OTP Generated</p>
-              <p className="text-sm text-green-700 mb-4">
+              <p className="font-bold text-bv-success mb-1">✅ 6-Digit OTP Generated</p>
+              <p className="text-sm text-bv-success mb-4">
                 Share this code with the user <strong>via phone call or in person</strong>. It expires in <strong>10 minutes</strong> and is valid for one use only.
               </p>
               <div className="flex items-center gap-3 flex-wrap">
-                <div className="bg-white border-2 border-green-300 rounded-xl px-6 py-3 font-mono text-3xl font-black tracking-[8px] text-green-900">
+                <div className="bg-bv-surface border-2 border-green-300 rounded-xl px-6 py-3 font-mono text-3xl font-black tracking-[8px] text-green-900">
                   {otpResult.otp}
                 </div>
                 <button onClick={copyOTP}
-                  className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-colors ${copied ? 'bg-green-600 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>
+                  className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-colors ${copied ? 'bg-bv-success text-white' : 'bg-bv-action hover:bg-bv-action-hover text-white'}`}>
                   {copied ? <><CheckCircle className="w-4 h-4" /> Copied!</> : <><Copy className="w-4 h-4" /> Copy OTP</>}
                 </button>
-                <button onClick={() => setOtpResult(null)} className="flex items-center gap-1 px-3 py-3 border border-gray-200 text-gray-500 rounded-xl text-sm font-semibold hover:bg-gray-50">
+                <button onClick={() => setOtpResult(null)} className="flex items-center gap-1 px-3 py-3 border border-bv-border text-bv-meta rounded-xl text-sm font-semibold hover:bg-bv-hover">
                   <X className="w-4 h-4" /> Dismiss
                 </button>
               </div>
@@ -696,7 +696,7 @@ function PasswordResetsTab() {
         {['ALL', 'PENDING', 'APPROVED', 'OTP_VERIFIED', 'COMPLETED', 'EXPIRED'].map(f => (
           <button key={f} onClick={() => setFilter(f)}
             className={`px-4 py-1.5 rounded-lg text-xs font-bold capitalize transition-colors border ${
-              filter === f ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+              filter === f ? 'bg-bv-action text-white border-bv-action' : 'bg-bv-surface text-bv-meta border-bv-border hover:border-bv-border'
             }`}>
             {f === 'ALL' ? 'All' : f === 'OTP_VERIFIED' ? 'OTP Verified' : f.charAt(0) + f.slice(1).toLowerCase()}
             {f === 'PENDING' && pendingCount > 0 ? ` (${pendingCount})` : ''}
@@ -706,9 +706,9 @@ function PasswordResetsTab() {
 
       {/* Request list */}
       {loading ? (
-        <div className="flex items-center justify-center h-40"><Loader2 className="w-7 h-7 animate-spin text-blue-500" /></div>
+        <div className="flex items-center justify-center h-40"><Loader2 className="w-7 h-7 animate-spin text-bv-accent" /></div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 bg-white border border-dashed border-gray-200 rounded-2xl text-gray-400">
+        <div className="text-center py-16 bg-bv-surface border border-dashed border-bv-border rounded-2xl text-bv-meta">
           <ShieldAlert className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="font-semibold">No {filter !== 'ALL' ? filter.toLowerCase() : ''} requests</p>
           <p className="text-sm mt-1">Password reset requests from staff will appear here</p>
@@ -723,26 +723,26 @@ function PasswordResetsTab() {
 
             return (
               <div key={req.id}
-                className={`bg-white border rounded-xl p-4 flex items-center gap-4 flex-wrap transition-all ${isPending ? 'border-yellow-200 shadow-sm shadow-yellow-50' : 'border-gray-100'}`}>
+                className={`bg-bv-surface border rounded-xl p-4 flex items-center gap-4 flex-wrap transition-all ${isPending ? 'border-yellow-200 shadow-sm shadow-yellow-50' : 'border-bv-border'}`}>
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                   {initials}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                    <span className="font-semibold text-gray-900 text-sm">{displayName}</span>
-                    {req.user?.username && <span className="text-xs text-gray-400">@{req.user.username}</span>}
+                    <span className="font-semibold text-bv-text text-sm">{displayName}</span>
+                    {req.user?.username && <span className="text-xs text-bv-meta">@{req.user.username}</span>}
                   </div>
-                  <p className="text-xs text-gray-400">{req.user?.email || '—'}</p>
+                  <p className="text-xs text-bv-meta">{req.user?.email || '—'}</p>
                   <div className="flex items-center gap-3 mt-1 flex-wrap">
                     <div className="flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-gray-300" />
-                      <span className="text-xs text-gray-400">Requested: {new Date(req.createdAt).toLocaleString()}</span>
+                      <Clock className="w-3 h-3 text-bv-meta" />
+                      <span className="text-xs text-bv-meta">Requested: {new Date(req.createdAt).toLocaleString()}</span>
                     </div>
                     {req.approvedAt && (
-                      <span className="text-xs text-gray-400">· Approved: {new Date(req.approvedAt).toLocaleString()}</span>
+                      <span className="text-xs text-bv-meta">· Approved: {new Date(req.approvedAt).toLocaleString()}</span>
                     )}
                     {req.otpExpiresAt && req.status === 'APPROVED' && (
-                      <span className={`text-xs font-semibold ${new Date(req.otpExpiresAt) < new Date() ? 'text-red-500' : 'text-amber-600'}`}>
+                      <span className={`text-xs font-semibold ${new Date(req.otpExpiresAt) < new Date() ? 'text-bv-danger' : 'text-amber-600'}`}>
                         · OTP expires: {new Date(req.otpExpiresAt).toLocaleString()}
                       </span>
                     )}
@@ -759,7 +759,7 @@ function PasswordResetsTab() {
                 {isPending && (
                   <div className="flex gap-2">
                     <button disabled={acting === req.id} onClick={() => approve(req.id)}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold transition-colors">
+                      className="flex items-center gap-1.5 px-4 py-2 bg-bv-success hover:bg-bv-success disabled:opacity-50 text-white rounded-xl text-sm font-bold transition-colors">
                       {acting === req.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                       Approve &amp; Issue OTP
                     </button>
@@ -820,32 +820,32 @@ function AppSettingsTab() {
     finally { setSaving(null); }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-40"><Loader2 className="w-7 h-7 animate-spin text-blue-500" /></div>;
+  if (loading) return <div className="flex items-center justify-center h-40"><Loader2 className="w-7 h-7 animate-spin text-bv-accent" /></div>;
 
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-lg font-bold text-gray-900">Application Settings</h2>
-        <p className="text-sm text-gray-500 mt-0.5">Configure system-wide defaults for loans and fees</p>
+        <h2 className="text-lg font-bold text-bv-text">Application Settings</h2>
+        <p className="text-sm text-bv-meta mt-0.5">Configure system-wide defaults for loans and fees</p>
       </div>
-      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
+      {error && <div className="mb-4 bg-bv-danger-bg border border-bv-danger/30 text-bv-danger text-sm px-4 py-3 rounded-xl">{error}</div>}
       <div className="space-y-4">
         {CONFIG.map(({ key, label, suffix, desc }) => (
-          <div key={key} className="bg-white border border-gray-100 rounded-xl p-5">
+          <div key={key} className="bg-bv-surface border border-bv-border rounded-xl p-5">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
-                <p className="font-semibold text-gray-900 text-sm">{label}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
+                <p className="font-semibold text-bv-text text-sm">{label}</p>
+                <p className="text-xs text-bv-meta mt-0.5">{desc}</p>
                 <div className="flex items-center gap-2 mt-3">
                   <input
-                    className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
+                    className="border border-bv-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-bv-action w-48"
                     value={settings[key] || ''} onChange={e => setSettings({ ...settings, [key]: e.target.value })} />
-                  {suffix && <span className="text-sm text-gray-400 font-medium">{suffix}</span>}
+                  {suffix && <span className="text-sm text-bv-meta font-medium">{suffix}</span>}
                 </div>
               </div>
               <button onClick={() => save(key)} disabled={saving === key}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all mt-1 min-w-[90px] justify-center ${
-                  saved === key ? 'bg-green-100 text-green-700' : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  saved === key ? 'bg-bv-success-bg text-bv-success' : 'bg-bv-action hover:bg-bv-action-hover text-white'
                 }`}>
                 {saved === key ? <><Check className="w-4 h-4" />Saved</> : saving === key ? 'Saving...' : <><Save className="w-4 h-4" />Save</>}
               </button>
@@ -856,26 +856,26 @@ function AppSettingsTab() {
 
       {/* ── SMS Settings ─────────────────────────────────────── */}
       <div className="mt-8 mb-6">
-        <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+        <h2 className="text-lg font-bold text-bv-text flex items-center gap-2">
           <span className="text-xl">📱</span> SMS Notifications
         </h2>
-        <p className="text-sm text-gray-500 mt-0.5">Configure SMS gateway and notification triggers</p>
+        <p className="text-sm text-bv-meta mt-0.5">Configure SMS gateway and notification triggers</p>
       </div>
       <div className="space-y-4">
         {SMS_CONFIG.map(({ key, label, desc, type, options }: any) => (
-          <div key={key} className="bg-white border border-gray-100 rounded-xl p-5">
+          <div key={key} className="bg-bv-surface border border-bv-border rounded-xl p-5">
             <div className="flex items-center justify-between gap-4">
               <div className="flex-1">
-                <p className="font-semibold text-gray-900 text-sm">{label}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
+                <p className="font-semibold text-bv-text text-sm">{label}</p>
+                <p className="text-xs text-bv-meta mt-0.5">{desc}</p>
                 {(type === 'text' || type === 'password') && (
                   <input type={type}
-                    className="mt-3 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
+                    className="mt-3 border border-bv-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-bv-action w-64"
                     value={settings[key] || ''} onChange={e => setSettings({ ...settings, [key]: e.target.value })} />
                 )}
                 {type === 'select' && (
                   <select
-                    className="mt-3 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="mt-3 border border-bv-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-bv-action"
                     value={settings[key] || ''} onChange={e => setSettings({ ...settings, [key]: e.target.value })}>
                     {(options || []).map((o: string) => <option key={o} value={o}>{o}</option>)}
                   </select>
@@ -891,7 +891,7 @@ function AppSettingsTab() {
                   className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
                     settings[key] === 'true'
                       ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      : 'bg-bv-hover text-bv-meta hover:bg-bv-border'
                   }`}>
                   {settings[key] === 'true'
                     ? <><ToggleRight className="w-4 h-4" />ON</>
@@ -900,7 +900,7 @@ function AppSettingsTab() {
               ) : (
                 <button onClick={() => save(key)} disabled={saving === key}
                   className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all mt-1 min-w-[90px] justify-center ${
-                    saved === key ? 'bg-green-100 text-green-700' : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    saved === key ? 'bg-bv-success-bg text-bv-success' : 'bg-bv-action hover:bg-bv-action-hover text-white'
                   }`}>
                   {saved === key ? <><Check className="w-4 h-4" />Saved</> : saving === key ? 'Saving...' : <><Save className="w-4 h-4" />Save</>}
                 </button>
@@ -935,38 +935,37 @@ export default function SettingsPage() {
       <div className="p-8 flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <Lock className="w-12 h-12 text-gray-200 mx-auto mb-3" />
-          <p className="font-bold text-gray-400">Admin access required</p>
-          <p className="text-sm text-gray-300 mt-1">Only system administrators can access Settings</p>
+          <p className="font-bold text-bv-meta">Admin access required</p>
+          <p className="text-sm text-bv-meta mt-1">Only system administrators can access Settings</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50/50">
+    <div className="min-h-screen bg-bv-hover/50">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-            <span>Dashboard</span><ChevronRight className="w-3 h-3" /><span className="text-gray-900 font-medium">Settings</span>
+        <header className="flex flex-wrap items-start justify-between gap-3 border-b border-bv-border pb-4 mb-6">
+          <div>
+            <h1 className="text-lg font-semibold text-bv-text">Settings</h1>
+            <p className="text-sm text-bv-muted mt-0.5">System configuration, user management, and role permissions. Admin only.</p>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-          <p className="text-gray-500 mt-1">Manage users, control access permissions, and configure the system</p>
-        </div>
+        </header>
 
-        <div className="flex gap-1 bg-white border border-gray-100 rounded-xl p-1 mb-6 w-fit shadow-sm">
+        <div className="flex gap-1 bg-bv-surface border border-bv-border rounded-xl p-1 mb-6 w-fit shadow-sm">
           {TABS.map(tab => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
             return (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${active ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}>
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${active ? 'bg-bv-action text-white shadow-sm' : 'text-bv-meta hover:text-bv-text hover:bg-bv-hover'}`}>
                 <Icon className="w-4 h-4" />{tab.label}
               </button>
             );
           })}
         </div>
 
-        <div className="bg-gray-50 rounded-2xl border border-gray-100 p-6">
+        <div className="bg-bv-hover rounded-2xl border border-bv-border p-6">
           {activeTab === 'users'    && <UsersTab />}
           {activeTab === 'resets'   && <PasswordResetsTab />}
           {activeTab === 'settings' && <AppSettingsTab />}

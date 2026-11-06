@@ -1,16 +1,3 @@
-/**
- * LoansModule  (UPDATED for enterprise engines)
- *
- * Changes from original:
- *   • Added ArrearsCalculationJob to providers (Arrears Aggregation Engine)
- *   • Added LedgerModule to imports (so LoansService can inject LedgerService)
- *   • Added LoanProductsModule (so LoansService can load tenant-owned
- *     LoanProduct rows and source loan behavior from them — see
- *     applyForLoan()'s loanProductId branch)
- *
- * All original imports, controllers, and exports unchanged.
- */
-
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LoansController } from './loans.controller';
@@ -28,6 +15,7 @@ import { ArrearsCalculationJob } from './jobs/arrears-calculation.job';
 import { LedgerModule }          from '../ledger/ledger.module';
 import { LoanProductsModule }    from '../loan-products/loan-products.module';
 import { LoanCalculatorRegistry, loanCalculatorProviders } from './calculators/loan-calculator.registry';
+import { AuditModule }           from '../audit/audit.module';
 
 @Module({
   imports: [
@@ -37,6 +25,7 @@ import { LoanCalculatorRegistry, loanCalculatorProviders } from './calculators/l
     SchedulesModule,
     LedgerModule,        // provides LedgerService for LoansService (disbursement entries)
     LoanProductsModule,  // provides LoanProductsService for product-driven loan creation
+    AuditModule,         // provides AuditService for loan approval/rejection audit logging
   ],
   controllers: [LoansController],
   providers: [

@@ -6,12 +6,14 @@ import { ExpensesService } from './expenses.service';
 import { ExpensesController } from './expenses.controller';
 import { CashDrawersModule } from '../cash-drawers/cash-drawers.module';
 import { LedgerModule } from '../ledger/ledger.module';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Expense, ExpenseCategory]),
     CashDrawersModule,
     LedgerModule,
+    AuditModule, // provides AuditService for expense approval/rejection audit logging
   ],
   controllers: [ExpensesController],
   providers: [ExpensesService],

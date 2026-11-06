@@ -16,7 +16,7 @@ const ROLE_COLORS: Record<string, string> = {
   manager:      'bg-blue-900/40 text-blue-300',
   cashier:      'bg-green-900/40 text-green-300',
   loan_officer: 'bg-yellow-900/40 text-yellow-300',
-  agent:        'bg-gray-700 text-gray-300',
+  agent:        'bg-gray-700 text-bv-meta',
 };
 
 export default function AllUsersPage() {
@@ -61,7 +61,7 @@ export default function AllUsersPage() {
   return (
     <div className="p-8">
       <h1 className="text-2xl font-black text-white mb-1">All Users</h1>
-      <p className="text-gray-400 text-sm mb-6">Search across all tenants · {users.length} results</p>
+      <p className="text-bv-meta text-sm mb-6">Search across all tenants · {users.length} results</p>
 
       {/* Search */}
       <div className="flex gap-3 mb-6">
@@ -90,11 +90,11 @@ export default function AllUsersPage() {
           <div className="flex justify-between items-center mb-3">
             <div>
               <span className="text-xs font-black text-purple-400 uppercase tracking-widest">Impersonation Token</span>
-              <span className="ml-2 text-xs text-gray-400">for {tokenResult.username} · expires in 15 min</span>
+              <span className="ml-2 text-xs text-bv-meta">for {tokenResult.username} · expires in 15 min</span>
             </div>
-            <button onClick={() => setTokenResult(null)} className="text-gray-500 hover:text-gray-300">✕</button>
+            <button onClick={() => setTokenResult(null)} className="text-bv-meta hover:text-bv-meta">✕</button>
           </div>
-          <pre className="text-xs text-gray-300 bg-gray-900 rounded-lg p-3 whitespace-pre-wrap break-all mb-3">
+          <pre className="text-xs text-bv-meta bg-bv-action rounded-lg p-3 whitespace-pre-wrap break-all mb-3">
             {tokenResult.token}
           </pre>
           <button onClick={copyToken}
@@ -116,10 +116,10 @@ export default function AllUsersPage() {
       ) : (
         <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="border-b border-gray-700 bg-gray-900/50">
+            <thead className="border-b border-gray-700 bg-bv-action/50">
               <tr>
                 {['User', 'Email', 'Tenant', 'Role', 'Status', 'Actions'].map(h => (
-                  <th key={h} className="text-left py-3 px-4 text-xs font-bold text-gray-400 uppercase tracking-wider">{h}</th>
+                  <th key={h} className="text-left py-3 px-4 text-xs font-bold text-bv-meta uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -127,10 +127,10 @@ export default function AllUsersPage() {
               {users.map(u => (
                 <tr key={u.id} className="hover:bg-gray-700/30 transition-colors">
                   <td className="py-3 px-4 font-medium text-white">{u.username}</td>
-                  <td className="py-3 px-4 text-gray-400 text-xs">{u.email}</td>
-                  <td className="py-3 px-4 text-gray-300 text-xs">{u.tenant_name ?? '—'}</td>
+                  <td className="py-3 px-4 text-bv-meta text-xs">{u.email}</td>
+                  <td className="py-3 px-4 text-bv-meta text-xs">{u.tenant_name ?? '—'}</td>
                   <td className="py-3 px-4">
-                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${ROLE_COLORS[u.role_name] ?? 'bg-gray-700 text-gray-300'}`}>
+                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${ROLE_COLORS[u.role_name] ?? 'bg-gray-700 text-bv-meta'}`}>
                       {u.role_name}
                     </span>
                   </td>
@@ -152,7 +152,7 @@ export default function AllUsersPage() {
                       </div>
                     ) : (
                       <button onClick={() => setImpersonating(u.id)}
-                        className="px-3 py-1 bg-gray-700 hover:bg-purple-800 rounded text-xs font-bold transition text-gray-300 hover:text-white">
+                        className="px-3 py-1 bg-gray-700 hover:bg-purple-800 rounded text-xs font-bold transition text-bv-meta hover:text-white">
                         Impersonate
                       </button>
                     )}
@@ -162,7 +162,7 @@ export default function AllUsersPage() {
             </tbody>
           </table>
           {users.length === 0 && (
-            <div className="text-center text-gray-500 py-16">No users found</div>
+            <div className="text-center text-bv-meta py-16">No users found</div>
           )}
         </div>
       )}

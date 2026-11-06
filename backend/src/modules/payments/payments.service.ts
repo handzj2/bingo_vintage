@@ -161,6 +161,7 @@ export class PaymentsService {
     await qr.startTransaction();
 
     let savedPayment: Payment;
+    let allocationResult: any = null;
     let newBalance:   number;
     let loanCompleted: boolean;
     let lockedLoan:    Loan;
@@ -238,8 +239,20 @@ export class PaymentsService {
         throw err;
       }
 
+      // Policy: do not accept payment greater than outstanding principal balance.
+      // Unapplied schedule excess is still possible when balance > sum(open instalments)
+      // but amount must not exceed loan.balance (prevents silent over-collection).
+      const outstandingBalance = Math.round(Number(locked.balance));
+      const payAmount = Math.round(Number(dto.amount));
+      if (payAmount > outstandingBalance) {
+        throw new BadRequestException(
+          `Payment amount UGX ${payAmount.toLocaleString()} exceeds outstanding balance UGX ${outstandingBalance.toLocaleString()}. ` +
+          `Reduce the amount or settle exactly at the balance.`,
+        );
+      }
+
       // Compute new balance from the LOCKED row — not a stale read
-      newBalance    = Math.max(0, Number(locked.balance) - Number(dto.amount));
+      newBalance    = Math.max(0, outstandingBalance - payAmount);
       loanCompleted = newBalance === 0;
 
       await qr.manager.update(Loan, dto.loanId, {
@@ -268,7 +281,7 @@ export class PaymentsService {
       // scheduleId (resolved above) is still stored on the payment row
       // itself for backward-compatible single-column lookups — allocation
       // detail is the source of truth for what actually happened.
-      const allocationResult = await this.paymentAllocationService.allocatePayment(
+      allocationResult = await this.paymentAllocationService.allocatePayment(
         qr.manager,
         savedPayment!.id,
         dto.loanId,
@@ -293,6 +306,24 @@ export class PaymentsService {
           `could not be applied to any open installment (loan balance was still reduced by the full amount).`,
         );
       }
+
+      // Ledger entry — inside the transaction so a write failure rolls back
+      // the entire payment atomically (no committed payment without a ledger record).
+      await this.ledgerService.recordPayment(
+        {
+          id:         dto.loanId,
+          clientId:   lockedLoan.clientId,
+          loanNumber: lockedLoan.loanNumber,
+          balance:    newBalance,
+        },
+        {
+          id:           savedPayment!.id,
+          amount:       dto.amount,
+          receiptNumber,
+          collectedBy:  dto.collectedBy,
+        },
+        qr.manager,
+      );
 
       await qr.commitTransaction();
       this.logger.log(
@@ -331,23 +362,10 @@ export class PaymentsService {
       );
     }
 
-    // Ledger entry — swallowed: ledger failure must not undo a committed payment
-    this.ledgerService.recordPayment(
-      {
-        id:         dto.loanId,
-        clientId:   fullLoan?.clientId  ?? 0,
-        loanNumber: fullLoan?.loanNumber ?? '',
-        balance:    newBalance,
-      },
-      {
-        id:           savedPayment!.id,
-        amount:       dto.amount,
-        receiptNumber,
-        collectedBy:  dto.collectedBy,
-      },
-    ).catch(err =>
-      this.logger.warn(`Ledger entry failed for payment ${savedPayment!.id}: ${err.message}` +
-        (requestId ? ` [requestId=${requestId}]` : '')),
+    const allocDetail = allocationResult?.detail || [];
+    const totalAllocated = allocDetail.reduce(
+      (s: number, d: any) => s + (Number(d.applied) || 0),
+      0,
     );
 
     return {
@@ -355,6 +373,17 @@ export class PaymentsService {
       payment:  savedPayment!,
       receiptNumber,
       newBalance,
+      allocations: allocDetail.map((d: any) => ({
+        scheduleId: d.scheduleId,
+        allocated: d.applied,
+        previousStatus: d.previousStatus,
+        newStatus: d.newStatus,
+      })),
+      totalAllocated,
+      totalInstalmentApplied: allocationResult?.totalInstalmentApplied ?? 0,
+      totalPenaltyApplied: allocationResult?.totalPenaltyApplied ?? 0,
+      unallocated: allocationResult?.remaining ?? 0,
+      allocationSource: 'persisted',
     };
   }
 
@@ -462,8 +491,7 @@ export class PaymentsService {
             WHERE payment_id = $1 AND reversed_at IS NULL`,
           [paymentId],
         );
-      } else if (payment.scheduleId) {
-        // Fixed: CASE expression result is inferred as `text` by Postgres,
+      } else if (payment.scheduleId) {        // Fixed: CASE expression result is inferred as `text` by Postgres,
         // which then fails to assign into the enum-typed `status` column
         // ("column status is of type loan_schedules_status_enum but
         // expression is of type text"). Casting each branch's string
@@ -487,6 +515,14 @@ export class PaymentsService {
         );
       }
 
+      // Ledger entry — inside the transaction so a write failure rolls back
+      // the reversal atomically (no committed reversal without a ledger record).
+      await this.ledgerService.recordReversal(
+        { id: loan.id, clientId: loan.clientId, loanNumber: loan.loanNumber, balance: restoredBalance },
+        { id: payment.id, amount: payment.amount, receiptNumber: payment.receiptNumber, reversedBy: adminUser?.username ?? adminUser?.email },
+        queryRunner.manager,
+      );
+
       await queryRunner.commitTransaction();
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -494,13 +530,6 @@ export class PaymentsService {
     } finally {
       await queryRunner.release();
     }
-
-    try {
-      await this.ledgerService.recordReversal(
-        { id: loan.id, clientId: loan.clientId, loanNumber: loan.loanNumber, balance: restoredBalance },
-        { id: payment.id, amount: payment.amount, receiptNumber: payment.receiptNumber, reversedBy: adminUser?.username ?? adminUser?.email },
-      );
-    } catch (_) {}
 
     try {
       await this.auditService.logAction({
@@ -512,6 +541,7 @@ export class PaymentsService {
         oldValues:   { paymentStatus: PaymentStatus.COMPLETED, loanBalance: loan.balance, loanStatus: loan.status },
         newValues:   { paymentStatus: PaymentStatus.REVERSED,  loanBalance: restoredBalance, loanStatus: LoanStatus.ACTIVE },
         metadata:    { reversalAmount: payment.amount },
+        tenantId:    loan.tenantId ?? undefined,
       });
     } catch (_) {}
 
@@ -528,8 +558,46 @@ export class PaymentsService {
     };
   }
 
-  async findOne(id: number) {
-    return this.paymentRepo.findOne({ where: { id }, relations: ['loan', 'loan.client'] });
+  async findOne(id: number, tenantId?: number) {
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+    const payment = await this.paymentRepo.findOne({ where, relations: ['loan', 'loan.client'] });
+    if (!payment) return null;
+
+    const allocations = await this.paymentAllocationService.listAllocationsForPayment(
+      this.paymentRepo.manager,
+      id,
+    );
+    const active = allocations.filter((a) => !a.reversedAt);
+    const totalAllocated = active.reduce((s, a) => s + a.amountApplied, 0);
+
+    return {
+      ...payment,
+      allocations,
+      allocationSource: allocations.length ? 'persisted' : 'legacy_unavailable',
+      totalAllocated,
+      unallocated: Math.max(0, Math.round(Number(payment.amount) || 0) - totalAllocated),
+    };
+  }
+
+  /**
+   * Dry-run allocation for cashier UI. No schedule or allocation writes.
+   */
+  async previewAllocation(loanId: number, amount: number) {
+    if (!loanId || !Number.isFinite(Number(amount))) {
+      return {
+        loanId: loanId || 0,
+        amountReceived: 0,
+        totalAllocated: 0,
+        unallocated: 0,
+        lines: [],
+      };
+    }
+    return this.paymentAllocationService.previewAllocation(
+      this.paymentRepo.manager,
+      loanId,
+      Number(amount),
+    );
   }
 
   async findByReceiptNumber(receiptNumber: string) {

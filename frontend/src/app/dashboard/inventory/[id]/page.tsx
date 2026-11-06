@@ -24,17 +24,17 @@ interface BikeDetail {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  AVAILABLE:   'bg-green-100 text-green-700',
-  LOANED:      'bg-blue-100 text-blue-700',
-  MAINTENANCE: 'bg-yellow-100 text-yellow-700',
-  SOLD:        'bg-gray-100 text-gray-600',
+  AVAILABLE:   'bg-bv-success-bg text-bv-success',
+  LOANED:      'bg-bv-info-bg text-bv-accent',
+  MAINTENANCE: 'bg-bv-warning-bg text-bv-warning',
+  SOLD:        'bg-bv-hover text-bv-muted',
 };
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <p className="text-xs text-gray-500 mb-1">{label}</p>
-      <p className="font-medium text-gray-900">{value ?? '—'}</p>
+      <p className="text-xs text-bv-meta mb-1">{label}</p>
+      <p className="font-medium text-bv-text">{value ?? '—'}</p>
     </div>
   );
 }
@@ -66,8 +66,8 @@ export default function InventoryDetailPage() {
     return (
       <div className="p-6 max-w-4xl mx-auto">
         <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-1/3" />
-          <div className="h-64 bg-gray-200 rounded-xl" />
+          <div className="h-8 bg-bv-border rounded w-1/3" />
+          <div className="h-64 bg-bv-border rounded-xl" />
         </div>
       </div>
     );
@@ -76,9 +76,9 @@ export default function InventoryDetailPage() {
   if (error || !bike) {
     return (
       <div className="p-6 max-w-4xl mx-auto text-center mt-12">
-        <Package className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-        <p className="text-gray-500">{error || 'Bike not found'}</p>
-        <button onClick={() => router.back()} className="mt-4 text-blue-600 text-sm hover:underline">
+        <Package className="w-12 h-12 text-bv-meta mx-auto mb-3" />
+        <p className="text-bv-meta">{error || 'Bike not found'}</p>
+        <button onClick={() => router.back()} className="mt-4 text-bv-accent text-sm hover:underline">
           Go back
         </button>
       </div>
@@ -94,18 +94,18 @@ export default function InventoryDetailPage() {
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <button onClick={() => router.back()} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-          <ArrowLeft className="w-5 h-5 text-gray-500" />
+        <button onClick={() => router.back()} className="p-2 hover:bg-bv-hover rounded-lg transition-colors">
+          <ArrowLeft className="w-5 h-5 text-bv-meta" />
         </button>
         <div className="flex items-center gap-3 flex-1">
-          <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-            <Bike className="w-5 h-5 text-blue-600" />
+          <div className="w-10 h-10 bg-bv-info-bg rounded-xl flex items-center justify-center">
+            <Bike className="w-5 h-5 text-bv-accent" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{bike.model}</h1>
-            <p className="text-sm text-gray-500">{bike.frame_number}</p>
+            <h1 className="text-2xl font-bold text-bv-text">{bike.model}</h1>
+            <p className="text-sm text-bv-meta">{bike.frame_number}</p>
           </div>
-          <span className={`ml-auto px-3 py-1 rounded-full text-sm font-semibold ${STATUS_COLORS[bike.status] ?? 'bg-gray-100 text-gray-600'}`}>
+          <span className={`ml-auto px-3 py-1 rounded-full text-sm font-semibold ${STATUS_COLORS[bike.status] ?? 'bg-bv-hover text-bv-muted'}`}>
             {bike.status}
           </span>
         </div>
@@ -114,8 +114,8 @@ export default function InventoryDetailPage() {
       {/* Details */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Bike Info */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h2 className="font-semibold text-gray-900 border-b pb-2">Bike Information</h2>
+        <div className="bg-bv-surface rounded-xl border border-bv-border p-6 space-y-4">
+          <h2 className="font-semibold text-bv-text border-b pb-2">Bike Information</h2>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Model" value={bike.model} />
             <Field label="Frame Number" value={bike.frame_number} />
@@ -127,14 +127,14 @@ export default function InventoryDetailPage() {
         </div>
 
         {/* Financials */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h2 className="font-semibold text-gray-900 border-b pb-2">Financials</h2>
+        <div className="bg-bv-surface rounded-xl border border-bv-border p-6 space-y-4">
+          <h2 className="font-semibold text-bv-text border-b pb-2">Financials</h2>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Sale Price"     value={formatUGX(Number(bike.sale_price))} />
             <Field label="Purchase Price" value={formatUGX(Number(bike.purchase_price))} />
             <div className="col-span-2">
-              <p className="text-xs text-gray-500 mb-1">Gross Profit</p>
-              <p className={`text-2xl font-bold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <p className="text-xs text-bv-meta mb-1">Gross Profit</p>
+              <p className={`text-2xl font-bold ${profit >= 0 ? 'text-green-600' : 'text-bv-danger'}`}>
                 {formatUGX(profit)}
               </p>
             </div>
@@ -144,8 +144,8 @@ export default function InventoryDetailPage() {
 
       {/* Client Info */}
       {bike.client && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="font-semibold text-gray-900 border-b pb-2 mb-4">Assigned Client</h2>
+        <div className="bg-bv-surface rounded-xl border border-bv-border p-6">
+          <h2 className="font-semibold text-bv-text border-b pb-2 mb-4">Assigned Client</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <Field label="Name"  value={clientName} />
             <Field label="Phone" value={bike.client.phone} />
@@ -156,16 +156,16 @@ export default function InventoryDetailPage() {
 
       {/* Loan History */}
       {bike.loans && bike.loans.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="font-semibold text-gray-900 border-b pb-2 mb-4">
+        <div className="bg-bv-surface rounded-xl border border-bv-border p-6">
+          <h2 className="font-semibold text-bv-text border-b pb-2 mb-4">
             Loan History ({bike.loans.length})
           </h2>
           <div className="space-y-3">
             {bike.loans.map((loan: any) => (
-              <div key={loan.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+              <div key={loan.id} className="flex items-center justify-between py-2 border-b border-bv-border last:border-0">
                 <div>
                   <p className="font-medium text-sm">{loan.loan_number ?? loan.loanNumber ?? `#${loan.id}`}</p>
-                  <p className="text-xs text-gray-500">{loan.status}</p>
+                  <p className="text-xs text-bv-meta">{loan.status}</p>
                 </div>
                 <p className="font-semibold">{formatUGX(Number(loan.principal_amount ?? loan.principalAmount ?? 0))}</p>
               </div>

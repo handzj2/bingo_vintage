@@ -36,6 +36,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { BikesService } from '../bikes/bikes.service';
 import { assertAdmin, assertRole, AuthRequest } from '../../common/helpers/role-helper';
 import { ApplyLoanDto } from './dto/apply-loan.dto';
+import { AuditService } from '../audit/audit.service';
 
 // Safe error message extractor (unknown → string)
 const errorMessage = (err: unknown, fallback: string): string =>
@@ -235,6 +236,7 @@ export class LoansController {
   constructor(
     private readonly loansService: LoansService,
     private readonly bikesService: BikesService,
+    private readonly auditService: AuditService,
   ) {}
 
   // ==================== PUBLIC ENDPOINTS (ALL AUTHENTICATED ROLES) ====================
@@ -252,19 +254,6 @@ export class LoansController {
       return await this.loansService.applyForLoan(data, user);
     } catch (error) {
       throw new BadRequestException(errorMessage(error, 'Loan application failed'));
-    }
-  }
-
-  @Get(':id')
-  @ApiParam({ name: 'id', example: 1 })
-  @ApiOperation({ summary: 'Get loan details' })
-  @ApiResponse({ status: 200, description: 'Loan details retrieved successfully' })
-  @ApiResponse({ status: 404, description: 'Loan not found' })
-  async findOne(@Param('id', ParseIntPipe) id: number) {
-    try {
-      return await this.loansService.findOne(id);
-    } catch (error) {
-      throw new BadRequestException(errorMessage(error, 'Failed to fetch loan details'));
     }
   }
 
@@ -299,9 +288,10 @@ export class LoansController {
     description: 'Search loans by multiple criteria including loan number, client name, etc.',
   })
   @ApiResponse({ status: 200, description: 'Search results retrieved successfully' })
-  async searchLoans(@Body() searchDto: SearchLoansDto) {
+  async searchLoans(@Body() searchDto: SearchLoansDto, @Request() req: AuthRequest) {
     try {
-      return await this.loansService.searchLoans(searchDto);
+      // Phase 3: tenantId comes from the authenticated JWT — never from the request body
+      return await this.loansService.searchLoans(searchDto, req.user?.tenantId);
     } catch (error) {
       throw new BadRequestException(errorMessage(error, 'Search failed'));
     }
@@ -453,7 +443,21 @@ export class LoansController {
     try {
       const user = req.user;
       assertRole(user, ['admin', 'manager'], 'Loan approval requires Admin or Manager role.');
-      return await this.loansService.approveOrRejectLoan(id, approvalDto, user);
+      const result = await this.loansService.approveOrRejectLoan(id, approvalDto, user);
+      // Phase 3 — Area 6: audit sensitive financial action (loan approval/rejection)
+      try {
+        await this.auditService.logAction({
+          action:      approvalDto.action === 'approve' ? 'LOAN_APPROVED' : 'LOAN_REJECTED',
+          tableName:   'loans',
+          recordId:    id,
+          user:        user?.username ?? user?.email ?? String(user?.id),
+          description: approvalDto.action === 'approve'
+            ? `Loan #${id} approved by ${user?.username ?? user?.id}`
+            : `Loan #${id} rejected. Reason: ${approvalDto.reason ?? 'none'}`,
+          tenantId:    user?.tenantId,
+        });
+      } catch (_) { /* non-fatal */ }
+      return result;
     } catch (error) {
       if (error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
       throw new BadRequestException(errorMessage(error, 'Loan approval failed'));
@@ -676,6 +680,19 @@ export class LoansController {
     } catch (error) {
       if (error instanceof ForbiddenException) throw error;
       throw new BadRequestException(errorMessage(error, 'Failed to retrieve audit trail'));
+    }
+  }
+
+  @Get(':id')
+  @ApiParam({ name: 'id', example: 1 })
+  @ApiOperation({ summary: 'Get loan details' })
+  @ApiResponse({ status: 200, description: 'Loan details retrieved successfully' })
+  @ApiResponse({ status: 404, description: 'Loan not found' })
+  async findOne(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
+    try {
+      return await this.loansService.findOne(id, req.user?.tenantId);
+    } catch (error) {
+      throw new BadRequestException(errorMessage(error, 'Failed to fetch loan details'));
     }
   }
 }

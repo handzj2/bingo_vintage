@@ -16,10 +16,10 @@ const getH = () => {
 const fmt = (n: number) => `UGX ${Number(n || 0).toLocaleString()}`;
 
 const SEV: Record<string, { bar: string; badge: string; icon: any; text: string }> = {
-  critical: { bar: 'border-l-red-600',    badge: 'bg-red-600 text-white',    icon: XCircle,       text: 'text-red-700'    },
+  critical: { bar: 'border-l-red-600',    badge: 'bg-bv-danger text-white',    icon: XCircle,       text: 'text-bv-danger'    },
   high:     { bar: 'border-l-orange-500', badge: 'bg-orange-500 text-white', icon: AlertTriangle, text: 'text-orange-700' },
   medium:   { bar: 'border-l-amber-400',  badge: 'bg-amber-500 text-white',  icon: Clock,         text: 'text-amber-700'  },
-  low:      { bar: 'border-l-blue-400',   badge: 'bg-blue-500 text-white',   icon: Bell,          text: 'text-blue-700'   },
+  low:      { bar: 'border-l-blue-400',   badge: 'bg-bv-info-bg0 text-white',   icon: Bell,          text: 'text-bv-accent'   },
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -81,34 +81,34 @@ export default function AlertsPage() {
   const unread = alerts.filter(a => !a.isRead).length;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-bv-hover">
 
       {/* Header */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm">
+      <div className="bg-bv-surface border-b border-bv-border sticky top-0 z-20 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center">
-              <Bell className="w-5 h-5 text-red-600" />
+            <div className="w-10 h-10 bg-bv-danger-bg rounded-xl flex items-center justify-center">
+              <Bell className="w-5 h-5 text-bv-danger" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-black text-gray-900">Alert Inbox</h1>
+                <h1 className="text-lg font-semibold text-bv-text">Schedule alerts</h1>
                 {unread > 0 && (
-                  <span className="px-2 py-0.5 bg-red-600 text-white rounded-full text-xs font-bold">
+                  <span className="px-2 py-0.5 bg-bv-danger text-white rounded-full text-xs font-bold">
                     {unread} new
                   </span>
                 )}
               </div>
-              <p className="text-xs text-gray-400">Overdue payments, missed instalments & due today</p>
+              <p className="text-xs text-bv-meta">Overdue payments, missed instalments & due today</p>
             </div>
           </div>
           <div className="flex gap-2">
             {unread > 0 && (
-              <button onClick={markAllRead} className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-medium text-gray-600">
+              <button onClick={markAllRead} className="flex items-center gap-1.5 px-3 py-2 bg-bv-hover hover:bg-bv-border rounded-xl text-sm font-medium text-bv-muted">
                 <Eye className="w-4 h-4" /> Mark all read
               </button>
             )}
-            <button onClick={load} className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-medium text-gray-600">
+            <button onClick={load} className="flex items-center gap-1.5 px-3 py-2 bg-bv-hover hover:bg-bv-border rounded-xl text-sm font-medium text-bv-muted">
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
             </button>
           </div>
@@ -123,16 +123,16 @@ export default function AlertsPage() {
             {[
               { label: 'Total',    value: summary.total,    color: 'bg-gray-700', icon: Bell,          sub: `${summary.unread} unread` },
               { label: 'Due Today',value: summary.dueToday, color: 'bg-blue-600', icon: Zap,           sub: 'Collect today' },
-              { label: 'Overdue',  value: summary.overdue,  color: 'bg-red-600',  icon: AlertTriangle, sub: 'Need attention' },
+              { label: 'Overdue',  value: summary.overdue,  color: 'bg-bv-danger',  icon: AlertTriangle, sub: 'Need attention' },
               { label: 'Critical', value: summary.critical, color: 'bg-red-900',  icon: XCircle,       sub: '>30 days late' },
             ].map(c => (
-              <div key={c.label} className={`bg-white rounded-2xl border border-gray-100 p-4 shadow-sm ${c.value > 0 && c.label !== 'Total' ? 'ring-1 ring-red-100' : ''}`}>
+              <div key={c.label} className={`bg-bv-surface rounded-2xl border border-bv-border p-4 shadow-sm ${c.value > 0 && c.label !== 'Total' ? 'ring-1 ring-red-100' : ''}`}>
                 <div className={`w-9 h-9 ${c.color} rounded-xl flex items-center justify-center mb-3`}>
                   <c.icon className="w-4 h-4 text-white" />
                 </div>
-                <p className={`text-2xl font-black ${c.value > 0 && c.label !== 'Total' ? 'text-red-600' : 'text-gray-900'}`}>{c.value}</p>
-                <p className="text-xs text-gray-400 font-medium">{c.label}</p>
-                <p className="text-xs text-gray-500">{c.sub}</p>
+                <p className={`text-2xl font-black ${c.value > 0 && c.label !== 'Total' ? 'text-bv-danger' : 'text-bv-text'}`}>{c.value}</p>
+                <p className="text-xs text-bv-meta font-medium">{c.label}</p>
+                <p className="text-xs text-bv-meta">{c.sub}</p>
               </div>
             ))}
           </div>
@@ -140,10 +140,10 @@ export default function AlertsPage() {
 
         {/* Empty state */}
         {!loading && alerts.length === 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center shadow-sm">
+          <div className="bg-bv-surface rounded-2xl border border-bv-border p-16 text-center shadow-sm">
             <BellOff className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-            <h3 className="text-lg font-bold text-gray-600 mb-1">All Clear</h3>
-            <p className="text-sm text-gray-400">No active alerts. All loans are on schedule.</p>
+            <h3 className="text-lg font-bold text-bv-muted mb-1">All Clear</h3>
+            <p className="text-sm font-semibold text-bv-text">No active alerts</p><p className="text-sm text-bv-muted mt-1">No unresolved schedule alerts for this tenant.</p>
           </div>
         )}
 
@@ -156,7 +156,7 @@ export default function AlertsPage() {
                   key={f}
                   onClick={() => setFilter(f)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                    filter === f ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                    filter === f ? 'bg-bv-action text-white' : 'bg-bv-surface border border-bv-border text-bv-muted hover:bg-bv-hover'
                   }`}
                 >
                   {f === 'all' ? 'All Types' : TYPE_LABEL[f] || f}
@@ -169,7 +169,7 @@ export default function AlertsPage() {
                   key={s}
                   onClick={() => setSev(s)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-colors ${
-                    sev === s ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                    sev === s ? 'bg-bv-action text-white' : 'bg-bv-surface border border-bv-border text-bv-muted hover:bg-bv-hover'
                   }`}
                 >
                   {s === 'all' ? 'All Severity' : s}
@@ -181,7 +181,7 @@ export default function AlertsPage() {
 
         {/* Alert list */}
         {loading ? (
-          <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-gray-300" /></div>
+          <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-bv-meta" /></div>
         ) : (
           <div className="space-y-3">
             {filtered.map(alert => {
@@ -191,7 +191,7 @@ export default function AlertsPage() {
                 <div
                   key={alert.id}
                   onClick={() => !alert.isRead && markRead(alert.id)}
-                  className={`bg-white rounded-2xl border border-gray-100 shadow-sm border-l-4 ${cfg.bar} ${!alert.isRead ? 'ring-1 ring-blue-100' : ''} cursor-pointer`}
+                  className={`bg-bv-surface rounded-2xl border border-bv-border shadow-sm border-l-4 ${cfg.bar} ${!alert.isRead ? 'ring-1 ring-blue-100' : ''} cursor-pointer`}
                 >
                   <div className="p-4">
                     <div className="flex items-start justify-between gap-3">
@@ -205,16 +205,16 @@ export default function AlertsPage() {
                             <span className={`px-2 py-0.5 rounded text-xs font-bold ${cfg.badge}`}>
                               {alert.severity.toUpperCase()}
                             </span>
-                            <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-semibold">
+                            <span className="px-2 py-0.5 bg-bv-hover text-bv-muted rounded text-xs font-semibold">
                               {TYPE_LABEL[alert.alertType] || alert.alertType}
                             </span>
-                            {!alert.isRead && <span className="w-2 h-2 bg-blue-500 rounded-full" />}
+                            {!alert.isRead && <span className="w-2 h-2 bg-bv-info-bg0 rounded-full" />}
                           </div>
-                          <p className="text-sm text-gray-600 mt-1">{alert.message}</p>
+                          <p className="text-sm text-bv-muted mt-1">{alert.message}</p>
 
                           {alert.loan && (
                             <div className="flex flex-wrap items-center gap-3 mt-2">
-                              <span className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+                              <span className="flex items-center gap-1.5 text-sm font-semibold text-bv-text">
                                 {alert.loan.loanType === 'bike'
                                   ? <Bike className="w-3.5 h-3.5 text-blue-500" />
                                   : <Banknote className="w-3.5 h-3.5 text-emerald-500" />}
@@ -224,14 +224,14 @@ export default function AlertsPage() {
                                 <a
                                   href={`tel:${alert.loan.clientPhone}`}
                                   onClick={e => e.stopPropagation()}
-                                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                  className="flex items-center gap-1 text-xs text-bv-accent hover:text-bv-accent font-medium"
                                 >
                                   <Phone className="w-3 h-3" />{alert.loan.clientPhone}
                                 </a>
                               )}
-                              <span className="text-xs text-gray-400">{alert.loan.loanNumber}</span>
+                              <span className="text-xs text-bv-meta">{alert.loan.loanNumber}</span>
                               {alert.amountDue > 0 && (
-                                <span className="flex items-center gap-1 text-xs font-bold text-red-600">
+                                <span className="flex items-center gap-1 text-xs font-bold text-bv-danger">
                                   <DollarSign className="w-3 h-3" />{fmt(alert.amountDue)} due
                                 </span>
                               )}
@@ -241,7 +241,7 @@ export default function AlertsPage() {
                       </div>
 
                       <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-bv-meta">
                           {new Date(alert.createdAt).toLocaleDateString('en-UG', { day: 'numeric', month: 'short' })}
                         </span>
                         <div className="flex gap-1.5">
@@ -249,7 +249,7 @@ export default function AlertsPage() {
                             <Link
                               href={`/dashboard/schedules/${alert.loan.id}`}
                               onClick={e => e.stopPropagation()}
-                              className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg"
+                              className="p-1.5 bg-bv-info-bg hover:bg-bv-info-bg text-bv-accent rounded-lg"
                               title="View schedule"
                             >
                               <ChevronRight className="w-4 h-4" />
@@ -276,8 +276,8 @@ export default function AlertsPage() {
         )}
 
         {filtered.length === 0 && alerts.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center shadow-sm">
-            <p className="text-gray-400">No alerts match this filter</p>
+          <div className="bg-bv-surface rounded-2xl border border-bv-border p-12 text-center shadow-sm">
+            <p className="text-bv-meta">No alerts match this filter</p>
           </div>
         )}
 

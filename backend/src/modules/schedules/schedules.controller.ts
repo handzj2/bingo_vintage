@@ -17,8 +17,12 @@ export class SchedulesController {
   // Loan repayment schedule
   @Get('loan/:loanId')
   @ApiOperation({ summary: 'Get repayment schedule for a loan' })
-  getLoanSchedule(@Param('loanId', ParseIntPipe) loanId: number) {
-    return this.schedulesService.getLoanSchedule(loanId);
+  getLoanSchedule(
+    @Param('loanId', ParseIntPipe) loanId: number,
+    @Request() req: AuthRequest,
+  ) {
+    const tenantId = req.user?.tenantId;
+    return this.schedulesService.getLoanSchedule(loanId, tenantId);
   }
 
   // Alerts
@@ -42,16 +46,16 @@ export class SchedulesController {
     return this.schedulesService.getAlertSummary();
   }
 
-  @Patch('alerts/:id/read')
-  @ApiOperation({ summary: 'Mark alert as read' })
-  markRead(@Param('id', ParseIntPipe) id: number) {
-    return this.schedulesService.markAlertRead(id);
-  }
-
   @Patch('alerts/mark-all-read')
   @ApiOperation({ summary: 'Mark all alerts as read' })
   markAllRead() {
     return this.schedulesService.markAllRead();
+  }
+
+  @Patch('alerts/:id/read')
+  @ApiOperation({ summary: 'Mark alert as read' })
+  markRead(@Param('id', ParseIntPipe) id: number) {
+    return this.schedulesService.markAlertRead(id);
   }
 
   @Patch('alerts/:id/resolve')

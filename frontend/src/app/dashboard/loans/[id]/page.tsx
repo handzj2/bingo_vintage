@@ -6,6 +6,7 @@ import { calculateCashLoan, calculateBikeLoan } from '@/features/loans/loan.util
 import { useAuth } from '@/contexts/AuthContext';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 import {
   ChevronLeft, Loader2, AlertTriangle, CheckCircle2, Clock,
   User, Phone, Mail, Calendar, DollarSign, Bike, Banknote,
@@ -23,20 +24,20 @@ const fmt  = (n: any) => `UGX ${Number(n || 0).toLocaleString()}`;
 const fmtD = (d: any) => d ? new Date(d).toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
 const STATUS_STYLES: Record<string, string> = {
-  ACTIVE:     'bg-green-100 text-green-700',
-  PENDING:    'bg-yellow-100 text-yellow-700',
-  COMPLETED:  'bg-blue-100 text-blue-700',
-  CANCELLED:  'bg-gray-100 text-gray-500',
-  DELINQUENT: 'bg-red-100 text-red-700',
-  REJECTED:   'bg-red-100 text-red-600',
+  ACTIVE:     'bg-bv-success-bg text-bv-success',
+  PENDING:    'bg-bv-warning-bg text-bv-warning',
+  COMPLETED:  'bg-bv-info-bg text-bv-accent',
+  CANCELLED:  'bg-bv-hover text-bv-meta',
+  DELINQUENT: 'bg-bv-danger-bg text-bv-danger',
+  REJECTED:   'bg-bv-danger-bg text-bv-danger',
 };
 
 const SCHED_STATUS: Record<string, { cls: string; dot: string }> = {
   PAID:      { cls: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
   PARTIAL:   { cls: 'bg-amber-100 text-amber-700',    dot: 'bg-amber-400'   },
-  OVERDUE:   { cls: 'bg-red-100 text-red-700',        dot: 'bg-red-500'     },
-  PENDING:   { cls: 'bg-gray-100 text-gray-500',      dot: 'bg-gray-300'    },
-  CANCELLED: { cls: 'bg-gray-100 text-gray-400',      dot: 'bg-gray-200'    },
+  OVERDUE:   { cls: 'bg-bv-danger-bg text-bv-danger',        dot: 'bg-bv-danger-bg0'     },
+  PENDING:   { cls: 'bg-bv-hover text-bv-meta',      dot: 'bg-gray-300'    },
+  CANCELLED: { cls: 'bg-bv-hover text-bv-meta',      dot: 'bg-bv-border'    },
   WAIVED:    { cls: 'bg-purple-100 text-purple-700',  dot: 'bg-purple-400'  },
 };
 
@@ -183,10 +184,14 @@ export default function LoanDetailPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Action failed');
+      toast.success(approveAction === 'approved' ? 'Loan approved' : 'Loan rejected');
       setShowApproveModal(false);
       setApproveComment('');
       load();
-    } catch (e: any) { setApproveErr(e.message); }
+    } catch (e: any) {
+      setApproveErr(e.message);
+      toast.error(e.message || 'Approval failed');
+    }
     finally { setApproving(false); }
   };
 
@@ -220,16 +225,19 @@ export default function LoanDetailPage() {
   };
 
   if (loading) return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+    <div className="p-6 max-w-bv mx-auto">
+      <p className="text-sm text-bv-muted">Loading loan…</p>
     </div>
   );
 
   if (err || !loan) return (
-    <div className="flex flex-col items-center justify-center min-h-screen gap-4 bg-gray-50 p-8">
-      <AlertTriangle className="w-12 h-12 text-red-300" />
-      <p className="text-gray-600 font-medium">{err || 'Loan not found'}</p>
-      <button onClick={() => router.back()} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium">Go Back</button>
+    <div className="p-6 max-w-bv mx-auto space-y-3">
+      <h1 className="text-lg font-semibold text-bv-text">Loan</h1>
+      <div className="border border-bv-danger/30 bg-bv-danger-bg text-bv-danger text-sm px-3 py-2 rounded-md">
+        {err || 'Loan not found'}
+      </div>
+      <button type="button" onClick={() => router.back()}
+        className="text-sm border border-bv-border px-3 py-1.5 rounded hover:bg-bv-hover">Go back</button>
     </div>
   );
 
@@ -244,37 +252,37 @@ export default function LoanDetailPage() {
   const schedules    = (sched?.schedules || []).slice(0, 6);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-bv-hover">
 
       {/* Sticky header */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-20 shadow-sm">
+      <div className="bg-bv-surface border-b border-bv-border sticky top-0 z-20 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => router.back()} className="p-2 rounded-xl hover:bg-gray-100 text-gray-500">
+            <button onClick={() => router.back()} className="p-2 rounded-xl hover:bg-bv-hover text-bv-meta">
               <ChevronLeft className="w-5 h-5" />
             </button>
             <div>
               <div className="flex items-center gap-2">
                 {isWeekly
-                  ? <Bike className="w-5 h-5 text-blue-600" />
+                  ? <Bike className="w-5 h-5 text-bv-accent" />
                   : <Banknote className="w-5 h-5 text-emerald-600" />}
-                <h1 className="text-lg font-black text-gray-900">
+                <h1 className="text-lg font-semibold text-bv-text">
                   {loan.loan_number || `Loan #${id}`}
                 </h1>
-                <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${STATUS_STYLES[loan.status] || 'bg-gray-100 text-gray-600'}`}>
+                <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${STATUS_STYLES[loan.status] || 'bg-bv-hover text-bv-muted'}`}>
                   {loan.status}
                 </span>
               </div>
-              <p className="text-xs text-gray-400">{clientName} · {isWeekly ? 'Bike Loan' : 'Cash Loan'}</p>
+              <p className="text-sm text-bv-muted">{clientName} · {isWeekly ? 'Bike loan' : 'Cash loan'} · Remaining principal and schedule below</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={load} className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-medium text-gray-600">
+            <button onClick={load} className="flex items-center gap-2 px-3 py-2 bg-bv-hover hover:bg-bv-border rounded-xl text-sm font-medium text-bv-muted">
               <RefreshCw className="w-4 h-4" />
             </button>
             {canApprove && (loan.status === 'PENDING_APPROVAL' || loan.status === 'PENDING') && (
               <button onClick={() => { setApproveAction('approved'); setShowApproveModal(true); }}
-                className="flex items-center gap-2 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-xl text-sm font-bold">
+                className="flex items-center gap-2 px-4 py-2 bg-bv-warning-bg0 hover:bg-yellow-600 text-white rounded-xl text-sm font-bold">
                 <ThumbsUp className="w-4 h-4" /> Review
               </button>
             )}
@@ -289,7 +297,7 @@ export default function LoanDetailPage() {
             )}
             <Link
               href={`/dashboard/schedules/${id}`}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold"
+              className="flex items-center gap-2 px-4 py-2 bg-bv-action hover:bg-bv-action-hover text-white rounded-xl text-sm font-bold"
             >
               Full Schedule <ArrowRight className="w-4 h-4" />
             </Link>
@@ -302,17 +310,17 @@ export default function LoanDetailPage() {
         {/* Loan financials */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'Principal',    value: fmt(loan.principal_amount), icon: DollarSign,  color: 'bg-blue-500'    },
+            { label: 'Principal',    value: fmt(loan.principal_amount), icon: DollarSign,  color: 'bg-bv-info-bg0'    },
             { label: 'Total Amount', value: fmt(loan.totalAmount     || loan.total_amount),     icon: TrendingUp,  color: 'bg-violet-500'  },
-            { label: 'Balance',      value: fmt(loan.balance),                                  icon: CreditCard,  color: loan.balance > 0 ? 'bg-red-500' : 'bg-emerald-500' },
+            { label: 'Balance',      value: fmt(loan.balance),                                  icon: CreditCard,  color: loan.balance > 0 ? 'bg-bv-danger-bg0' : 'bg-emerald-500' },
             { label: 'Interest Rate',value: `${loan.interest_rate || 0}%`, icon: Shield,      color: 'bg-amber-500'   },
           ].map(c => (
-            <div key={c.label} className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
+            <div key={c.label} className="bg-bv-surface rounded-2xl border border-bv-border p-4 shadow-sm">
               <div className={`w-9 h-9 ${c.color} rounded-xl flex items-center justify-center mb-3`}>
                 <c.icon className="w-4 h-4 text-white" />
               </div>
-              <p className="text-lg font-black text-gray-900">{c.value}</p>
-              <p className="text-xs text-gray-400 font-medium">{c.label}</p>
+              <p className="text-lg font-black text-bv-text">{c.value}</p>
+              <p className="text-xs text-bv-meta font-medium">{c.label}</p>
             </div>
           ))}
         </div>
@@ -320,9 +328,9 @@ export default function LoanDetailPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
           {/* Loan info */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm space-y-3">
-            <h2 className="font-bold text-gray-900 flex items-center gap-2">
-              <FileText className="w-4 h-4 text-gray-400" /> Loan Details
+          <div className="bg-bv-surface rounded-2xl border border-bv-border p-5 shadow-sm space-y-3">
+            <h2 className="font-bold text-bv-text flex items-center gap-2">
+              <FileText className="w-4 h-4 text-bv-meta" /> Loan Details
             </h2>
             {[
               ['Loan Number',   loan.loan_number || '—'],
@@ -335,45 +343,45 @@ export default function LoanDetailPage() {
               ['Processing Fee',fmt(loan.processingFee|| loan.processing_fee || 0)],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between text-sm py-1 border-b border-gray-50 last:border-0">
-                <span className="text-gray-500">{label}</span>
-                <span className="font-semibold text-gray-900 text-right max-w-[60%]">{value}</span>
+                <span className="text-bv-meta">{label}</span>
+                <span className="font-semibold text-bv-text text-right max-w-[60%]">{value}</span>
               </div>
             ))}
           </div>
 
           {/* Client + Bike info */}
           <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-              <h2 className="font-bold text-gray-900 flex items-center gap-2 mb-3">
-                <User className="w-4 h-4 text-gray-400" /> Client
+            <div className="bg-bv-surface rounded-2xl border border-bv-border p-5 shadow-sm">
+              <h2 className="font-bold text-bv-text flex items-center gap-2 mb-3">
+                <User className="w-4 h-4 text-bv-meta" /> Client
               </h2>
               {clientName !== '—' ? (
                 <div className="space-y-2">
-                  <p className="font-bold text-gray-900">{clientName}</p>
+                  <p className="font-bold text-bv-text">{clientName}</p>
                   {(client.phone) && (
-                    <a href={`tel:${client.phone}`} className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800">
+                    <a href={`tel:${client.phone}`} className="flex items-center gap-2 text-sm text-bv-accent hover:text-bv-accent">
                       <Phone className="w-4 h-4" />{client.phone}
                     </a>
                   )}
                   {(client.email) && (
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <div className="flex items-center gap-2 text-sm text-bv-meta">
                       <Mail className="w-4 h-4" />{client.email}
                     </div>
                   )}
                   <Link
                     href={`/dashboard/clients/${client.id}`}
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline mt-1"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-bv-accent hover:underline mt-1"
                   >
                     View client profile <ArrowRight className="w-3 h-3" />
                   </Link>
                 </div>
-              ) : <p className="text-sm text-gray-400">No client data</p>}
+              ) : <p className="text-sm text-bv-meta">No client data</p>}
             </div>
 
             {isWeekly && bike?.id && (
-              <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-                <h2 className="font-bold text-gray-900 flex items-center gap-2 mb-3">
-                  <Bike className="w-4 h-4 text-gray-400" /> Bike
+              <div className="bg-bv-surface rounded-2xl border border-bv-border p-5 shadow-sm">
+                <h2 className="font-bold text-bv-text flex items-center gap-2 mb-3">
+                  <Bike className="w-4 h-4 text-bv-meta" /> Bike
                 </h2>
                 <div className="space-y-2 text-sm">
                   {[
@@ -384,8 +392,8 @@ export default function LoanDetailPage() {
                     ['Colour', bike.color || bike.colour || '—'],
                   ].map(([label, value]) => (
                     <div key={label} className="flex justify-between border-b border-gray-50 pb-1 last:border-0">
-                      <span className="text-gray-500">{label}</span>
-                      <span className="font-semibold text-gray-900">{value}</span>
+                      <span className="text-bv-meta">{label}</span>
+                      <span className="font-semibold text-bv-text">{value}</span>
                     </div>
                   ))}
                 </div>
@@ -396,37 +404,37 @@ export default function LoanDetailPage() {
 
         {/* Schedule preview */}
         {schedSummary && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+          <div className="bg-bv-surface rounded-2xl border border-bv-border shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-bv-border flex items-center justify-between">
               <div>
-                <h2 className="font-bold text-gray-900">Repayment Schedule</h2>
-                <p className="text-xs text-gray-400 mt-0.5">
+                <h2 className="font-bold text-bv-text">Repayment Schedule</h2>
+                <p className="text-xs text-bv-meta mt-0.5">
                   {schedSummary.paid}/{schedSummary.total} paid · {schedSummary.progressPct}% complete
                 </p>
               </div>
               <Link
                 href={`/dashboard/schedules/${id}`}
-                className="flex items-center gap-1.5 text-sm font-bold text-blue-600 hover:text-blue-800"
+                className="flex items-center gap-1.5 text-sm font-bold text-bv-accent hover:text-bv-accent"
               >
                 View all <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
 
-            <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
-              <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
+            <div className="px-5 py-3 bg-bv-hover border-b border-bv-border">
+              <div className="h-2.5 bg-bv-border rounded-full overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-blue-500 transition-all"
+                  className="h-full rounded-full bg-bv-info-bg0 transition-all"
                   style={{ width: `${schedSummary.progressPct}%` }}
                 />
               </div>
-              <div className="flex justify-between text-xs text-gray-500 mt-1.5">
+              <div className="flex justify-between text-xs text-bv-meta mt-1.5">
                 <span>{fmt(schedSummary.totalPaid)} paid</span>
                 <span>{fmt(schedSummary.totalDue - schedSummary.totalPaid)} remaining</span>
               </div>
             </div>
 
             {schedSummary.overdue > 0 && (
-              <div className="px-5 py-3 bg-red-50 border-b border-red-100 flex items-center gap-2 text-sm text-red-700">
+              <div className="px-5 py-3 bg-bv-danger-bg border-b border-red-100 flex items-center gap-2 text-sm text-bv-danger">
                 <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                 <strong>{schedSummary.overdue} overdue instalment{schedSummary.overdue !== 1 ? 's' : ''}</strong>
                 &nbsp;·&nbsp;{fmt(schedSummary.totalOverdue)} outstanding
@@ -436,7 +444,7 @@ export default function LoanDetailPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 text-xs font-bold text-gray-500 uppercase tracking-wide">
+                  <tr className="bg-bv-hover text-xs font-bold text-bv-meta uppercase tracking-wide">
                     <th className="px-4 py-3 text-left">#</th>
                     <th className="px-4 py-3 text-left">Due Date</th>
                     <th className="px-4 py-3 text-right">Amount</th>
@@ -448,12 +456,12 @@ export default function LoanDetailPage() {
                   {schedules.map((s: any) => {
                     const cfg = SCHED_STATUS[s.status] || SCHED_STATUS.PENDING;
                     return (
-                      <tr key={s.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-gray-500 font-mono text-xs">{s.installmentNumber}</td>
-                        <td className="px-4 py-3 font-medium text-gray-900">{fmtD(s.dueDate)}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-gray-900">{fmt(s.amountDue)}</td>
+                      <tr key={s.id} className="hover:bg-bv-hover">
+                        <td className="px-4 py-3 text-bv-meta font-mono text-xs">{s.installmentNumber}</td>
+                        <td className="px-4 py-3 font-medium text-bv-text">{fmtD(s.dueDate)}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-bv-text">{fmt(s.amountDue)}</td>
                         <td className="px-4 py-3 text-right font-semibold text-emerald-600">
-                          {s.amountPaid > 0 ? fmt(s.amountPaid) : <span className="text-gray-300">—</span>}
+                          {s.amountPaid > 0 ? fmt(s.amountPaid) : <span className="text-bv-meta">—</span>}
                         </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${cfg.cls}`}>
@@ -469,10 +477,10 @@ export default function LoanDetailPage() {
             </div>
 
             {(sched?.schedules?.length || 0) > 6 && (
-              <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 text-center">
+              <div className="px-5 py-3 bg-bv-hover border-t border-bv-border text-center">
                 <Link
                   href={`/dashboard/schedules/${id}`}
-                  className="text-sm font-bold text-blue-600 hover:text-blue-800"
+                  className="text-sm font-bold text-bv-accent hover:text-bv-accent"
                 >
                   View all {sched.schedules.length} instalments →
                 </Link>
@@ -483,9 +491,9 @@ export default function LoanDetailPage() {
 
         {/* Notes */}
         {loan.notes && (
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <h2 className="font-bold text-gray-900 mb-3">Notes & Audit Trail</h2>
-            <pre className="text-xs text-gray-600 whitespace-pre-wrap font-mono bg-gray-50 rounded-xl p-4 max-h-64 overflow-y-auto">
+          <div className="bg-bv-surface rounded-2xl border border-bv-border p-5 shadow-sm">
+            <h2 className="font-bold text-bv-text mb-3">Notes & Audit Trail</h2>
+            <pre className="text-xs text-bv-muted whitespace-pre-wrap font-mono bg-bv-hover rounded-xl p-4 max-h-64 overflow-y-auto">
               {loan.notes}
             </pre>
           </div>
@@ -496,39 +504,39 @@ export default function LoanDetailPage() {
       {/* Approve / Reject Modal */}
       {showApproveModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            <div className="flex items-center justify-between p-6 border-b border-gray-100">
-              <h2 className="font-bold text-gray-900 text-lg">Review Loan Application</h2>
-              <button onClick={() => setShowApproveModal(false)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
+          <div className="bg-bv-surface rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between p-6 border-b border-bv-border">
+              <h2 className="font-bold text-bv-text text-lg">Review Loan Application</h2>
+              <button onClick={() => setShowApproveModal(false)} className="p-1 rounded-lg hover:bg-bv-hover text-bv-meta"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-6 space-y-4">
-              <div className="bg-gray-50 rounded-xl p-4 text-sm space-y-1">
-                <p><span className="text-gray-500">Client:</span> <span className="font-semibold">{clientName}</span></p>
-                <p><span className="text-gray-500">Amount:</span> <span className="font-semibold">{fmt(loan.principal_amount)}</span></p>
-                <p><span className="text-gray-500">Loan #:</span> <span className="font-semibold">{loan.loan_number}</span></p>
+              <div className="bg-bv-hover rounded-xl p-4 text-sm space-y-1">
+                <p><span className="text-bv-meta">Client:</span> <span className="font-semibold">{clientName}</span></p>
+                <p><span className="text-bv-meta">Amount:</span> <span className="font-semibold">{fmt(loan.principal_amount)}</span></p>
+                <p><span className="text-bv-meta">Loan #:</span> <span className="font-semibold">{loan.loan_number}</span></p>
               </div>
               <div className="flex gap-3">
                 <button onClick={() => setApproveAction('approved')}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 border-2 transition-all ${approveAction === 'approved' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 text-gray-500 hover:border-green-300'}`}>
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 border-2 transition-all ${approveAction === 'approved' ? 'border-green-500 bg-bv-success-bg text-bv-success' : 'border-bv-border text-bv-meta hover:border-green-300'}`}>
                   <ThumbsUp className="w-4 h-4" /> Approve
                 </button>
                 <button onClick={() => setApproveAction('rejected')}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 border-2 transition-all ${approveAction === 'rejected' ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-200 text-gray-500 hover:border-red-300'}`}>
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 border-2 transition-all ${approveAction === 'rejected' ? 'border-red-500 bg-bv-danger-bg text-bv-danger' : 'border-bv-border text-bv-meta hover:border-red-300'}`}>
                   <ThumbsDown className="w-4 h-4" /> Reject
                 </button>
               </div>
               <textarea
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                className="w-full border border-bv-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-bv-action resize-none"
                 rows={3} placeholder="Comments (optional)..."
                 value={approveComment} onChange={e => setApproveComment(e.target.value)} />
-              {approveErr && <p className="text-red-600 text-sm">{approveErr}</p>}
+              {approveErr && <p className="text-bv-danger text-sm">{approveErr}</p>}
               <div className="flex gap-3 pt-1">
                 <button onClick={() => setShowApproveModal(false)}
-                  className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
+                  className="flex-1 px-4 py-2.5 border border-bv-border rounded-xl text-sm font-semibold text-bv-muted hover:bg-bv-hover">
                   Cancel
                 </button>
                 <button onClick={handleApprove} disabled={approving}
-                  className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 ${approveAction === 'approved' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} disabled:opacity-50`}>
+                  className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 ${approveAction === 'approved' ? 'bg-bv-success hover:bg-bv-success' : 'bg-bv-danger hover:bg-bv-danger'} disabled:opacity-50`}>
                   {approving ? <Loader2 className="w-4 h-4 animate-spin" /> : (approveAction === 'approved' ? <ThumbsUp className="w-4 h-4" /> : <ThumbsDown className="w-4 h-4" />)}
                   {approving ? 'Submitting...' : (approveAction === 'approved' ? 'Approve Loan' : 'Reject Loan')}
                 </button>
@@ -541,35 +549,35 @@ export default function LoanDetailPage() {
       {/* ── Edit Loan Details Modal (PRE‑FILLED CORRECTLY) ────────────────── */}
       {showEditModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-100">
-              <h2 className="font-bold text-gray-900 text-lg">Edit Loan Details</h2>
-              <button onClick={() => setShowEditModal(false)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-5 h-5" /></button>
+          <div className="bg-bv-surface rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-bv-border">
+              <h2 className="font-bold text-bv-text text-lg">Edit Loan Details</h2>
+              <button onClick={() => setShowEditModal(false)} className="p-1 rounded-lg hover:bg-bv-hover text-bv-meta"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-6 space-y-4">
-              <div className="bg-gray-50 rounded-xl p-4 text-sm space-y-1">
-                <p><span className="text-gray-500">Loan #:</span> <span className="font-semibold">{loan.loan_number}</span></p>
-                <p><span className="text-gray-500">Client:</span> <span className="font-semibold">{clientName}</span></p>
-                <p><span className="text-gray-500">Type:</span> <span className="font-semibold">{isWeekly ? 'Bike (Weekly)' : 'Cash (Monthly)'}</span></p>
+              <div className="bg-bv-hover rounded-xl p-4 text-sm space-y-1">
+                <p><span className="text-bv-meta">Loan #:</span> <span className="font-semibold">{loan.loan_number}</span></p>
+                <p><span className="text-bv-meta">Client:</span> <span className="font-semibold">{clientName}</span></p>
+                <p><span className="text-bv-meta">Type:</span> <span className="font-semibold">{isWeekly ? 'Bike (Weekly)' : 'Cash (Monthly)'}</span></p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Principal Amount</label>
+                  <label className="block text-xs font-medium text-bv-muted mb-1">Principal Amount</label>
                   <input
                     type="number"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full border border-bv-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     value={editForm.principalAmount}
                     onChange={e => setEditForm({...editForm, principalAmount: Number(e.target.value)})}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <label className="block text-xs font-medium text-bv-muted mb-1">
                     Term ({isWeekly ? 'weeks' : 'months'})
                   </label>
                   <input
                     type="number"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full border border-bv-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     value={isWeekly ? editForm.termWeeks : editForm.termMonths}
                     onChange={e => setEditForm(
                       isWeekly
@@ -580,41 +588,41 @@ export default function LoanDetailPage() {
                 </div>
                 {isWeekly && (
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Weekly Amount (override)</label>
+                    <label className="block text-xs font-medium text-bv-muted mb-1">Weekly Amount (override)</label>
                     <input
                       type="number"
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full border border-bv-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       value={editForm.weeklyAmount}
                       onChange={e => setEditForm({...editForm, weeklyAmount: Number(e.target.value)})}
                     />
                   </div>
                 )}
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                  <label className="block text-xs font-medium text-bv-muted mb-1">
                     {isWeekly ? 'Weekly' : 'Monthly'} Interest Rate (%)
                   </label>
                   <input
                     type="number"
                     step="any"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full border border-bv-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     value={editForm.interestRate}
                     onChange={e => setEditForm({...editForm, interestRate: Number(e.target.value)})}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Start Date</label>
+                  <label className="block text-xs font-medium text-bv-muted mb-1">Start Date</label>
                   <input
                     type="date"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full border border-bv-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     value={editForm.startDate}
                     onChange={e => setEditForm({...editForm, startDate: e.target.value})}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">New Balance (optional)</label>
+                  <label className="block text-xs font-medium text-bv-muted mb-1">New Balance (optional)</label>
                   <input
                     type="number"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full border border-bv-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     placeholder="Calculated if empty"
                     value={editForm.newBalance !== undefined ? editForm.newBalance : ''}
                     onChange={e => setEditForm({...editForm, newBalance: e.target.value ? Number(e.target.value) : undefined})}
@@ -624,13 +632,13 @@ export default function LoanDetailPage() {
 
               {/* ── Calculation preview: current terms vs. what these edits produce ── */}
               <div className="grid grid-cols-2 gap-3 pt-1">
-                <div className="rounded-2xl p-4 bg-gray-100 text-gray-700">
+                <div className="rounded-2xl p-4 bg-bv-hover text-bv-muted">
                   <p className="text-[10px] font-bold uppercase tracking-wider opacity-60 mb-2">Current (before edit)</p>
                   <p className="text-xl font-black">
                     {Math.round(originalCalc?.installment || 0).toLocaleString()}
                     <span className="text-xs font-medium opacity-60 ml-1">UGX / {isWeekly ? 'wk' : 'mo'}</span>
                   </p>
-                  <div className="mt-3 pt-3 border-t border-gray-300/70 space-y-1 text-xs">
+                  <div className="mt-3 pt-3 border-t border-bv-border/70 space-y-1 text-xs">
                     <div className="flex justify-between"><span className="opacity-60">Total Interest</span><span className="font-semibold">{Math.round(originalCalc?.totalInterest || 0).toLocaleString()}</span></div>
                     <div className="flex justify-between font-bold"><span>Total Payable</span><span>{Math.round(originalCalc?.totalPayable || 0).toLocaleString()}</span></div>
                   </div>
@@ -647,14 +655,14 @@ export default function LoanDetailPage() {
                   </div>
                 </div>
               </div>
-              <p className="text-[11px] text-gray-400 -mt-1">
+              <p className="text-[11px] text-bv-meta -mt-1">
                 Preview only — the schedule is recalculated and existing payments replayed against it when you save.
               </p>
 
-              {editErr && <p className="text-red-600 text-sm">{editErr}</p>}
+              {editErr && <p className="text-bv-danger text-sm">{editErr}</p>}
               <div className="flex gap-3 pt-1">
                 <button onClick={() => setShowEditModal(false)}
-                  className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50">
+                  className="flex-1 px-4 py-2.5 border border-bv-border rounded-xl text-sm font-semibold text-bv-muted hover:bg-bv-hover">
                   Cancel
                 </button>
                 <button onClick={handleEditSubmit} disabled={editing}

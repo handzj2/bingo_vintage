@@ -28,6 +28,12 @@ export class CreatePaymentDto {
   @IsOptional()
   @IsDateString()
   payment_date?: string;
+  @ApiProperty({ required: false, description: 'Required when admin posts a backdated payment_date' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  backdate_reason?: string;
+
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -60,4 +66,15 @@ export class CreatePaymentDto {
   @IsOptional()
   @IsNumber()
   cash_drawer_id?: number;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Idempotency key — a UUID generated client-side to prevent duplicate payment submissions. ' +
+      'If a payment with this key already exists, it is returned without creating a duplicate.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  idempotency_key?: string;
 }

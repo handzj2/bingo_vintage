@@ -1,5 +1,6 @@
 'use client';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import GuidedTour from '@/components/ui/GuidedTour';
 
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -26,11 +27,16 @@ import {
   Receipt,   // <-- for Expenses
   Wallet,    // <-- for Finance (Reconciliation)
   Clock,     // <-- for Pending Approvals
+  BarChart3, // <-- for Reports
 } from 'lucide-react';
 import Link from 'next/link';
 
 // Navigation items with proper icons
-const navigationGroups = [
+// roles: who may see this item (empty = all authenticated)
+type NavItem = { name: string; href: string; icon: any; roles?: string[] };
+type NavGroup = { label: string; items: NavItem[] };
+
+const navigationGroups: NavGroup[] = [
   {
     label: 'Overview',
     items: [
@@ -40,46 +46,54 @@ const navigationGroups = [
   {
     label: 'Lending',
     items: [
-      { name: 'All Loans',         href: '/dashboard/loans',           icon: FileText  },
-      { name: 'Cash Loans',        href: '/dashboard/loans?type=cash', icon: Banknote  },
-      { name: 'Bike Loans',        href: '/dashboard/loans?type=bike', icon: Bike      },
-      { name: 'Create Loan',       href: '/dashboard/loans/create',    icon: Plus      },
-      { name: 'Schedules',         href: '/dashboard/schedules',       icon: Calendar  },
-      { name: 'Historical Import', href: '/dashboard/import',          icon: Upload    },
-      { name: 'My Drawer',         href: '/dashboard/my-drawer',       icon: Wallet    },
+      { name: 'All Loans',         href: '/dashboard/loans',           icon: FileText, roles: ['admin','manager','agent','loan_officer','credit_officer','cashier'] },
+      { name: 'Cash Loans',        href: '/dashboard/loans?type=cash', icon: Banknote, roles: ['admin','manager','agent','loan_officer','credit_officer'] },
+      { name: 'Bike Loans',        href: '/dashboard/loans?type=bike', icon: Bike,     roles: ['admin','manager','agent','loan_officer','credit_officer'] },
+      { name: 'Create Loan',       href: '/dashboard/loans/create',    icon: Plus,     roles: ['admin','manager','agent','loan_officer','credit_officer'] },
+      { name: 'Schedules',         href: '/dashboard/schedules',       icon: Calendar, roles: ['admin','manager','cashier','agent','loan_officer'] },
+      { name: 'Historical Import', href: '/dashboard/import',          icon: Upload,   roles: ['admin','manager'] },
+      { name: 'My Drawer',         href: '/dashboard/my-drawer',       icon: Wallet,   roles: ['admin','manager','cashier'] },
     ],
   },
   {
     label: 'Operations',
     items: [
-      { name: 'Clients',   href: '/dashboard/clients',   icon: Users    },
-      { name: 'Payments',  href: '/dashboard/payments',  icon: CreditCard },
-      { name: 'Alerts',    href: '/dashboard/alerts',    icon: Bell     },
-      { name: 'Inventory', href: '/dashboard/inventory', icon: Package  },
-      { name: 'Expenses',  href: '/dashboard/expenses',  icon: Receipt  },   // <-- NEW
-      { name: 'Pending Approvals', href: '/dashboard/expenses/approval', icon: Clock },
+      { name: 'Clients',   href: '/dashboard/clients',   icon: Users,      roles: ['admin','manager','agent','loan_officer','credit_officer','cashier'] },
+      { name: 'Payments',  href: '/dashboard/payments',  icon: CreditCard, roles: ['admin','manager','cashier'] },
+      { name: 'Alerts',    href: '/dashboard/alerts',    icon: Bell,       roles: ['admin','manager','cashier','agent'] },
+      { name: 'Inventory', href: '/dashboard/inventory', icon: Package,    roles: ['admin','manager','cashier'] },
+      { name: 'Expenses',  href: '/dashboard/expenses',  icon: Receipt,    roles: ['admin','manager','cashier'] },
+      { name: 'Pending Approvals', href: '/dashboard/expenses/approval', icon: Clock, roles: ['admin','manager'] },
     ],
   },
   {
     label: 'Governance',
     items: [
-      { name: 'Audit Logs', href: '/dashboard/audit',     icon: ClipboardList },
-      { name: 'Reversals',  href: '/dashboard/reversals', icon: RotateCcw     },
+      { name: 'Audit Logs', href: '/dashboard/audit',     icon: ClipboardList, roles: ['admin'] },
+      { name: 'Reversals',  href: '/dashboard/reversals', icon: RotateCcw,     roles: ['admin','manager','cashier'] },
     ],
   },
   {
-    label: 'Finance',                                        // <-- NEW GROUP
+    label: 'Finance',
     items: [
-      { name: 'Reconciliation', href: '/dashboard/finance/reconciliation', icon: Wallet },
+      { name: 'Reconciliation', href: '/dashboard/finance/reconciliation', icon: Wallet,    roles: ['admin','manager'] },
+      { name: 'Reports', href: '/dashboard/reports', icon: BarChart3, roles: ['admin','manager'] },
     ],
   },
   {
     label: 'System',
     items: [
-      { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+      { name: 'Settings', href: '/dashboard/settings', icon: Settings, roles: ['admin'] },
     ],
   },
 ];
+
+function canSeeNavItem(role: string, item: NavItem): boolean {
+  const r = (role || '').toLowerCase();
+  if (r === 'superadmin' || r === 'admin') return true;
+  if (!item.roles || item.roles.length === 0) return true;
+  return item.roles.map((x) => x.toLowerCase()).includes(r);
+}
 
 // Mobile navigation (simplified) – optionally add Expenses/Finance here too if needed
 const mobileNavItems = [
@@ -161,7 +175,15 @@ export default function DashboardLayout({
     }
   }, [user, isLoading, router]);
 
-  const memoizedNavigationGroups = useMemo(() => navigationGroups, []);
+  const memoizedNavigationGroups = useMemo(() => {
+    const role = (user?.role || '').toLowerCase();
+    return navigationGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => canSeeNavItem(role, item)),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [user?.role]);
   const memoizedMobileNavItems = useMemo(() => mobileNavItems, []);
 
   const getIsActive = (href: string) => {
@@ -197,8 +219,16 @@ export default function DashboardLayout({
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-cyan-50">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-bv-canvas">
+        <div
+          className="h-12 w-12 animate-spin rounded-full border-[3px] border-bv-border border-t-bv-action"
+          role="status"
+          aria-label="Bingo Vintage loading"
+        />
+        <p className="text-sm font-semibold tracking-wide text-bv-text">
+          Bingo Vintage
+          <span className="text-bv-meta font-normal"> · loading</span>
+        </p>
       </div>
     );
   }
@@ -216,7 +246,7 @@ export default function DashboardLayout({
         {/* Logo */}
         <div className="h-16 flex items-center px-6 border-b border-blue-500/30">
           <Link href="/dashboard" className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+            <div className="w-10 h-10 bg-bv-surface/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
               <Bike className="h-6 w-6 text-white" />
             </div>
             <span className="font-bold text-white text-xl">Bingo Vintage</span>
@@ -239,8 +269,8 @@ export default function DashboardLayout({
                       href={item.href}
                       className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all ${
                         isActive
-                          ? 'bg-white/20 text-white backdrop-blur-sm shadow-sm'
-                          : 'text-blue-100 hover:bg-white/10 hover:text-white'
+                          ? 'bg-bv-surface/20 text-white backdrop-blur-sm shadow-sm'
+                          : 'text-blue-100 hover:bg-bv-surface/10 hover:text-white'
                       }`}
                     >
                       <item.icon className="h-5 w-5" />
@@ -255,7 +285,7 @@ export default function DashboardLayout({
 
         {/* User Section — uses full_name via getUserInitials / getUserDisplayName */}
         <div className="p-4 border-t border-blue-500/30">
-          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/10 backdrop-blur-sm">
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-bv-surface/10 backdrop-blur-sm">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-white/30 to-white/10 flex items-center justify-center">
               <span className="text-white font-bold text-sm">{initials}</span>
             </div>
@@ -266,7 +296,7 @@ export default function DashboardLayout({
           </div>
           <button
             onClick={handleLogout}
-            className="mt-3 w-full text-center px-3 py-2 text-sm text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-all backdrop-blur-sm"
+            className="mt-3 w-full text-center px-3 py-2 text-sm text-white/80 hover:text-white hover:bg-bv-surface/10 rounded-lg transition-all backdrop-blur-sm"
           >
             Sign Out
           </button>
@@ -277,14 +307,14 @@ export default function DashboardLayout({
       <div className="lg:hidden sticky top-0 z-40 flex h-16 items-center justify-between px-4 border-b border-blue-200/50 bg-gradient-to-r from-blue-600 to-blue-700 shadow-lg">
         <button
           onClick={handleMobileMenuToggle}
-          className="p-2 text-white hover:bg-white/20 rounded-lg transition-colors"
+          className="p-2 text-white hover:bg-bv-surface/20 rounded-lg transition-colors"
           aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
         >
           {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
 
         <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
+          <div className="w-8 h-8 bg-bv-surface/20 rounded-lg flex items-center justify-center backdrop-blur-sm">
             <Bike className="h-5 w-5 text-white" />
           </div>
           <span className="font-bold text-white">Bingo Vintage</span>
@@ -312,8 +342,8 @@ export default function DashboardLayout({
                         onClick={() => setMobileMenuOpen(false)}
                         className={`flex items-center gap-3 px-3 py-3 text-base font-medium rounded-lg transition-all ${
                           isActive
-                            ? 'bg-white/20 text-white backdrop-blur-sm'
-                            : 'text-blue-100 hover:bg-white/10 hover:text-white'
+                            ? 'bg-bv-surface/20 text-white backdrop-blur-sm'
+                            : 'text-blue-100 hover:bg-bv-surface/10 hover:text-white'
                         }`}
                       >
                         <item.icon className="h-6 w-6" />
@@ -338,7 +368,7 @@ export default function DashboardLayout({
               </div>
               <button
                 onClick={handleLogout}
-                className="w-full py-3 text-center text-white bg-white/20 backdrop-blur-sm rounded-lg hover:bg-white/30 transition-all"
+                className="w-full py-3 text-center text-white bg-bv-surface/20 backdrop-blur-sm rounded-lg hover:bg-bv-surface/30 transition-all"
               >
                 Sign Out
               </button>
@@ -350,7 +380,7 @@ export default function DashboardLayout({
       {/* Main Content */}
       <div className="flex-1 lg:ml-64 flex flex-col min-w-0">
         {/* Topbar */}
-        <header className="hidden lg:flex h-16 bg-white/80 backdrop-blur-sm border-b border-blue-200/50 items-center justify-between px-6 shadow-sm">
+        <header className="hidden lg:flex h-16 bg-bv-surface/80 backdrop-blur-sm border-b border-blue-200/50 items-center justify-between px-6 shadow-sm">
           <form onSubmit={handleSearch} className="flex items-center gap-4">
             <div className="relative">
               <input
@@ -358,14 +388,14 @@ export default function DashboardLayout({
                 placeholder="Search clients, loans... (Ctrl+K)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-72 pl-10 pr-10 py-2.5 bg-white/50 border border-blue-200/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all backdrop-blur-sm"
+                className="w-72 pl-10 pr-10 py-2.5 bg-bv-surface/50 border border-blue-200/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-bv-action focus:border-transparent transition-all backdrop-blur-sm"
               />
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400" />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-400 hover:text-blue-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-400 hover:text-bv-accent"
                   aria-label="Clear search"
                 >
                   <X className="h-4 w-4" />
@@ -374,7 +404,7 @@ export default function DashboardLayout({
             </div>
             <button
               type="submit"
-              className="px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 transition-colors"
+              className="px-4 py-2.5 bg-bv-action text-white text-sm font-medium rounded-xl hover:bg-bv-action-hover transition-colors"
             >
               Search
             </button>
@@ -382,19 +412,20 @@ export default function DashboardLayout({
 
           <div className="flex items-center gap-4">
             <div className="text-right">
-              <p className="text-sm text-gray-700">{displayName}</p>
-              <p className="text-xs text-blue-600 font-medium capitalize">{user.role}</p>
+              <p className="text-sm text-bv-muted">{displayName}</p>
+              <p className="text-xs text-bv-accent font-medium capitalize">{user.role}</p>
             </div>
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center border border-blue-200">
-              <span className="text-blue-600 font-bold text-sm">{initials}</span>
+              <span className="text-bv-accent font-bold text-sm">{initials}</span>
             </div>
           </div>
         </header>
 
         {/* Page Content */}
         <main className="flex-1 overflow-auto p-4 lg:p-6 pb-20 lg:pb-6">
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-blue-100/50 p-6 min-h-[calc(100vh-8rem)]">
+          <div className="bg-bv-surface/80 backdrop-blur-sm rounded-2xl shadow-lg border border-blue-100/50 p-6 min-h-[calc(100vh-8rem)]">
             <ErrorBoundary context="Dashboard">{children}</ErrorBoundary>
+      <GuidedTour />
           </div>
         </main>
       </div>

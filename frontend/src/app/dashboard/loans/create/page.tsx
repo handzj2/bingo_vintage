@@ -68,14 +68,14 @@ function StepBar({ step }: { step: number }) {
           <div key={n} className="flex items-center flex-1 last:flex-none">
             <div className="flex flex-col items-center gap-1">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                done ? 'bg-green-500 text-white' : active ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-400'
+                done ? 'bg-bv-success-bg0 text-white' : active ? 'bg-bv-action text-white' : 'bg-bv-hover text-bv-meta'
               }`}>
                 {done ? '✓' : n}
               </div>
-              <span className={`text-xs font-semibold whitespace-nowrap ${active ? 'text-gray-900' : 'text-gray-400'}`}>{label}</span>
+              <span className={`text-xs font-semibold whitespace-nowrap ${active ? 'text-bv-text' : 'text-bv-meta'}`}>{label}</span>
             </div>
             {i < steps.length - 1 && (
-              <div className={`flex-1 h-0.5 mx-2 mb-5 ${step > n ? 'bg-green-400' : 'bg-gray-100'}`} />
+              <div className={`flex-1 h-0.5 mx-2 mb-5 ${step > n ? 'bg-green-400' : 'bg-bv-hover'}`} />
             )}
           </div>
         );
@@ -124,80 +124,80 @@ function ClientSelector({ onSelect, preselectedId }: { onSelect: (c: Client) => 
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-lg font-bold text-gray-900 mb-1">Select Client</h2>
-        <p className="text-sm text-gray-500">Search by name, phone number, or NIN</p>
+        <h2 className="text-lg font-bold text-bv-text mb-1">Select Client</h2>
+        <p className="text-sm text-bv-meta">Search by name, phone number, or NIN</p>
       </div>
 
       {/* Search */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-bv-meta" />
         <input
-          className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full pl-10 pr-4 py-3 border border-bv-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-bv-action"
           placeholder="Search by name, phone, NIN, or ID number..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           autoFocus
         />
         {search && (
-          <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+          <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-bv-meta hover:text-bv-muted">
             <X className="w-4 h-4" />
           </button>
         )}
       </div>
 
       {/* Client list */}
-      <div className="border border-gray-100 rounded-2xl overflow-hidden">
+      <div className="border border-bv-border rounded-2xl overflow-hidden">
         {loading ? (
           <div className="py-16 text-center">
-            <Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto mb-2" />
-            <p className="text-sm text-gray-400">Loading clients...</p>
+            <Loader2 className="w-6 h-6 animate-spin text-bv-action mx-auto mb-2" />
+            <p className="text-sm text-bv-meta">Loading clients...</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center">
             <User className="w-10 h-10 text-gray-200 mx-auto mb-3" />
-            <p className="font-semibold text-gray-400 text-sm">
+            <p className="font-semibold text-bv-meta text-sm">
               {search ? 'No clients match your search' : 'No clients found'}
             </p>
-            {search && <p className="text-xs text-gray-300 mt-1">Try searching by phone number or NIN</p>}
+            {search && <p className="text-xs text-bv-meta mt-1">Try searching by phone number or NIN</p>}
           </div>
         ) : (
           <div className="max-h-96 overflow-y-auto divide-y divide-gray-50">
             {filtered.map(c => (
               <button key={c.id} onClick={() => setSelected(c)}
-                className={`w-full text-left px-5 py-4 hover:bg-blue-50/50 transition-colors flex items-center justify-between gap-4 ${
-                  selected?.id === c.id ? 'bg-blue-50 border-l-2 border-blue-600' : ''
+                className={`w-full text-left px-5 py-4 hover:bg-bv-info-bg/50 transition-colors flex items-center justify-between gap-4 ${
+                  selected?.id === c.id ? 'bg-bv-info-bg border-l-2 border-blue-600' : ''
                 }`}>
                 <div className="flex items-center gap-3 min-w-0">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${
-                    selected?.id === c.id ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
+                    selected?.id === c.id ? 'bg-bv-action text-white' : 'bg-bv-hover text-bv-muted'
                   }`}>
                     {(c.firstName ?? c.first_name ?? "?").charAt(0)}{(c.lastName ?? c.last_name ?? "").charAt(0)}
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-gray-900 text-sm">{cName(c)}</p>
+                      <p className="font-semibold text-bv-text text-sm">{cName(c)}</p>
                       {c.verified && (
-                        <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-semibold">Verified</span>
+                        <span className="text-xs bg-bv-success-bg text-bv-success px-1.5 py-0.5 rounded font-semibold">Verified</span>
                       )}
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                      {c.phone && <span className="text-xs text-gray-400 flex items-center gap-1"><Phone className="w-3 h-3" />{c.phone}</span>}
-                      {c.nin && <span className="text-xs text-gray-400 flex items-center gap-1"><CreditCard className="w-3 h-3" />NIN: {c.nin}</span>}
-                      {c.occupation && <span className="text-xs text-gray-400">{c.occupation}</span>}
+                      {c.phone && <span className="text-xs text-bv-meta flex items-center gap-1"><Phone className="w-3 h-3" />{c.phone}</span>}
+                      {c.nin && <span className="text-xs text-bv-meta flex items-center gap-1"><CreditCard className="w-3 h-3" />NIN: {c.nin}</span>}
+                      {c.occupation && <span className="text-xs text-bv-meta">{c.occupation}</span>}
                     </div>
                   </div>
                 </div>
                 <div className="flex-shrink-0 flex items-center gap-3">
                   {c.loan_limit && (
                     <div className="text-right hidden sm:block">
-                      <p className="text-xs text-gray-400">Loan Limit</p>
-                      <p className="text-xs font-bold text-gray-700">{fmt(c.loan_limit)}</p>
+                      <p className="text-xs text-bv-meta">Loan Limit</p>
+                      <p className="text-xs font-bold text-bv-muted">{fmt(c.loan_limit)}</p>
                     </div>
                   )}
                   <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                    selected?.id === c.id ? 'border-blue-600 bg-blue-600' : 'border-gray-300'
+                    selected?.id === c.id ? 'border-blue-600 bg-bv-action' : 'border-bv-border'
                   }`}>
-                    {selected?.id === c.id && <div className="w-2 h-2 bg-white rounded-full" />}
+                    {selected?.id === c.id && <div className="w-2 h-2 bg-bv-surface rounded-full" />}
                   </div>
                 </div>
               </button>
@@ -208,17 +208,17 @@ function ClientSelector({ onSelect, preselectedId }: { onSelect: (c: Client) => 
 
       {/* Selected client preview + proceed */}
       {selected && (
-        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-center justify-between gap-4">
+        <div className="bg-bv-info-bg border border-blue-200 rounded-2xl p-4 flex items-center justify-between gap-4">
           <div>
-            <p className="font-bold text-gray-900">{cName(selected)}</p>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="font-bold text-bv-text">{cName(selected)}</p>
+            <p className="text-xs text-bv-meta mt-0.5">
               {selected.phone && `${selected.phone}`}
               {selected.nin && ` · NIN: ${selected.nin}`}
               {selected.monthly_income && ` · Income: ${fmt(selected.monthly_income)}/mo`}
             </p>
           </div>
           <button onClick={() => onSelect(selected)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition-colors flex-shrink-0">
+            className="flex items-center gap-2 px-5 py-2.5 bg-bv-action hover:bg-bv-action-hover text-white rounded-xl text-sm font-bold transition-colors flex-shrink-0">
             Continue <ArrowRight className="w-4 h-4" />
           </button>
         </div>
@@ -232,8 +232,8 @@ function LoanTypeSelector({ selected, onSelect }: { selected: string; onSelect: 
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-lg font-bold text-gray-900 mb-1">Select Loan Type</h2>
-        <p className="text-sm text-gray-500">Choose the type of loan for this application</p>
+        <h2 className="text-lg font-bold text-bv-text mb-1">Select Loan Type</h2>
+        <p className="text-sm text-bv-meta">Choose the type of loan for this application</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {[
@@ -251,30 +251,30 @@ function LoanTypeSelector({ selected, onSelect }: { selected: string; onSelect: 
           <button key={id} onClick={() => onSelect(id)}
             className={`text-left p-6 rounded-2xl border-2 transition-all ${
               selected === id
-                ? color === 'blue' ? 'border-blue-600 bg-blue-50' : 'border-orange-500 bg-orange-50'
-                : 'border-gray-100 hover:border-gray-200 bg-white'
+                ? color === 'blue' ? 'border-blue-600 bg-bv-info-bg' : 'border-orange-500 bg-orange-50'
+                : 'border-bv-border hover:border-bv-border bg-bv-surface'
             }`}>
             <div className="flex items-start justify-between mb-4">
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
                 selected === id
-                  ? color === 'blue' ? 'bg-blue-600' : 'bg-orange-500'
-                  : 'bg-gray-100'
+                  ? color === 'blue' ? 'bg-bv-action' : 'bg-orange-500'
+                  : 'bg-bv-hover'
               }`}>
-                <Icon className={`w-6 h-6 ${selected === id ? 'text-white' : 'text-gray-500'}`} />
+                <Icon className={`w-6 h-6 ${selected === id ? 'text-white' : 'text-bv-meta'}`} />
               </div>
               <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                 selected === id
-                  ? color === 'blue' ? 'border-blue-600 bg-blue-600' : 'border-orange-500 bg-orange-500'
-                  : 'border-gray-300'
+                  ? color === 'blue' ? 'border-blue-600 bg-bv-action' : 'border-orange-500 bg-orange-500'
+                  : 'border-bv-border'
               }`}>
-                {selected === id && <div className="w-2 h-2 bg-white rounded-full" />}
+                {selected === id && <div className="w-2 h-2 bg-bv-surface rounded-full" />}
               </div>
             </div>
-            <p className={`font-bold text-gray-900 mb-1`}>{label}</p>
-            <p className="text-xs text-gray-500 mb-3">{desc}</p>
+            <p className={`font-bold text-bv-text mb-1`}>{label}</p>
+            <p className="text-xs text-bv-meta mb-3">{desc}</p>
             <ul className="space-y-1">
               {details.map(d => (
-                <li key={d} className="text-xs text-gray-500 flex items-center gap-2">
+                <li key={d} className="text-xs text-bv-meta flex items-center gap-2">
                   <div className={`w-1.5 h-1.5 rounded-full ${color === 'blue' ? 'bg-blue-400' : 'bg-orange-400'}`} />
                   {d}
                 </li>
@@ -326,11 +326,11 @@ function LoanDetailsForm({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-bold text-gray-900 mb-1">
+        <h2 className="text-lg font-bold text-bv-text mb-1">
           {isCash ? 'Cash Loan' : 'Bike Loan'} Details
         </h2>
-        <p className="text-sm text-gray-500">
-          For <span className="font-semibold text-gray-700">{cName(client)}</span>
+        <p className="text-sm text-bv-meta">
+          For <span className="font-semibold text-bv-muted">{cName(client)}</span>
         </p>
       </div>
 
@@ -341,17 +341,17 @@ function LoanDetailsForm({
           {/* Bike picker */}
           {!isCash && (
             <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Select Bike from Inventory</label>
+              <label className="block text-xs font-bold text-bv-meta uppercase tracking-wider mb-2">Select Bike from Inventory</label>
               {loadingBikes ? (
-                <div className="border border-gray-100 rounded-xl p-4 text-center text-sm text-gray-400">
+                <div className="border border-bv-border rounded-xl p-4 text-center text-sm text-bv-meta">
                   <Loader2 className="w-4 h-4 animate-spin inline mr-2" />Loading bikes...
                 </div>
               ) : bikes.length === 0 ? (
-                <div className="border border-dashed border-gray-200 rounded-xl p-4 text-center text-sm text-gray-400">
+                <div className="border border-dashed border-bv-border rounded-xl p-4 text-center text-sm text-bv-meta">
                   No bikes in inventory — enter price manually below
                 </div>
               ) : (
-                <div className="max-h-48 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50">
+                <div className="max-h-48 overflow-y-auto border border-bv-border rounded-xl divide-y divide-gray-50">
                   {bikes.map(b => (
                     <button key={b.id} type="button" onClick={() => setForm({
                       ...form,
@@ -362,8 +362,8 @@ function LoanDetailsForm({
                         form.bike_id === b.id ? 'bg-orange-50 border-l-4 border-orange-500' : ''
                       }`}>
                       <div>
-                        <p className="font-semibold text-gray-900 text-sm">{b.model}</p>
-                        <p className="text-xs text-gray-400">{b.frame_number}{b.registration_number ? ` · ${b.registration_number}` : ''}</p>
+                        <p className="font-semibold text-bv-text text-sm">{b.model}</p>
+                        <p className="text-xs text-bv-meta">{b.frame_number}{b.registration_number ? ` · ${b.registration_number}` : ''}</p>
                       </div>
                       <span className="font-bold text-orange-600 text-sm">{fmt(b.sale_price)}</span>
                     </button>
@@ -375,11 +375,11 @@ function LoanDetailsForm({
 
           {/* Price / Principal */}
           <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-bold text-bv-meta uppercase tracking-wider mb-2">
               {isCash ? 'Principal Amount (UGX)' : 'Bike Price (UGX)'}
             </label>
             <input type="number"
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-bv-border rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-bv-action"
               placeholder="0"
               value={form.principal_amount}
               onChange={e => setForm({ ...form, principal_amount: e.target.value })}
@@ -391,7 +391,7 @@ function LoanDetailsForm({
             const amt   = Number(form.principal_amount);
             const limit = Number(client.loan_limit);
             if (amt > limit) return (
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
+              <div className="flex items-start gap-2 bg-bv-danger-bg border border-bv-danger/30 text-bv-danger text-sm px-4 py-3 rounded-xl">
                 <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                 <span>Amount <strong>{fmt(amt)}</strong> exceeds this client's loan limit of <strong>{fmt(limit)}</strong>.</span>
               </div>
@@ -403,19 +403,19 @@ function LoanDetailsForm({
           {isCash && (
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Interest Rate (% / month)</label>
+                <label className="block text-xs font-bold text-bv-meta uppercase tracking-wider mb-2">Interest Rate (% / month)</label>
                 <div className="relative">
                   <input type="number"
-                    className="w-full border border-gray-200 rounded-xl px-4 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border border-bv-border rounded-xl px-4 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-bv-action"
                     placeholder="15" value={form.interest_rate}
                     onChange={e => setForm({ ...form, interest_rate: e.target.value })}
                   />
-                  <Percent className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Percent className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-bv-meta" />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Term (Months)</label>
-                <select className="w-full border border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                <label className="block text-xs font-bold text-bv-meta uppercase tracking-wider mb-2">Term (Months)</label>
+                <select className="w-full border border-bv-border rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-bv-action bg-bv-surface"
                   value={form.term_months} onChange={e => setForm({ ...form, term_months: e.target.value })}>
                   {[1,2,3,4,6,9,12,18,24].map(n => <option key={n} value={n}>{n} Month{n>1?'s':''}</option>)}
                 </select>
@@ -437,11 +437,11 @@ function LoanDetailsForm({
 
               {/* Initial Deposit */}
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-bold text-bv-meta uppercase tracking-wider mb-2">
                   Initial Deposit (UGX)
                 </label>
                 <input type="number"
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  className="w-full border border-bv-border rounded-xl px-4 py-3 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-orange-400"
                   placeholder="e.g. 1,000,000"
                   value={form.deposit}
                   onChange={e => setForm({ ...form, deposit: e.target.value })}
@@ -453,13 +453,13 @@ function LoanDetailsForm({
                   </div>
                 )}
                 {deposit >= bikePrice && bikePrice > 0 && (
-                  <p className="text-xs text-red-600 mt-1 font-semibold">Deposit cannot equal or exceed bike price</p>
+                  <p className="text-xs text-bv-danger mt-1 font-semibold">Deposit cannot equal or exceed bike price</p>
                 )}
               </div>
 
               {/* Mode toggle */}
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">How will repayment be set?</label>
+                <label className="block text-xs font-bold text-bv-meta uppercase tracking-wider mb-2">How will repayment be set?</label>
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { val: 'payment', label: 'I know the weekly amount' },
@@ -470,7 +470,7 @@ function LoanDetailsForm({
                       className={`py-2.5 rounded-xl text-sm font-semibold border-2 transition-all ${
                         (form.bike_mode || 'payment') === opt.val
                           ? 'border-orange-500 bg-orange-50 text-orange-700'
-                          : 'border-gray-100 text-gray-500 hover:border-gray-200'
+                          : 'border-bv-border text-bv-meta hover:border-bv-border'
                       }`}>
                       {opt.label}
                     </button>
@@ -481,11 +481,11 @@ function LoanDetailsForm({
               {/* Mode A: enter weekly amount */}
               {(form.bike_mode || 'payment') === 'payment' && (
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-bold text-bv-meta uppercase tracking-wider mb-2">
                     Agreed Weekly Instalment (UGX)
                   </label>
                   <input type="number"
-                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-xl font-black focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    className="w-full border border-bv-border rounded-xl px-4 py-3 text-xl font-black focus:outline-none focus:ring-2 focus:ring-orange-400"
                     placeholder="e.g. 75,000"
                     value={form.weekly_installment || ''}
                     onChange={e => setForm({ ...form, weekly_installment: e.target.value })}
@@ -509,11 +509,11 @@ function LoanDetailsForm({
               {/* Mode B: enter weeks */}
               {form.bike_mode === 'weeks' && (
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-bold text-bv-meta uppercase tracking-wider mb-2">
                     Repayment Period (Number of Weeks)
                   </label>
                   <input type="number"
-                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-xl font-black focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    className="w-full border border-bv-border rounded-xl px-4 py-3 text-xl font-black focus:outline-none focus:ring-2 focus:ring-orange-400"
                     placeholder="e.g. 104"
                     value={form.term_weeks_input || ''}
                     onChange={e => setForm({ ...form, term_weeks_input: e.target.value })}
@@ -538,11 +538,11 @@ function LoanDetailsForm({
 
           {/* Start Date */}
           <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Start Date</label>
+            <label className="block text-xs font-bold text-bv-meta uppercase tracking-wider mb-2">Start Date</label>
             <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-bv-meta" />
               <input type="date"
-                className="w-full border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-bv-border rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-bv-action"
                 value={form.start_date}
                 onChange={e => setForm({ ...form, start_date: e.target.value })}
               />
@@ -551,9 +551,9 @@ function LoanDetailsForm({
 
           {/* Notes */}
           <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Notes (optional)</label>
+            <label className="block text-xs font-bold text-bv-meta uppercase tracking-wider mb-2">Notes (optional)</label>
             <textarea rows={2}
-              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              className="w-full border border-bv-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-bv-action resize-none"
               placeholder="Purpose of loan, additional context..."
               value={form.notes}
               onChange={e => setForm({ ...form, notes: e.target.value })}
@@ -576,7 +576,7 @@ function LoanDetailsForm({
                 <span className="font-bold">Total Payable</span><span className="text-xl font-black">{fmt(cashTotal)}</span>
               </div>
               {cashMonthly > 0 && (
-                <div className="bg-white/10 rounded-xl p-3 mt-2">
+                <div className="bg-bv-surface/10 rounded-xl p-3 mt-2">
                   <p className="text-xs opacity-60 mb-1">Monthly Payment</p>
                   <p className="text-2xl font-black">{fmt(cashMonthly)}</p>
                   <p className="text-xs opacity-50 mt-0.5">for {months} months</p>
@@ -602,7 +602,7 @@ function LoanDetailsForm({
                 </div>
               )}
               {activeAmt > 0 && (
-                <div className="bg-white/10 rounded-xl p-3 mt-1">
+                <div className="bg-bv-surface/10 rounded-xl p-3 mt-1">
                   <p className="text-xs opacity-60 mb-1">Weekly Instalment</p>
                   <p className="text-2xl font-black">{fmt(activeAmt)}</p>
                   {activeWeeks > 0 && (
@@ -673,21 +673,21 @@ function ReviewStep({ client, loanType, form, bikes }: { client: Client; loanTyp
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-lg font-bold text-gray-900 mb-1">Review Application</h2>
-        <p className="text-sm text-gray-500">Confirm all details before submitting</p>
+        <h2 className="text-lg font-bold text-bv-text mb-1">Review Application</h2>
+        <p className="text-sm text-bv-meta">Confirm all details before submitting</p>
       </div>
-      <div className="bg-gray-50 rounded-2xl border border-gray-100 overflow-hidden">
+      <div className="bg-bv-hover rounded-2xl border border-bv-border overflow-hidden">
         {rows.map(({ label, value }, i) => (
-          <div key={i} className={`flex items-center justify-between px-5 py-3.5 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
-            <span className="text-sm text-gray-500 font-medium">{label}</span>
-            <span className={`text-sm font-bold ${label === 'Interest' ? 'text-emerald-600' : 'text-gray-900'}`}>{value}</span>
+          <div key={i} className={`flex items-center justify-between px-5 py-3.5 ${i % 2 === 0 ? 'bg-bv-surface' : 'bg-bv-hover/50'}`}>
+            <span className="text-sm text-bv-meta font-medium">{label}</span>
+            <span className={`text-sm font-bold ${label === 'Interest' ? 'text-emerald-600' : 'text-bv-text'}`}>{value}</span>
           </div>
         ))}
       </div>
       {form.notes && (
-        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-          <p className="text-xs font-bold text-blue-600 uppercase mb-1">Notes</p>
-          <p className="text-sm text-gray-700">{form.notes}</p>
+        <div className="bg-bv-info-bg border border-blue-100 rounded-xl p-4">
+          <p className="text-xs font-bold text-bv-accent uppercase mb-1">Notes</p>
+          <p className="text-sm text-bv-muted">{form.notes}</p>
         </div>
       )}
       <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
@@ -873,25 +873,26 @@ export default function CreateLoanPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8">
+    <div className="max-w-2xl mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-8">
-        <Link href="/dashboard/loans" className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4 w-fit">
+        <Link href="/dashboard/loans" className="flex items-center gap-2 text-sm text-bv-meta hover:text-bv-muted mb-4 w-fit">
           <ArrowLeft className="w-4 h-4" /> Back to Loans
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900">Create New Loan</h1>
-        <p className="text-sm text-gray-500 mt-1">Complete all steps to submit a loan application</p>
+        <h1 className="text-lg font-semibold text-bv-text">New loan application</h1>
+        <p className="text-sm text-bv-muted mt-0.5">Select client, product type and terms. Submit for approval where required by role.</p>
+        <p className="text-sm text-bv-meta mt-1">Complete all steps to submit a loan application</p>
       </div>
 
       <StepBar step={step} />
 
       {/* Step content */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
+      <div className="bg-bv-surface border border-bv-border rounded-2xl p-6 shadow-sm">
         {error && (
           <div className={`flex items-start gap-3 border rounded-xl px-4 py-3 mb-5 text-sm ${
             error.includes('Policy') || error.includes('already has') || error.includes('repay')
               ? 'bg-amber-50 border-amber-300 text-amber-900'
-              : 'bg-red-50 border-red-200 text-red-700'
+              : 'bg-bv-danger-bg border-bv-danger/30 text-bv-danger'
           }`}>
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <div>
@@ -936,7 +937,7 @@ export default function CreateLoanPage() {
                         <span className="capitalize">{lt} loan</span>
                         <span className="text-amber-700 font-semibold">({l.status})</span>
                         {blocked && (
-                          <span className="text-red-700 font-black text-xs">✗ Must repay fully before new {lt} loan</span>
+                          <span className="text-bv-danger font-black text-xs">✗ Must repay fully before new {lt} loan</span>
                         )}
                       </li>
                     );
@@ -965,7 +966,7 @@ export default function CreateLoanPage() {
       <div className="flex items-center justify-between mt-6">
         <button
           onClick={() => step > 1 ? setStep(s => (s - 1) as any) : router.push('/dashboard/loans')}
-          className="flex items-center gap-2 px-5 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+          className="flex items-center gap-2 px-5 py-2.5 border border-bv-border rounded-xl text-sm font-semibold text-bv-muted hover:bg-bv-hover transition-colors">
           <ArrowLeft className="w-4 h-4" />
           {step === 1 ? 'Cancel' : 'Back'}
         </button>
@@ -974,14 +975,14 @@ export default function CreateLoanPage() {
           <button
             onClick={() => setStep(s => (s + 1) as any)}
             disabled={!canProceed()}
-            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-colors">
+            className="flex items-center gap-2 px-6 py-2.5 bg-bv-action hover:bg-bv-action-hover disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-colors">
             Continue <ArrowRight className="w-4 h-4" />
           </button>
         ) : (
           <button
             onClick={handleSubmit}
             disabled={submitting}
-            className="flex items-center gap-2 px-6 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold transition-colors">
+            className="flex items-center gap-2 px-6 py-2.5 bg-bv-success hover:bg-bv-success disabled:opacity-50 text-white rounded-xl text-sm font-bold transition-colors">
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
             {submitting ? 'Submitting...' : 'Submit Loan Application'}
           </button>

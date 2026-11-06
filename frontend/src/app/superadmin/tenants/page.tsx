@@ -28,9 +28,9 @@ const EMPTY: CreateForm = {
 function StatusDot({ active }: { active: boolean }) {
   return (
     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-bold ${
-      active ? 'bg-green-900/40 text-green-400' : 'bg-gray-700 text-gray-400'
+      active ? 'bg-green-900/40 text-green-400' : 'bg-gray-700 text-bv-meta'
     }`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-green-400' : 'bg-gray-500'}`} />
+      <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-green-400' : 'bg-bv-hover0'}`} />
       {active ? 'Active' : 'Inactive'}
     </span>
   );
@@ -80,12 +80,12 @@ function BranchPanel({ tenant, onClose }: { tenant: Tenant; onClose: () => void 
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+      <div className="bg-bv-action border border-gray-700 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
           <div>
             <h2 className="text-lg font-black text-white">{tenant.name}</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Branch Management · {branches.length} branch{branches.length !== 1 ? 'es' : ''}</p>
+            <p className="text-xs text-bv-meta mt-0.5">Branch Management · {branches.length} branch{branches.length !== 1 ? 'es' : ''}</p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => setShowAdd(true)}
@@ -112,7 +112,7 @@ function BranchPanel({ tenant, onClose }: { tenant: Tenant; onClose: () => void 
                 ['Contact Phone', 'contactPhone', 'text'],
               ].map(([label, field, type]) => (
                 <div key={field}>
-                  <label className="text-xs text-gray-400 mb-1 block">{label}</label>
+                  <label className="text-xs text-bv-meta mb-1 block">{label}</label>
                   <input type={type}
                     value={(form as any)[field]}
                     onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
@@ -139,7 +139,7 @@ function BranchPanel({ tenant, onClose }: { tenant: Tenant; onClose: () => void 
           {loading ? (
             [...Array(3)].map((_, i) => <div key={i} className="bg-gray-800 h-14 rounded-lg animate-pulse" />)
           ) : branches.length === 0 ? (
-            <div className="text-center text-gray-500 py-12">
+            <div className="text-center text-bv-meta py-12">
               <p className="text-sm">No branches yet</p>
               <p className="text-xs mt-1">Add a branch so cashiers can be assigned</p>
             </div>
@@ -150,7 +150,7 @@ function BranchPanel({ tenant, onClose }: { tenant: Tenant; onClose: () => void 
                   <span className="font-bold text-white text-sm">{b.name}</span>
                   <StatusDot active={b.is_active} />
                 </div>
-                <div className="text-xs text-gray-400 flex gap-2 flex-wrap">
+                <div className="text-xs text-bv-meta flex gap-2 flex-wrap">
                   {b.location && <span>{b.location}</span>}
                   {b.manager_name && <><span>·</span><span>Mgr: {b.manager_name}</span></>}
                   {b.contact_phone && <><span>·</span><span>{b.contact_phone}</span></>}
@@ -258,7 +258,7 @@ export default function TenantsPage() {
       <div className="flex justify-between items-start mb-6">
         <div>
           <h1 className="text-2xl font-black text-white">Tenants</h1>
-          <p className="text-gray-400 text-sm mt-1">{tenants.length} tenant{tenants.length !== 1 ? 's' : ''} on platform</p>
+          <p className="text-bv-meta text-sm mt-1">{tenants.length} tenant{tenants.length !== 1 ? 's' : ''} on platform</p>
         </div>
         <button onClick={() => { setShowForm(true); setError(''); setSuccess(''); }}
           className="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-bold transition">
@@ -285,16 +285,16 @@ export default function TenantsPage() {
         <div className="mb-6 bg-gray-800 rounded-xl p-6 border border-purple-700 space-y-6">
           <div>
             <h2 className="font-black text-purple-300 text-lg mb-1">Onboard New Tenant</h2>
-            <p className="text-xs text-gray-500">Creates tenant, seeds all roles, creates admin account, and sets up branches.</p>
+            <p className="text-xs text-bv-meta">Creates tenant, seeds all roles, creates admin account, and sets up branches.</p>
           </div>
 
           {/* Tenant Info */}
           <div>
-            <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Tenant Details</h3>
+            <h3 className="text-xs font-black text-bv-meta uppercase tracking-widest mb-3">Tenant Details</h3>
             <div className="grid grid-cols-2 gap-4">
               {tenantFields.map(([label, field, type]) => (
                 <div key={field}>
-                  <label className="text-xs text-gray-400 mb-1 block font-medium">{label}</label>
+                  <label className="text-xs text-bv-meta mb-1 block font-medium">{label}</label>
                   <input type={type} value={form[field]}
                     onChange={e => field === 'name' ? handleNameChange(e.target.value) : setForm(f => ({ ...f, [field]: e.target.value }))}
                     className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
@@ -306,11 +306,11 @@ export default function TenantsPage() {
 
           {/* Admin Account */}
           <div>
-            <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Admin Account</h3>
+            <h3 className="text-xs font-black text-bv-meta uppercase tracking-widest mb-3">Admin Account</h3>
             <div className="grid grid-cols-2 gap-4">
               {adminFields.map(([label, field, type]) => (
                 <div key={field}>
-                  <label className="text-xs text-gray-400 mb-1 block font-medium">{label}</label>
+                  <label className="text-xs text-bv-meta mb-1 block font-medium">{label}</label>
                   <input type={type} value={form[field]}
                     onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
                     className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
@@ -323,15 +323,15 @@ export default function TenantsPage() {
 
           {/* Branch Setup */}
           <div>
-            <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Branch Setup</h3>
-            <p className="text-xs text-gray-500 mb-3">At least one branch is required. Cashiers must be assigned to a branch.</p>
+            <h3 className="text-xs font-black text-bv-meta uppercase tracking-widest mb-3">Branch Setup</h3>
+            <p className="text-xs text-bv-meta mb-3">At least one branch is required. Cashiers must be assigned to a branch.</p>
 
             {/* Main Branch */}
             <div className="bg-gray-700/50 rounded-lg p-4 mb-3 border border-gray-600">
               <p className="text-xs font-bold text-purple-300 mb-2">Main Branch *</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-gray-400 mb-1 block">Branch Name *</label>
+                  <label className="text-xs text-bv-meta mb-1 block">Branch Name *</label>
                   <input value={form.branchName}
                     onChange={e => setForm(f => ({ ...f, branchName: e.target.value }))}
                     className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
@@ -339,7 +339,7 @@ export default function TenantsPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-gray-400 mb-1 block">Location / Address</label>
+                  <label className="text-xs text-bv-meta mb-1 block">Location / Address</label>
                   <input value={form.branchLocation}
                     onChange={e => setForm(f => ({ ...f, branchLocation: e.target.value }))}
                     className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
@@ -353,19 +353,19 @@ export default function TenantsPage() {
             {extraBranches.map((b, i) => (
               <div key={i} className="bg-gray-700/30 rounded-lg p-4 mb-3 border border-gray-700">
                 <div className="flex justify-between items-center mb-2">
-                  <p className="text-xs font-bold text-gray-400">Branch {i + 2}</p>
+                  <p className="text-xs font-bold text-bv-meta">Branch {i + 2}</p>
                   <button onClick={() => removeExtraBranch(i)}
                     className="text-xs text-red-400 hover:text-red-300">Remove</button>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs text-gray-400 mb-1 block">Branch Name *</label>
+                    <label className="text-xs text-bv-meta mb-1 block">Branch Name *</label>
                     <input value={b.name} onChange={e => updateExtraBranch(i, 'name', e.target.value)}
                       className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
                     />
                   </div>
                   <div>
-                    <label className="text-xs text-gray-400 mb-1 block">Location</label>
+                    <label className="text-xs text-bv-meta mb-1 block">Location</label>
                     <input value={b.location} onChange={e => updateExtraBranch(i, 'location', e.target.value)}
                       className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
                     />
@@ -400,7 +400,7 @@ export default function TenantsPage() {
           {[...Array(3)].map((_, i) => <div key={i} className="bg-gray-800 rounded-xl h-20 animate-pulse" />)}
         </div>
       ) : tenants.length === 0 ? (
-        <div className="text-center text-gray-500 py-16">No tenants yet. Onboard your first tenant above.</div>
+        <div className="text-center text-bv-meta py-16">No tenants yet. Onboard your first tenant above.</div>
       ) : (
         <div className="space-y-3">
           {tenants.map(t => (
@@ -411,7 +411,7 @@ export default function TenantsPage() {
                   <span className="font-bold text-white">{t.name}</span>
                   <StatusDot active={t.is_active} />
                 </div>
-                <div className="text-xs text-gray-400 flex gap-3 flex-wrap">
+                <div className="text-xs text-bv-meta flex gap-3 flex-wrap">
                   <span>/{t.slug}</span>
                   <span>·</span>
                   <span>{t.user_count ?? 0} users</span>
@@ -420,7 +420,7 @@ export default function TenantsPage() {
                   {t.contact_email && <><span>·</span><span>{t.contact_email}</span></>}
                 </div>
               </div>
-              <div className="text-xs text-gray-500 flex-shrink-0">
+              <div className="text-xs text-bv-meta flex-shrink-0">
                 {new Date(t.created_at).toLocaleDateString()}
               </div>
               <div className="flex gap-2 flex-shrink-0">

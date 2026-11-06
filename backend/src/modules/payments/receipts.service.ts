@@ -72,6 +72,24 @@ export interface ReceiptData {
   company_name:       string;
   company_phone:      string;
   printed_at:         string;
+
+  /** Amount received on this transaction (same as amount) */
+  amount_received:    number;
+  total_allocated:    number;
+  unallocated:        number;
+  /** persisted | legacy_unavailable */
+  allocation_source:  string;
+  allocations:        Array<{
+    schedule_id: number;
+    installment_number: number | null;
+    due_date: string | null;
+    amount_allocated: number;
+    instalment_allocated?: number;
+    penalty_allocated?: number;
+    remaining_after: number | null;
+    penalty_remaining?: number;
+    status_after: string;
+  }>;
 }
 
 @Injectable()
@@ -155,16 +173,7 @@ export class ReceiptsService {
     actorUser: string,
     ipAddress?: string,
   ): Promise<ReceiptData> {
-    //
-    // SQL column audit:
-    //   bikes:    b.model ✓, b.registration_number ✓         (NO b.make)
-    //   branches: br.name ✓, br.contact_phone ✓  (NO location column in actual DB — entity defines it but DB table omits it)
-    //   tenants:  t.name ✓, t.contact_phone ✓               (tenants HAS contact_phone)
-    //   loans:    l.loan_number, l.loan_type, l.principal_amount,
-    //             l.interest_rate, l.term_months, l.balance,
-    //             l.branch_id, l.tenant_id ✓ (all confirmed in entity)
-    //   clients:  c.first_name, c.last_name, c.phone, c.id_number ✓
-    //
+    // Column names verified against entity definitions / live DB.
     const rows: any[] = await this.paymentRepo.manager.query(
       `SELECT
           p.id                    AS payment_id,
@@ -265,7 +274,55 @@ export class ReceiptsService {
       this.logger.warn(`Audit log failed for receipt print: ${err?.message}`);
     }
 
-    return this.buildReceiptData(row, isVoid, isReprint);
+    const base = this.buildReceiptData(row, isVoid, isReprint);
+    const allocRows: any[] = await this.paymentRepo.manager.query(
+      `SELECT a.schedule_id,
+              a.amount_applied,
+              COALESCE(a.instalment_applied, a.amount_applied, 0) AS instalment_applied,
+              COALESCE(a.penalty_applied, 0) AS penalty_applied,
+              a.new_status,
+              a.reversed_at,
+              s.installment_number,
+              s.due_date,
+              s.amount_due,
+              s.amount_paid,
+              COALESCE(s.penalty_amount, 0) AS penalty_amount
+         FROM payment_allocations a
+         LEFT JOIN loan_schedules s ON s.id = a.schedule_id
+        WHERE a.payment_id = $1
+        ORDER BY a.id ASC`,
+      [paymentId],
+    );
+    const active = (allocRows || []).filter((a) => !a.reversed_at);
+    const allocations = active.map((a) => {
+      const applied = Math.round(Number(a.amount_applied));
+      const instalment_allocated = Math.round(Number(a.instalment_applied));
+      const penalty_allocated = Math.round(Number(a.penalty_applied));
+      const amountDue = Math.round(Number(a.amount_due ?? 0));
+      const amountPaid = Math.round(Number(a.amount_paid ?? 0));
+      const remainingAfter = Math.max(0, amountDue - amountPaid);
+      return {
+        schedule_id: Number(a.schedule_id),
+        installment_number: a.installment_number != null ? Number(a.installment_number) : null,
+        due_date: a.due_date ? String(a.due_date).slice(0, 10) : null,
+        amount_allocated: applied,
+        instalment_allocated,
+        penalty_allocated,
+        remaining_after: remainingAfter,
+        penalty_remaining: Math.round(Number(a.penalty_amount ?? 0)),
+        status_after: String(a.new_status || ''),
+      };
+    });
+    const total_allocated = allocations.reduce((s, a) => s + a.amount_allocated, 0);
+    const amount_received = Number(row.amount || 0);
+    return {
+      ...base,
+      amount_received,
+      total_allocated,
+      unallocated: Math.max(0, Math.round(amount_received) - total_allocated),
+      allocation_source: allocations.length ? 'persisted' : 'legacy_unavailable',
+      allocations,
+    };
   }
 
   /**
@@ -361,6 +418,12 @@ export class ReceiptsService {
       company_name:    row.company_name    || 'Bingo Vintage',
       company_phone:   row.company_phone   || row.branch_phone || '',
       printed_at:      new Date().toISOString(),
+      // allocation fields — populated by getReceiptData() after this call
+      amount_received:   Number(row.amount || 0),
+      total_allocated:   0,
+      unallocated:       0,
+      allocation_source: 'legacy_unavailable',
+      allocations:       [],
     };
   }
 }

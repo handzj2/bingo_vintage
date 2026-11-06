@@ -56,22 +56,32 @@ export default function ExpenseForm({ initialData, isEdit }: any) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-md mx-auto space-y-4">
+    <div className="max-w-md mx-auto p-4 sm:p-6 space-y-4">
+      <div className="border-b border-bv-border pb-4">
+        <h1 className="text-lg font-semibold text-bv-text">
+          {isEdit ? 'Edit expense' : 'New expense'}
+        </h1>
+        <p className="text-sm text-bv-muted mt-0.5">
+          Record branch spending. Cash expenses should use an open drawer when available.
+        </p>
+      </div>
+
+    <form onSubmit={handleSubmit} className="space-y-4">
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
+        <div className="bg-bv-danger-bg border border-bv-danger/30 text-bv-danger text-sm px-3 py-2 rounded-md">
           {error}
         </div>
       )}
 
       {/* Category */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
+        <label className="block text-sm font-medium text-bv-muted mb-1">Category *</label>
         <select
           value={form.categoryId}
           onChange={e => setForm({ ...form, categoryId: e.target.value })}
           required
-          className="w-full border border-gray-300 rounded-lg px-3 py-2"
+          className="w-full border border-bv-border rounded-lg px-3 py-2"
         >
           <option value="">Select Category</option>
           {categories.map((c: any) => (
@@ -82,7 +92,7 @@ export default function ExpenseForm({ initialData, isEdit }: any) {
 
       {/* Amount */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Amount (UGX) *</label>
+        <label className="block text-sm font-medium text-bv-muted mb-1">Amount (UGX) *</label>
         <input
           type="number"
           min="1"
@@ -90,30 +100,30 @@ export default function ExpenseForm({ initialData, isEdit }: any) {
           value={form.amount}
           onChange={e => setForm({ ...form, amount: e.target.value })}
           required
-          className="w-full border border-gray-300 rounded-lg px-3 py-2"
+          className="w-full border border-bv-border rounded-lg px-3 py-2"
         />
       </div>
 
       {/* Description */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
+        <label className="block text-sm font-medium text-bv-muted mb-1">Description *</label>
         <textarea
           placeholder="What was this expense for?"
           value={form.description}
           onChange={e => setForm({ ...form, description: e.target.value })}
           required
           rows={3}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2"
+          className="w-full border border-bv-border rounded-lg px-3 py-2"
         />
       </div>
 
       {/* Payment method */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method *</label>
+        <label className="block text-sm font-medium text-bv-muted mb-1">Payment Method *</label>
         <select
           value={form.paymentMethod}
           onChange={e => setForm({ ...form, paymentMethod: e.target.value })}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2"
+          className="w-full border border-bv-border rounded-lg px-3 py-2"
         >
           <option value="cash">Cash</option>
           <option value="bank">Bank Transfer</option>
@@ -123,13 +133,13 @@ export default function ExpenseForm({ initialData, isEdit }: any) {
       {/* Cash drawer — only for cash payments */}
       {form.paymentMethod === 'cash' && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Cash Drawer <span className="text-gray-400 font-normal">(optional)</span>
+          <label className="block text-sm font-medium text-bv-muted mb-1">
+            Cash Drawer <span className="text-bv-meta font-normal">(optional)</span>
           </label>
           <select
             value={form.cashDrawerId}
             onChange={e => setForm({ ...form, cashDrawerId: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            className="w-full border border-bv-border rounded-lg px-3 py-2"
           >
             <option value="">No drawer / unassigned</option>
             {drawers.map((d: any) => (
@@ -148,7 +158,7 @@ export default function ExpenseForm({ initialData, isEdit }: any) {
         <button
           type="button"
           onClick={() => router.push('/dashboard/expenses')}
-          className="flex-1 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50"
+          className="flex-1 border border-bv-border text-bv-muted px-4 py-2 rounded-lg hover:bg-bv-hover"
         >
           Cancel
         </button>
@@ -161,5 +171,7 @@ export default function ExpenseForm({ initialData, isEdit }: any) {
         </button>
       </div>
     </form>
+    </div>
+
   );
 }

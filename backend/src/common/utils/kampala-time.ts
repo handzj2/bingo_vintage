@@ -36,3 +36,16 @@ export function endOfKampalaDay(reference: Date = new Date()): Date {
   const start = startOfKampalaDay(reference);
   return new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
 }
+
+/**
+ * Returns the Kampala calendar date as a YYYY-MM-DD string (no time component).
+ * Use this instead of new Date().toISOString().slice(0,10) anywhere a "today"
+ * date string is needed in a Kampala business-day context.
+ */
+export function kampalaDateString(reference: Date = new Date()): string {
+  const kampalaWallClock = new Date(reference.getTime() + KAMPALA_OFFSET_MS);
+  const y = kampalaWallClock.getUTCFullYear();
+  const m = String(kampalaWallClock.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(kampalaWallClock.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}

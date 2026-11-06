@@ -322,9 +322,14 @@ export class LoansService {
   }
 
   // ── findOne ───────────────────────────────────────────────────────────────
-  async findOne(id: number) {
+  // Phase 3: accepts optional tenantId for tenant-scoped lookups.
+  // When tenantId is supplied the query filters by it so a user cannot
+  // fetch another tenant's loan by guessing the numeric ID.
+  async findOne(id: number, tenantId?: number) {
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
     const loan = await this.loansRepo.findOne({
-      where: { id },
+      where,
       relations: ['client', 'bike', 'payments', 'schedules'],
     });
     if (!loan) throw new NotFoundException(`Loan #${id} not found`);
@@ -351,9 +356,13 @@ export class LoansService {
   }
 
   // ── searchLoans ───────────────────────────────────────────────────────────
-  async searchLoans(dto: any) {
+  // Phase 3: tenantId filter is MANDATORY — must come from the authenticated
+  // JWT, never from the request body or query string.
+  async searchLoans(dto: any, tenantId?: number) {
     const qb = this.loansRepo.createQueryBuilder('loan')
       .leftJoinAndSelect('loan.client', 'client');
+    // Always scope to caller's tenant (confirmed Phase 1 gap)
+    if (tenantId) qb.andWhere('loan.tenantId = :tenantId', { tenantId });
     if (dto.loanNumber) qb.andWhere('loan.loanNumber ILIKE :n', { n: `%${dto.loanNumber}%` });
     if (dto.clientName) qb.andWhere("(client.first_name || ' ' || client.last_name) ILIKE :cn", { cn: `%${dto.clientName}%` });
     if (dto.status)     qb.andWhere('loan.status = :s', { s: dto.status });
@@ -402,22 +411,60 @@ export class LoansService {
 
   // ── reverseOrAdjustLoan ───────────────────────────────────────────────────
   async reverseOrAdjustLoan(id: number, dto: any, user: RequestUser) {
-    const loan = await this.findOne(id);
-    const previousBalance = Number(loan.balance);
-    const detail = dto.newBalance !== undefined
-      ? `${dto.reason ?? 'No reason'} (balance corrected: ${previousBalance} -> ${Number(dto.newBalance)})`
-      : (dto.reason ?? 'No reason');
-    loan.addAuditNote('REVERSAL', `Admin ${user.userId}`, detail);
-    if (dto.newBalance !== undefined) loan.balance = dto.newBalance;
-    return this.loansRepo.save(loan);
+    const qr = this.loansRepo.manager.connection.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+    try {
+      const loan = await qr.manager
+        .createQueryBuilder(Loan, 'loan')
+        .where('loan.id = :id', { id })
+        .setLock('pessimistic_write')
+        .getOne();
+      if (!loan) throw new NotFoundException(`Loan #${id} not found`);
+
+      const previousBalance = Number(loan.balance);
+      const detail = dto.newBalance !== undefined
+        ? `${dto.reason ?? 'No reason'} (balance corrected: ${previousBalance} -> ${Number(dto.newBalance)})`
+        : (dto.reason ?? 'No reason');
+      loan.addAuditNote('REVERSAL', `Admin ${user.userId}`, detail);
+      if (dto.newBalance !== undefined) loan.balance = dto.newBalance;
+
+      const saved = await qr.manager.save(Loan, loan);
+      await qr.commitTransaction();
+      return saved;
+    } catch (err) {
+      await qr.rollbackTransaction();
+      throw err;
+    } finally {
+      await qr.release();
+    }
   }
 
   // ── updateLoan ────────────────────────────────────────────────────────────
   async updateLoan(id: number, dto: any, user: RequestUser) {
-    const loan = await this.findOne(id);
-    if (dto.amount)  loan.principalAmount = dto.amount;
-    loan.addAuditNote('UPDATE', `Admin ${user.userId}`, dto.details ?? '');
-    return this.loansRepo.save(loan);
+    const qr = this.loansRepo.manager.connection.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+    try {
+      const loan = await qr.manager
+        .createQueryBuilder(Loan, 'loan')
+        .where('loan.id = :id', { id })
+        .setLock('pessimistic_write')
+        .getOne();
+      if (!loan) throw new NotFoundException(`Loan #${id} not found`);
+
+      if (dto.amount) loan.principalAmount = dto.amount;
+      loan.addAuditNote('UPDATE', `Admin ${user.userId}`, dto.details ?? '');
+
+      const saved = await qr.manager.save(Loan, loan);
+      await qr.commitTransaction();
+      return saved;
+    } catch (err) {
+      await qr.rollbackTransaction();
+      throw err;
+    } finally {
+      await qr.release();
+    }
   }
 
   // ── updateLoanStatus ──────────────────────────────────────────────────────
@@ -750,9 +797,9 @@ export class LoansService {
     return rows[0];
   }
 
-  async getOverdueLoansReport(tenantId?: number, limit = 200) {
-    const where: any = { status: LoanStatus.DELINQUENT };
-    if (tenantId) where.tenantId = tenantId;
+  async getOverdueLoansReport(tenantId: number, limit = 200) {
+    if (!tenantId) throw new ForbiddenException('No tenant assigned — cannot run overdue report without a tenant context');
+    const where: any = { status: LoanStatus.DELINQUENT, tenantId };
     return this.loansRepo.find({
       where,
       relations: ['client'],
