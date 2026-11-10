@@ -2,6 +2,6 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "node dist/src/main"
+startCommand = "npm run migration:run:prod && node dist/src/main"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
