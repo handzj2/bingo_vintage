@@ -18,7 +18,7 @@ const apiFetch = async (path: string, opts: RequestInit = {}) => {
   const res = await fetch(`${API_URL}${path}`, { headers: getHeaders(), ...opts });
   const text = await res.text();
   const json = text ? JSON.parse(text) : {};
-  if (!res.ok) throw new Error(json.message || `Error ${res.status}`);
+  if (!res.ok) throw new Error(Array.isArray(json.message) ? json.message.join(', ') : (json.message || `Error ${res.status}`));
   return json;
 };
 const fmt = (n: number) => `UGX ${Number(n || 0).toLocaleString()}`;
@@ -80,7 +80,7 @@ function RequestReversalModal({ payment, onClose, onSuccess }: { payment: any; o
           <div className="bg-bv-hover rounded-xl p-4 grid grid-cols-2 gap-3 text-sm">
             <div>
               <p className="text-xs text-bv-meta mb-0.5">Receipt</p>
-              <p className="font-mono text-xs font-bold text-bv-text">{payment.receipt_number}</p>
+              <p className="font-mono text-xs font-bold text-bv-text">{payment.receiptNumber}</p>
             </div>
             <div>
               <p className="text-xs text-bv-meta mb-0.5">Amount</p>
@@ -200,7 +200,7 @@ function AdminReviewModal({ payment, onClose, onSuccess }: { payment: any; onClo
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
                 <p className="text-xs text-bv-meta mb-0.5">Receipt</p>
-                <p className="font-mono text-xs font-bold">{payment.receipt_number}</p>
+                <p className="font-mono text-xs font-bold">{payment.receiptNumber}</p>
               </div>
               <div>
                 <p className="text-xs text-bv-meta mb-0.5">Amount</p>
@@ -218,7 +218,7 @@ function AdminReviewModal({ payment, onClose, onSuccess }: { payment: any; onClo
             <div className="border-t border-bv-border pt-3">
               <p className="text-xs text-bv-meta mb-1">Cashier's Reason</p>
               <p className="text-sm text-bv-text font-medium bg-bv-surface rounded-lg p-3 border border-orange-200 border-l-4 border-l-orange-400">
-                {payment.reversalRequestReason || '—'}
+                {payment.reversalReason || '—'}
               </p>
             </div>
           </div>
@@ -290,7 +290,9 @@ function AdminReviewModal({ payment, onClose, onSuccess }: { payment: any; onClo
 export default function ReversalsPage() {
   const { user, can } = useAuth();
   const role    = (user?.role ?? '').toLowerCase();
-  const isAdmin = role === 'admin' || role === 'manager' || role === 'superadmin' || can('payment.reverse');
+  // Reviewer = same rule the API enforces on approve/reject (payment.reverse; admin/superadmin always).
+  // Managers were shown Review buttons here but the API answered 403.
+  const isAdmin = role === 'admin' || role === 'superadmin' || can('payment.reverse');
 
   const [payments,   setPayments]   = useState<any[]>([]);
   const [nextCursor, setNextCursor] = useState<number | null>(null);
@@ -306,30 +308,49 @@ export default function ReversalsPage() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 5000); };
 
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const unwrap = (data: any) =>
+    (data && typeof data === 'object' && 'items' in data)
+      ? data
+      : { items: Array.isArray(data) ? data : (data?.data ?? []), nextCursor: null, count: 0 };
+
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      // GitHub / Stripe list pattern: always read the typed paginated envelope
-      const data = await apiFetch('/payments');
-      const { items = [], nextCursor: nc = null, count = 0 } =
-        (data && typeof data === 'object' && 'items' in data)
-          ? data
-          : { items: Array.isArray(data) ? data : (data?.data ?? []), nextCursor: null, count: 0 };
-      setPayments(items);
-      setNextCursor(nc);
-      setTotalCount(count);
+      const data = unwrap(await apiFetch('/payments?limit=100'));
+      setPayments(data.items);
+      setNextCursor(data.nextCursor ?? null);
+      setTotalCount(data.count ?? 0);
+      // The queue comes from its own endpoint. Filtering the first page of /payments
+      // silently hid any request that was not among the latest 100 payments.
+      if (isAdmin) {
+        setPendingRequests(await apiFetch('/payments/reversal-requests'));
+      } else {
+        setPendingRequests([]);
+      }
     } catch (e: any) { setError(e.message); }
     finally { setLoading(false); }
-  }, []);
+  }, [isAdmin]);
+
+  const loadMore = async () => {
+    if (!nextCursor) return;
+    setLoadingMore(true);
+    try {
+      const data = unwrap(await apiFetch(`/payments?limit=100&cursor=${nextCursor}`));
+      setPayments(prev => [...prev, ...data.items.filter((n: any) => !prev.some(p => p.id === n.id))]);
+      setNextCursor(data.nextCursor ?? null);
+    } catch (e: any) { setError(e.message); }
+    finally { setLoadingMore(false); }
+  };
 
   useEffect(() => { load(); }, [load]);
-
-  const pendingRequests = payments.filter(p => p.status === 'REVERSAL_REQUESTED');
 
   const filtered = payments.filter(p => {
     const q = search.toLowerCase();
     const client = `${p.loan?.client?.firstName || p.loan?.client?.first_name || ''} ${p.loan?.client?.lastName || p.loan?.client?.last_name || ''}`.toLowerCase();
-    const matchSearch = !q || [p.receipt_number, client, String(p.id)].some(v => v?.toLowerCase().includes(q));
+    const matchSearch = !q || [p.receiptNumber, p.loan?.loanNumber, client, String(p.id)].some(v => (v ?? '').toLowerCase().includes(q));
     const matchStatus = !filterStatus || p.status === filterStatus;
     return matchSearch && matchStatus;
   });
@@ -409,10 +430,10 @@ export default function ReversalsPage() {
                   <div className="min-w-0">
                     <p className="font-bold text-bv-text text-sm">
                       {p.loan?.client?.firstName || p.loan?.client?.first_name} {p.loan?.client?.lastName || p.loan?.client?.last_name}
-                      <span className="ml-2 font-mono text-xs text-bv-meta font-normal">{p.receipt_number}</span>
+                      <span className="ml-2 font-mono text-xs text-bv-meta font-normal">{p.receiptNumber}</span>
                     </p>
                     <p className="text-xs text-bv-meta truncate mt-0.5">
-                      <span className="font-semibold text-orange-600">{p.reversalRequestedBy}</span>: {p.reversalRequestReason}
+                      <span className="font-semibold text-orange-600">{p.reversalRequestedBy || 'Unknown'}</span>: {p.reversalReason || '—'}
                     </p>
                   </div>
                 </div>
@@ -518,7 +539,7 @@ export default function ReversalsPage() {
                 {filtered.map(p => (
                   <tr key={p.id} className={`hover:bg-bv-hover/60 transition-colors ${p.status === 'REVERSED' ? 'opacity-50' : ''}`}>
                     <td className="px-4 py-3">
-                      <span className="font-mono text-xs bg-bv-hover px-2 py-1 rounded">{p.receipt_number}</span>
+                      <span className="font-mono text-xs bg-bv-hover px-2 py-1 rounded">{p.receiptNumber}</span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -583,7 +604,15 @@ export default function ReversalsPage() {
               </tbody>
             </table>
             <div className="px-4 py-3 border-t border-bv-border text-xs text-bv-meta flex justify-between">
-              <span>Showing {filtered.length} of {payments.length} payments</span>
+              <span>
+                Showing {filtered.length} of {payments.length} loaded payments
+                {nextCursor && (
+                  <button type="button" onClick={loadMore} disabled={loadingMore}
+                    className="ml-3 font-semibold text-bv-accent hover:underline disabled:opacity-50">
+                    {loadingMore ? 'Loading…' : 'Load older payments'}
+                  </button>
+                )}
+              </span>
               {pendingRequests.length > 0 && (
                 <span className="text-orange-500 font-bold">{pendingRequests.length} awaiting review</span>
               )}

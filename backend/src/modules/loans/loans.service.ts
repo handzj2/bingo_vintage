@@ -1,6 +1,6 @@
 // patch 2026-06-16
 import {
-  Injectable, NotFoundException, BadRequestException, ForbiddenException,
+  Injectable, NotFoundException, BadRequestException, ForbiddenException, ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository }       from 'typeorm';
@@ -47,6 +47,17 @@ import { PaymentAllocation } from '../payments/entities/payment-allocation.entit
  *  FIX-L14: historicalImport again preserves an imported balance (rec.balance)
  *           when provided; only falls back to computed when absent.
  */
+/**
+ * Keep loan.status consistent with a corrected balance (the payment path does the same:
+ * paid-off => COMPLETED, reversal => ACTIVE). Without this a correction to 0 left an
+ * ACTIVE loan with nothing owing, and a correction above 0 left a COMPLETED loan owing money.
+ */
+export function statusAfterBalanceCorrection(current: string, newBalance: number): string {
+  if (newBalance <= 0 && (current === 'ACTIVE' || current === 'DEFAULTED')) return 'COMPLETED';
+  if (newBalance > 0 && current === 'COMPLETED') return 'ACTIVE';
+  return current;
+}
+
 @Injectable()
 export class LoansService {
   constructor(
@@ -1337,8 +1348,8 @@ export class LoansService {
     if (!reason || reason.trim().length < 5) {
       throw new BadRequestException('A meaningful reason is required for balance correction');
     }
-    if (newBalance < 0) {
-      throw new BadRequestException('Balance cannot be negative');
+    if (!Number.isFinite(newBalance) || newBalance < 0) {
+      throw new BadRequestException('Balance must be a number that is 0 or more');
     }
 
     return this.loansRepo.manager.transaction(async (em) => {
@@ -1351,8 +1362,15 @@ export class LoansService {
         throw new ForbiddenException('Tenant isolation violation');
       }
 
+      if (!['ACTIVE', 'COMPLETED', 'DEFAULTED'].includes(String(loan.status))) {
+        throw new BadRequestException(`Balance cannot be corrected on a ${loan.status} loan`);
+      }
+      if (Number(newBalance) === Number(loan.balance)) {
+        throw new BadRequestException('The new balance is the same as the current balance');
+      }
+
       const previousBalance = Number(loan.balance);
-      const previousSnapshot = { balance: previousBalance, totalAmount: Number(loan.totalAmount) };
+      const previousSnapshot = { balance: previousBalance, totalAmount: Number(loan.totalAmount), status: String(loan.status) };
       const actorId = (user as any).userId || (user as any).id;
       const perms: Set<string> = (user as any).permissions instanceof Set
         ? (user as any).permissions
@@ -1387,7 +1405,9 @@ export class LoansService {
         };
       }
 
+      const nextStatus = statusAfterBalanceCorrection(String(loan.status), Number(newBalance));
       loan.balance = newBalance as any;
+      if (nextStatus !== String(loan.status)) loan.status = nextStatus as any;
       await em.save(Loan, loan);
 
       await em.query(
@@ -1418,6 +1438,7 @@ export class LoansService {
         loanNumber: loan.loanNumber,
         previousBalance,
         newBalance,
+        loanStatus: String(loan.status),
       };
     });
   }
@@ -1458,6 +1479,10 @@ export class LoansService {
             WHERE id = $2`,
           [actorId, correctionId],
         );
+        await em.query(
+          `UPDATE loans SET notes = COALESCE(notes,'') || $1, updated_at = NOW() WHERE id = $2`,
+          [`\n[CORRECTION_REJECTED] #${correctionId} by user ${actorId}. ${reason || ''}`.slice(0, 500), corr.loan_id],
+        );
         return { success: true, status: 'REJECTED', correctionId };
       }
 
@@ -1467,10 +1492,32 @@ export class LoansService {
         : corr.new_snapshot;
 
       if (corr.correction_type === 'BALANCE' && snapshot?.balance != null) {
-        await em.query(
-          `UPDATE loans SET balance = $1, updated_at = NOW() WHERE id = $2`,
-          [snapshot.balance, corr.loan_id],
+        const [loanRow] = await em.query(
+          `SELECT id, balance, status, tenant_id FROM loans WHERE id = $1 FOR UPDATE`,
+          [corr.loan_id],
         );
+        if (!loanRow) throw new NotFoundException(`Loan ${corr.loan_id} not found`);
+        if (loanRow.tenant_id && user.tenantId && loanRow.tenant_id !== user.tenantId) {
+          throw new ForbiddenException('Tenant isolation violation');
+        }
+        // The request stored an ABSOLUTE balance. If payments/reversals changed the balance
+        // while it waited, applying it would silently wipe them out.
+        const prev = typeof corr.previous_snapshot === 'string'
+          ? JSON.parse(corr.previous_snapshot) : corr.previous_snapshot;
+        if (prev?.balance != null && Number(loanRow.balance) !== Number(prev.balance)) {
+          throw new ConflictException(
+            `The loan balance changed since this correction was requested (was ${Number(prev.balance)}, now ${Number(loanRow.balance)}). ` +
+            'Reject it and submit a new correction.',
+          );
+        }
+        const nextStatus = statusAfterBalanceCorrection(String(loanRow.status), Number(snapshot.balance));
+        if (nextStatus !== String(loanRow.status)) {
+          await em.query(`UPDATE loans SET balance = $1, status = $2, updated_at = NOW() WHERE id = $3`,
+            [snapshot.balance, nextStatus, corr.loan_id]);
+        } else {
+          await em.query(`UPDATE loans SET balance = $1, updated_at = NOW() WHERE id = $2`,
+            [snapshot.balance, corr.loan_id]);
+        }
       }
       // TERMS / RESCHEDULE that were queued as PENDING would need re-application;
       // current path applies balance immediately on approve.

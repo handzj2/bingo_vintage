@@ -1,3 +1,4 @@
+import { hasPermission } from '../../common/helpers/role-helper';
 import { Controller, Get, Query, UseGuards, Req } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
@@ -36,9 +37,14 @@ export class DashboardController {
     const branchScoped = ['cashier', 'credit_officer', 'teller', 'branch_manager']
       .includes((user.roleName || '').toLowerCase());
     const branchId = branchScoped ? user.branchId : undefined;
-    const perms = user.permissions instanceof Set
-      ? user.permissions
-      : new Set(Array.isArray(user.permissions) ? user.permissions : []);
-    return this.dashboardService.getPendingWork(user.tenantId, branchId, perms);
+    // hasPermission() lets admin/superadmin through and reads the real permission set.
+    const caps = {
+      loan:       hasPermission(user, 'loan.approve'),
+      expense:    hasPermission(user, 'expense.approve'),
+      reversal:   hasPermission(user, 'payment.reverse') || hasPermission(user, 'payment.reversal.approve'),
+      correction: hasPermission(user, 'loan.approve_correction'),
+      drawer:     hasPermission(user, 'drawer.force_close'),
+    };
+    return this.dashboardService.getPendingWork(user.tenantId, branchId, caps);
   }
 }

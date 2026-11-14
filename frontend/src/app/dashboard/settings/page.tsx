@@ -3,13 +3,15 @@
 // RBAC patch 2026-06-15: branch selector required for cashier; dynamic roles; ROLE_ID_MAP removed
 'use client';
 import { useState, useEffect } from 'react';
+import RolesTab from './RolesTab';
+import BranchesTab from './BranchesTab';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   Users, Plus, Pencil, Trash2, KeyRound, ShieldCheck, ShieldOff,
   Save, Eye, EyeOff, X, Check, UserCog, SlidersHorizontal,
   Shield, Lock, AlertTriangle, Loader2,
   ToggleLeft, ToggleRight, Info, ShieldAlert, RefreshCw,
-  User, Clock, Copy, CheckCircle,
+  User, Clock, Copy, CheckCircle, Building2,
 } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
@@ -928,6 +930,8 @@ const TABS = [
   { id: 'users',    label: 'Users & Access',   icon: UserCog          },
   { id: 'resets',   label: 'Password Resets',  icon: ShieldAlert      },
   { id: 'settings', label: 'App Settings',     icon: SlidersHorizontal},
+  { id: 'roles',    label: 'Roles & Permissions', icon: Shield, adminOnly: true },
+  { id: 'branches', label: 'Branches',         icon: Building2, adminOnly: true },
 ];
 
 export default function SettingsPage() {
@@ -963,7 +967,7 @@ export default function SettingsPage() {
         </header>
 
         <div className="flex gap-1 bg-bv-surface border border-bv-border rounded-xl p-1 mb-6 w-fit shadow-sm">
-          {TABS.map(tab => {
+          {TABS.filter((t: any) => !t.adminOnly || isAdmin).map(tab => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
             return (
@@ -979,6 +983,8 @@ export default function SettingsPage() {
           {activeTab === 'users'    && <UsersTab />}
           {activeTab === 'resets'   && <PasswordResetsTab />}
           {activeTab === 'settings' && <AppSettingsTab />}
+          {activeTab === 'roles'    && isAdmin && <RolesTab />}
+          {activeTab === 'branches' && isAdmin && <BranchesTab canWrite={isAdmin} />}
         </div>
       </div>
     </div>

@@ -60,8 +60,10 @@ const getHeaders = () => {
 
 const apiFetch = async (path: string, opts: RequestInit = {}) => {
   const res = await fetch(`${API_URL}${path}`, { headers: getHeaders(), ...opts });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json.message || `Request failed: ${res.status}`);
+  const text = await res.text();
+  let json: any = {};
+  try { json = text ? JSON.parse(text) : {}; } catch { /* non-JSON error body */ }
+  if (!res.ok) throw new Error(Array.isArray(json.message) ? json.message.join(', ') : (json.message || `Request failed: ${res.status}`));
   return json;
 };
 
@@ -702,6 +704,13 @@ function PaymentsPageInner() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
+  // Server-side lookups (the table above only holds the latest 100 payments)
+  const [rangeLabel, setRangeLabel] = useState('');
+  const [rangeBusy, setRangeBusy] = useState(false);
+  const [receiptQuery, setReceiptQuery] = useState('');
+  const [lookupBusy, setLookupBusy] = useState(false);
+  const [lookupError, setLookupError] = useState('');
+  const [pendingReversals, setPendingReversals] = useState(0);
   const PER_PAGE = 25;
 
   const load = useCallback(async () => {
@@ -720,6 +729,15 @@ function PaymentsPageInner() {
         new Date(a.paymentDate || a.payment_date || a.createdAt || 0).getTime()
       );
       setPayments(list);
+      setRangeLabel('');
+
+      // Reviewers: how many reversal requests are waiting (dedicated endpoint, not a filter of this page)
+      if (canReverse) {
+        try {
+          const pending = await apiFetch('/payments/reversal-requests');
+          setPendingReversals(Array.isArray(pending) ? pending.length : 0);
+        } catch { setPendingReversals(0); }
+      }
 
       // PAY-003: fetch the canonical, REVERSED-excluded today total from the
       // backend rather than recomputing it client-side over a capped list.
@@ -736,9 +754,35 @@ function PaymentsPageInner() {
       setPayments([]);
     }
     finally { setLoading(false); }
-  }, []);
+  }, [canReverse]);
 
   useEffect(() => { load(); }, [load]);
+
+  const searchRange = async () => {
+    if (!dateFrom || !dateTo) { setLookupError('Choose both a from and a to date to search all payments.'); return; }
+    if (dateFrom > dateTo) { setLookupError('The from date is after the to date.'); return; }
+    setLookupError(''); setRangeBusy(true);
+    try {
+      const list = await apiFetch(`/payments/search/range?startDate=${dateFrom}&endDate=${dateTo}`);
+      setPayments(Array.isArray(list) ? list : []);
+      setRangeLabel(`${fmtDate(dateFrom)} – ${fmtDate(dateTo)}`);
+      setPage(1);
+    } catch (e: any) { setLookupError(e.message || 'Date search failed'); }
+    finally { setRangeBusy(false); }
+  };
+
+  const lookupReceipt = async () => {
+    const n = receiptQuery.trim();
+    if (!n) return;
+    setLookupError(''); setLookupBusy(true);
+    try {
+      const found = await apiFetch(`/payments/receipt/${encodeURIComponent(n)}`);
+      // findOne() adds allocations; the detail modal expects that shape
+      const detail = found?.id ? await apiFetch(`/payments/${found.id}`) : found;
+      setDetailPayment(detail || found);
+    } catch (e: any) { setLookupError(e.message || 'Receipt not found'); }
+    finally { setLookupBusy(false); }
+  };
 
   const todayStr = new Date().toDateString();
   const stats = {
@@ -817,6 +861,13 @@ function PaymentsPageInner() {
           </div>
         </div>
 
+        {canReverse && pendingReversals > 0 && (
+          <a href="/dashboard/reversals"
+            className="block border border-orange-200 bg-orange-50 text-orange-800 text-sm px-3 py-2 rounded-md font-semibold hover:bg-orange-100">
+            {pendingReversals} reversal request{pendingReversals > 1 ? 's' : ''} waiting for review →
+          </a>
+        )}
+
         {loadError && (
           <div className="border border-bv-danger/30 bg-bv-danger-bg text-bv-danger text-sm px-3 py-2 rounded-md flex flex-wrap items-center justify-between gap-2">
             <span>{loadError}</span>
@@ -857,6 +908,31 @@ function PaymentsPageInner() {
             )}
             <span className="text-xs text-bv-meta ml-auto">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
           </div>
+
+          {/* Server-side lookups — reach payments beyond the 100 loaded above */}
+          <div className="mt-3 pt-3 border-t border-bv-border flex flex-wrap gap-3 items-center">
+            <button type="button" onClick={searchRange} disabled={rangeBusy || !dateFrom || !dateTo}
+              className="text-sm border border-bv-border px-3 py-2 rounded-xl font-semibold text-bv-muted hover:bg-bv-hover disabled:opacity-40">
+              {rangeBusy ? 'Searching…' : 'Search all payments in date range'}
+            </button>
+            <div className="flex items-center gap-2 ml-auto">
+              <input className="px-3 py-2 text-sm border border-bv-border rounded-xl font-mono focus:outline-none focus:ring-2 focus:ring-bv-action"
+                placeholder="Exact receipt number" value={receiptQuery}
+                onChange={e => setReceiptQuery(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') lookupReceipt(); }} />
+              <button type="button" onClick={lookupReceipt} disabled={lookupBusy || !receiptQuery.trim()}
+                className="text-sm font-medium text-white bg-bv-action px-3 py-2 rounded-xl hover:bg-bv-action-hover disabled:opacity-40">
+                {lookupBusy ? 'Looking up…' : 'Find receipt'}
+              </button>
+            </div>
+          </div>
+          {lookupError && <p className="mt-2 text-sm text-bv-danger">{lookupError}</p>}
+          {rangeLabel && (
+            <p className="mt-2 text-xs text-bv-meta">
+              Showing server results for {rangeLabel} (up to 1,000 payments).{' '}
+              <button type="button" onClick={load} className="underline font-semibold">Back to latest payments</button>
+            </p>
+          )}
         </div>
 
         {/* Table */}

@@ -38,7 +38,14 @@ export class ReconciliationService {
     const payRow = await this.paymentRepo
       .createQueryBuilder('p')
       .where('p.cashDrawerId = :drawerId', { drawerId })
-      .andWhere('p.status != :rev', { rev: 'REVERSED' })
+      .andWhere('(p.status != :rev OR p.reversedAfterClose = true)', { rev: 'REVERSED' })
+      .select('COALESCE(SUM(p.amount),0)', 'sum')
+      .getRawOne();
+
+    // Refunds carried in from drawers that were closed when the reversal happened.
+    const carriedRow = await this.paymentRepo
+      .createQueryBuilder('p')
+      .where('p.reversalCarryDrawerId = :drawerId', { drawerId })
       .select('COALESCE(SUM(p.amount),0)', 'sum')
       .getRawOne();
 
@@ -52,7 +59,8 @@ export class ReconciliationService {
     const expected =
       Number(drawer.openingBalance) +
       Number(payRow?.sum ?? 0) -
-      Number(expRow?.sum ?? 0);
+      Number(expRow?.sum ?? 0) -
+      Number(carriedRow?.sum ?? 0);
 
     return { expected };
   }

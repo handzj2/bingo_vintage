@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Payment } from '../payments/entities/payment.entity';
@@ -7,6 +7,7 @@ import { PaymentStatus } from '../enums/payment-status.enum';
 
 @Injectable()
 export class DashboardService {
+  private readonly logger = new Logger(DashboardService.name);
   constructor(
     @InjectRepository(Payment)
     private paymentRepo: Repository<Payment>,
@@ -111,25 +112,29 @@ export class DashboardService {
    * Tenant-scoped. Optional branch filter for branch-scoped roles.
    * Returns counts + lightweight item lists for each approval queue.
    */
-  async getPendingWork(tenantId: number, branchId?: number | null, permissions?: Set<string> | string[]) {
+  async getPendingWork(
+    tenantId: number,
+    branchId: number | null | undefined,
+    caps: { loan: boolean; expense: boolean; reversal: boolean; correction: boolean; drawer: boolean },
+  ) {
     if (!tenantId) {
       return {
-        loans: { count: 0, items: [] },
-        expenses: { count: 0, items: [] },
-        reversals: { count: 0, items: [] },
-        total: 0,
+        loans: { count: 0, items: [] }, expenses: { count: 0, items: [] },
+        reversals: { count: 0, items: [] }, corrections: { count: 0, items: [] },
+        overdueDrawers: { count: 0, items: [] }, total: 0,
       };
     }
 
-    const permSet = permissions instanceof Set
-      ? permissions
-      : new Set(Array.isArray(permissions) ? permissions : []);
+    // Capabilities are decided by the controller with hasPermission() (admins always pass).
+    // The old code read the raw permission Set and treated an EMPTY set as "already
+    // authorised", so any user whose set was empty received every approval queue.
+    const canLoan = caps.loan;
+    const canExpense = caps.expense;
+    const canReversal = caps.reversal;
 
-    const canLoan = permSet.has('loan.approve') || permSet.size === 0; // empty = caller already authorised
-    const canExpense = permSet.has('expense.approve') || permSet.size === 0;
-    const canReversal = permSet.has('payment.reverse') || permSet.has('payment.reversal.approve') || permSet.size === 0;
-
-    const branchClause = branchId ? 'AND branch_id = $2' : '';
+    // Qualified per table below: users/clients also have branch_id, so an unqualified
+    // column made every branch-scoped query fail with "ambiguous column".
+    const branchOn = (alias: string) => (branchId ? `AND ${alias}.branch_id = $2` : '');
     const params: any[] = branchId ? [tenantId, branchId] : [tenantId];
 
     let loans = { count: 0, items: [] as any[] };
@@ -147,7 +152,7 @@ export class DashboardService {
            LEFT JOIN clients c ON c.id = l.client_id
           WHERE l.tenant_id = $1
             AND l.status IN ('PENDING_APPROVAL', 'PENDING')
-            ${branchClause}
+            ${branchOn('l')}
           ORDER BY l.created_at ASC
           LIMIT 20`,
         params,
@@ -170,7 +175,7 @@ export class DashboardService {
       // Accurate count (not limited)
       const [{ cnt }] = await this.paymentRepo.manager.query(
         `SELECT COUNT(*)::int AS cnt FROM loans
-          WHERE tenant_id = $1 AND status IN ('PENDING_APPROVAL','PENDING') ${branchClause}`,
+          WHERE tenant_id = $1 AND status IN ('PENDING_APPROVAL','PENDING') ${branchId ? 'AND branch_id = $2' : ''}`,
         params,
       );
       loans.count = cnt;
@@ -184,14 +189,14 @@ export class DashboardService {
            LEFT JOIN users u ON u.id = e.created_by_id
           WHERE e.tenant_id = $1
             AND e.status = 'pending'
-            ${branchClause}
+            ${branchOn('e')}
           ORDER BY e.created_at ASC
           LIMIT 20`,
         params,
       );
       const [{ cnt }] = await this.paymentRepo.manager.query(
         `SELECT COUNT(*)::int AS cnt FROM expenses
-          WHERE tenant_id = $1 AND status = 'pending' ${branchClause}`,
+          WHERE tenant_id = $1 AND status = 'pending' ${branchId ? 'AND branch_id = $2' : ''}`,
         params,
       );
       expenses = {
@@ -214,22 +219,26 @@ export class DashboardService {
     if (canReversal) {
       // Reversals pending approval (uses reversal_status column from earlier migration)
       try {
+        // Who asked / when they asked come from the request columns added in migration 034.
+        // (Previously this showed the payment's cashier and the payment's creation time.)
         const revRows = await this.paymentRepo.manager.query(
-          `SELECT p.id, p.amount, p.branch_id, p.created_at AS submitted_at,
+          `SELECT p.id, p.amount, p.branch_id,
+                  COALESCE(p.reversal_requested_at, p.updated_at) AS submitted_at,
                   p.reversal_status AS status, p.receipt_number AS reference,
-                  u.full_name AS submitted_by, u.username AS submitted_by_username
+                  COALESCE(p.reversal_requested_by, u.full_name, u.username) AS submitted_by,
+                  p.reversal_reason AS reason
              FROM payments p
              LEFT JOIN users u ON u.id = p.created_by_id
             WHERE p.tenant_id = $1
               AND p.reversal_status = 'PENDING'
-              ${branchClause}
-            ORDER BY p.created_at ASC
+              ${branchOn('p')}
+            ORDER BY COALESCE(p.reversal_requested_at, p.updated_at) ASC
             LIMIT 20`,
           params,
         );
         const [{ cnt }] = await this.paymentRepo.manager.query(
           `SELECT COUNT(*)::int AS cnt FROM payments
-            WHERE tenant_id = $1 AND reversal_status = 'PENDING' ${branchClause}`,
+            WHERE tenant_id = $1 AND reversal_status = 'PENDING' ${branchId ? 'AND branch_id = $2' : ''}`,
           params,
         );
         reversals = {
@@ -242,20 +251,21 @@ export class DashboardService {
             branchId: r.branch_id,
             submittedAt: r.submitted_at,
             status: r.status,
-            submittedBy: r.submitted_by || r.submitted_by_username || '—',
+            submittedBy: r.submitted_by || '—',
+            description: r.reason ? String(r.reason).slice(0, 120) : undefined,
             href: `/dashboard/reversals`,
           })),
         };
-      } catch {
-        // Column may not exist on very old DBs — leave empty
+      } catch (e: any) {
+        // Surface it: a silent empty queue hides real failures (e.g. migration 034 not run).
+        this.logger.error(`pending-work reversals query failed: ${e?.message}`);
       }
     }
 
 
     // Pending loan corrections (dual-control queue)
     let corrections = { count: 0, items: [] as any[] };
-    const canApproveCorrection = permSet.has('loan.approve_correction') || permSet.size === 0;
-    if (canApproveCorrection) {
+    if (caps.correction) {
       try {
         const corrRows = await this.paymentRepo.manager.query(
           `SELECT c.id, c.loan_id, c.correction_type, c.reason, c.created_at AS submitted_at,
@@ -282,15 +292,16 @@ export class DashboardService {
             status: r.status,
             submittedBy: r.submitted_by || r.submitted_by_username || '—',
             description: `${r.correction_type}: ${r.reason || ''}`.slice(0, 120),
-            href: `/dashboard/loans/${r.loan_id}`,
+            href: `/dashboard/loans/${r.loan_id}#loan-corrections`,
           })),
         };
       } catch { /* table may not exist yet */ }
     }
 
     let overdueDrawers = { count: 0, items: [] as any[] };
-    const canDrawer = permSet.has('drawer.force_close') || permSet.has('drawer.view') || permSet.size === 0;
-    if (canDrawer) {
+    // Only holders of drawer.force_close can act on an overdue drawer, so only they get the queue
+    // (it used to be everyone with drawer.view, i.e. every cashier saw tenant-wide overdue drawers).
+    if (caps.drawer) {
       try {
         const drRows = await this.paymentRepo.manager.query(
           `SELECT d.id, d.branch_id, d.drawer_date, d.status, u.full_name AS opened_by
@@ -298,11 +309,19 @@ export class DashboardService {
              LEFT JOIN users u ON u.id = d.user_id
             WHERE d.tenant_id = $1 AND d.status = 'open'
               AND d.drawer_date < (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Kampala')::date
+              ${branchOn('d')}
             ORDER BY d.drawer_date ASC LIMIT 20`,
-          [tenantId],
+          params,
+        );
+        const [{ cnt: drCnt }] = await this.paymentRepo.manager.query(
+          `SELECT COUNT(*)::int AS cnt FROM cash_drawers d
+            WHERE d.tenant_id = $1 AND d.status = 'open'
+              AND d.drawer_date < (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Kampala')::date
+              ${branchOn('d')}`,
+          params,
         );
         overdueDrawers = {
-          count: drRows.length,
+          count: drCnt,
           items: drRows.map((r: any) => ({
             id: r.id,
             type: 'overdue_drawer',
