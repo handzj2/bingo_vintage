@@ -69,8 +69,9 @@ function Modal({ title, subtitle, onClose, children, wide }: any) {
 // ── Record Payment Modal ──────────────────────────────────────
 function RecordPaymentModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const { user } = useAuth();
-  const isAdmin = (user?.role ?? '').toLowerCase() === 'admin' || (user?.role ?? '').toLowerCase() === 'superadmin';
-  const todayStr = new Date().toISOString().split('T')[0];
+  const isAdmin = ['admin', 'superadmin', 'super_admin'].includes((user?.role ?? '').toLowerCase());
+  // Kampala (UTC+3) calendar day, not the UTC day
+  const todayStr = new Date(Date.now() + 3 * 3600 * 1000).toISOString().split('T')[0];
   const [step, setStep] = useState<1 | 2>(1);
   const [allLoans, setAllLoans] = useState<any[]>([]);
   const [clientSearch, setClientSearch] = useState('');
@@ -84,7 +85,7 @@ function RecordPaymentModal({ onClose, onSaved }: { onClose: () => void; onSaved
   const [form, setForm] = useState({
     amount: '',
     payment_method: 'CASH',
-    payment_date: new Date().toISOString().split('T')[0],
+    payment_date: new Date(Date.now() + 3 * 3600 * 1000).toISOString().split('T')[0],
     payment_time: new Date().toTimeString().slice(0, 5),
     receipt_number: genReceipt(),
     collected_by: '',
@@ -136,6 +137,9 @@ function RecordPaymentModal({ onClose, onSaved }: { onClose: () => void; onSaved
     if (!selectedLoan) return setError('Please select a loan');
     if (!form.amount || Number(form.amount) <= 0) return setError('Enter a valid amount');
     if (!form.receipt_number.trim()) return setError('Receipt number is required');
+    if (form.payment_date > todayStr) {
+      return setError('Payment date cannot be in the future.');
+    }
     if (!isAdmin && form.payment_date < todayStr) {
       return setError('Backdated payments can only be entered by an administrator.');
     }
@@ -350,6 +354,7 @@ function RecordPaymentModal({ onClose, onSaved }: { onClose: () => void; onSaved
               <label className="block text-xs font-black text-gray-500 uppercase tracking-wider mb-2">Payment Date *</label>
               <input type="date"
                 min={isAdmin ? undefined : todayStr}
+                max={todayStr}
                 className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:border-blue-500"
                 value={form.payment_date} onChange={e => setForm({ ...form, payment_date: e.target.value })} />
               {!isAdmin && (

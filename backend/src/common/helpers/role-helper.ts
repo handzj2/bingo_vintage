@@ -46,7 +46,9 @@ export function getUserId(user: RequestUser | null | undefined): number {
 
 export function getEffectiveRole(user: RequestUser | null | undefined): string {
   if (!user) return 'unknown';
-  return (user.roleRelation?.name ?? user.roleName ?? 'unknown').toLowerCase();
+  const r = (user.roleRelation?.name ?? user.roleName ?? 'unknown').toLowerCase().trim();
+  // 'super_admin' / 'super admin' are the same role as 'superadmin' everywhere guards compare names.
+  return r === 'super_admin' || r === 'super admin' ? 'superadmin' : r;
 }
 
 export function isRole(user: RequestUser | null | undefined, ...roles: string[]): boolean {
