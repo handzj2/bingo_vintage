@@ -39,7 +39,7 @@ export class CashDrawer {
   closedBy: User;
 
   @Column({ name: 'drawer_date', type: 'date' })
-  drawerDate: Date;
+  drawerDate: string; // 'YYYY-MM-DD' (Kampala business date)
 
   @Column({ name: 'opening_balance', type: 'decimal', precision: 15, scale: 2, default: 0 })
   openingBalance: number;
