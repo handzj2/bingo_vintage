@@ -1,5 +1,5 @@
 import {
-  Injectable, NotFoundException, ConflictException,
+  Injectable, NotFoundException, ConflictException, BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -135,18 +135,26 @@ export class RolesService {
   ): Promise<RolePermission[]> {
     await this.findOne(roleId, tenantId);
 
-    // Delete existing
-    await this.rpRepo.delete({ roleId });
+    if (!Array.isArray(codes) || codes.some(c => typeof c !== 'string')) {
+      throw new BadRequestException('codes must be an array of permission codes');
+    }
+    const unique = [...new Set(codes)];
 
-    // Insert new set
-    const rows = codes.map((code) =>
-      this.rpRepo.create({
-        roleId,
-        permissionCode: code,
-        grantedBy:      grantedBy ?? null,
-        tenantId,
-      }),
-    );
-    return this.rpRepo.save(rows);
+    // Replace atomically: a failure must not leave the role with no permissions.
+    return this.rpRepo.manager.transaction(async (em) => {
+      if (unique.length) {
+        const known: { code: string }[] = await em.query(
+          `SELECT code FROM permissions WHERE code = ANY($1)`, [unique]);
+        const knownSet = new Set(known.map(k => k.code));
+        const unknown = unique.filter(c => !knownSet.has(c));
+        if (unknown.length) throw new BadRequestException(`Unknown permission codes: ${unknown.join(', ')}`);
+      }
+      const rp = em.getRepository(RolePermission);
+      await rp.delete({ roleId });
+      const rows = unique.map((code) =>
+        rp.create({ roleId, permissionCode: code, grantedBy: grantedBy ?? null, tenantId }),
+      );
+      return rp.save(rows);
+    });
   }
 }

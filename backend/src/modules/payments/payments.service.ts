@@ -1,4 +1,5 @@
 // patch 2026-06-16: removed ::schedule_status_enum casts — production enum is loan_schedules_status_enum
+import { assertPaymentDateNotFuture } from '../../common/utils/payment-date';
 import {
   Injectable, NotFoundException, ForbiddenException,
   BadRequestException, ConflictException, Logger,
@@ -130,6 +131,8 @@ export class PaymentsService {
   async create(rawDto: CreatePaymentServiceDto, requestId?: string) {
     // Sanitise free-text fields before any processing
     const dto = sanitiseDto(rawDto);
+    // Defence in depth: every caller (API, import, scripts) goes through here.
+    assertPaymentDateNotFuture(dto.paymentDate);
 
     // ── Step 1: Idempotency check (outside transaction — fast path) ───────────
     if (dto.idempotencyKey) {
@@ -388,7 +391,8 @@ export class PaymentsService {
   }
 
   async reversePayment(paymentId: number, adminUser: any, reason: string) {
-    if (!reason || reason.length < 10) {
+    reason = (reason || '').trim();
+    if (reason.length < 10) {
       throw new BadRequestException('Reversal reason must be at least 10 characters');
     }
 
@@ -408,14 +412,46 @@ export class PaymentsService {
         .setLock('pessimistic_write')
         .getOne();
 
-      if (!found) throw new NotFoundException(`Payment ${paymentId} not found`);
+      // Tenant isolation: a non-superadmin may only reverse payments of their own tenant.
+      const callerTenant = adminUser?.tenantId;
+      const isSuper = (adminUser?.roleRelation?.name ?? adminUser?.roleName ?? '').toLowerCase() === 'superadmin';
+      if (!found || (callerTenant && !isSuper && found.tenantId && found.tenantId !== callerTenant)) {
+        throw new NotFoundException(`Payment ${paymentId} not found`);
+      }
       if (found.status === PaymentStatus.REVERSED) {
         throw new ConflictException('Payment already reversed');
+      }
+      // Only money that was actually taken can be reversed. FAILED / PENDING
+      // payments never reduced the loan balance, so "restoring" it would inflate the balance.
+      if (found.status !== PaymentStatus.COMPLETED && found.status !== PaymentStatus.REVERSAL_REQUESTED) {
+        throw new ConflictException(`Only completed payments can be reversed (current status: ${found.status})`);
       }
 
       payment         = found;
       loan            = payment.loan;
       restoredBalance = Number(loan.balance) + Number(payment.amount);
+
+      // Drawer handling. If the payment's own drawer is already closed/reconciled its figures
+      // stay as closed; the refund is carried into the branch's currently open drawer, or (if
+      // none is open) into the next one opened (see CashDrawerService.open).
+      let reversedAfterClose = false;
+      let carryDrawerId: number | null = null;
+      if (found.cashDrawerId) {
+        const own = await queryRunner.manager.query(
+          `SELECT status, branch_id, tenant_id FROM cash_drawers WHERE id = $1`,
+          [found.cashDrawerId],
+        );
+        if (own[0] && ['closed', 'reconciled'].includes(own[0].status)) {
+          reversedAfterClose = true;
+          const open = await queryRunner.manager.query(
+            `SELECT id FROM cash_drawers
+              WHERE tenant_id = $1 AND branch_id = $2 AND status = 'open'
+              ORDER BY id DESC LIMIT 1 FOR UPDATE`,
+            [own[0].tenant_id, own[0].branch_id],
+          );
+          carryDrawerId = open[0]?.id ?? null;
+        }
+      }
 
       await queryRunner.manager.update(Loan, loan.id, {
         balance:   restoredBalance,
@@ -433,11 +469,18 @@ export class PaymentsService {
       await queryRunner.manager.update(Payment, paymentId, {
         status:          PaymentStatus.REVERSED,
         reversedAt:      new Date(),
+        reversedAfterClose,
+        reversalCarryDrawerId: carryDrawerId,
         reversedBy:      adminUser.email || adminUser.username,
         reversalReason:  reason,
         policyReference: POLICY_REF,
         reversalStatus:  ReversalStatus.APPROVED,  // state machine: request fulfilled
-      });
+        // Decider is written in the SAME transaction as the reversal, so an approved
+        // request can never exist without who approved it (was a separate later write).
+        ...(found.status === PaymentStatus.REVERSAL_REQUESTED
+          ? { reversalDecidedBy: adminUser.email || adminUser.username, reversalDecidedAt: new Date() }
+          : {}),
+      } as any);
 
       // Reversal must undo exactly what allocation did. A payment posted
       // after this fix may have touched several loan_schedules rows (see
@@ -543,11 +586,13 @@ export class PaymentsService {
         metadata:    { reversalAmount: payment.amount },
         tenantId:    loan.tenantId ?? undefined,
       });
-    } catch (_) {}
+    } catch (e: any) {
+      this.logger.error(`Audit write failed for reversal of payment ${paymentId}: ${e?.message}`);
+    }
 
     return {
       success: true,
-      message: 'Payment reversed successfully per Policy [${POLICY_REF}]',
+      message: `Payment reversed successfully per Policy [${POLICY_REF}]`,
       data: {
         paymentId,
         reversedAmount: payment.amount,
@@ -600,8 +645,12 @@ export class PaymentsService {
     );
   }
 
-  async findByReceiptNumber(receiptNumber: string) {
-    return this.paymentRepo.findOne({ where: { receiptNumber }, relations: ['loan', 'loan.client'] });
+  async findByReceiptNumber(receiptNumber: string, tenantId?: number) {
+    const where: any = { receiptNumber: (receiptNumber || '').trim() };
+    if (tenantId) where.tenantId = tenantId;
+    const payment = await this.paymentRepo.findOne({ where, relations: ['loan', 'loan.client'] });
+    if (!payment) throw new NotFoundException(`No payment found for receipt ${where.receiptNumber}`);
+    return payment;
   }
 
   async getTodayPayments(tenantId?: number) {
@@ -646,6 +695,10 @@ export class PaymentsService {
   }
 
   async findByDateRange(start: Date, end: Date, tenantId?: number, limit = 500) {
+    if (isNaN(start?.getTime?.()) || isNaN(end?.getTime?.())) {
+      throw new BadRequestException('startDate and endDate are required (YYYY-MM-DD)');
+    }
+    if (start > end) throw new BadRequestException('startDate must not be after endDate');
     const where: any = { paymentDate: Between(start, end) };
     if (tenantId) where.tenantId = tenantId;
     return this.paymentRepo.find({
@@ -690,19 +743,43 @@ export class PaymentsService {
     });
   }
 
-  async requestReversal(paymentId: number, requestedBy: string, reason: string) {
-    const payment = await this.paymentRepo.findOne({ where: { id: paymentId } });
+  async requestReversal(paymentId: number, requestedBy: string, reason: string, tenantId?: number) {
+    reason = (reason || '').trim();
+    if (reason.length < 10) {
+      throw new BadRequestException('Reversal reason must be at least 10 characters');
+    }
+    const where: any = { id: paymentId };
+    if (tenantId) where.tenantId = tenantId;
+    const payment = await this.paymentRepo.findOne({ where });
     if (!payment) throw new NotFoundException(`Payment ${paymentId} not found`);
     if (payment.status === PaymentStatus.REVERSED)
       throw new ConflictException('Payment already reversed');
     if (payment.reversalStatus === ReversalStatus.PENDING)
       throw new ConflictException('A reversal request is already pending for this payment');
+    if (payment.status !== PaymentStatus.COMPLETED)
+      throw new ConflictException(`Only completed payments can be reversed (current status: ${payment.status})`);
+
+    // The requester gets their own columns. Previously this overwrote reversed_by,
+    // so the UI could not tell who asked and the audit trail lost the requester.
     await this.paymentRepo.update(paymentId, {
-      status:          PaymentStatus.REVERSAL_REQUESTED,
-      reversalReason:  reason,
-      reversedBy:      requestedBy,
-      reversalStatus:  ReversalStatus.PENDING,  // typed enum — not a string flag
+      status:                PaymentStatus.REVERSAL_REQUESTED,
+      reversalReason:        reason,
+      reversalRequestedBy:   requestedBy,
+      reversalRequestedAt:   new Date(),
+      reversalDecidedBy:     null,
+      reversalDecidedAt:     null,
+      reversalRejectReason:  null,
+      reversalStatus:        ReversalStatus.PENDING,
     } as any);
+    try {
+      await this.auditService.logAction({
+        action: 'PAYMENT_REVERSAL_REQUESTED', tableName: 'payments', recordId: paymentId,
+        user: requestedBy, description: `Reversal requested. Reason: ${reason}`,
+        tenantId: payment.tenantId ?? undefined,
+      });
+    } catch (e: any) {
+      this.logger.error(`Audit write failed for reversal request on payment ${paymentId}: ${e?.message}`);
+    }
     return { success: true, message: 'Reversal request submitted for admin review.' };
   }
 
@@ -712,22 +789,59 @@ export class PaymentsService {
     return this.paymentRepo.find({
       where,
       relations: ['loan', 'loan.client'],
-      order: { paymentDate: 'DESC' },
+      order: { reversalRequestedAt: 'ASC', id: 'ASC' },   // oldest request first
+      take: 500,
     });
   }
 
-  async approveReversalRequest(paymentId: number, adminUser: any) {
-    const payment = await this.paymentRepo.findOne({ where: { id: paymentId }, relations: ['loan'] });
+  private async loadPendingRequest(paymentId: number, tenantId?: number) {
+    const where: any = { id: paymentId };
+    if (tenantId) where.tenantId = tenantId;
+    const payment = await this.paymentRepo.findOne({ where });
     if (!payment) throw new NotFoundException(`Payment ${paymentId} not found`);
-    return this.reversePayment(paymentId, adminUser, payment.reversalReason || 'Approved by admin');
+    if (payment.reversalStatus !== ReversalStatus.PENDING || payment.status !== PaymentStatus.REVERSAL_REQUESTED) {
+      throw new ConflictException('There is no pending reversal request for this payment');
+    }
+    return payment;
+  }
+
+  async approveReversalRequest(paymentId: number, adminUser: any) {
+    const payment = await this.loadPendingRequest(paymentId, adminUser?.tenantId);
+    return this.reversePayment(paymentId, adminUser, payment.reversalReason || '');
   }
 
   async rejectReversalRequest(paymentId: number, adminUser: any, reason?: string) {
-    await this.paymentRepo.update(paymentId, {
-      status:          PaymentStatus.COMPLETED,
-      reversalStatus:  ReversalStatus.REJECTED,
-      reversalReason:  reason || 'Rejected by admin',
-    } as any);
+    reason = (reason || '').trim();
+    if (reason.length < 5) throw new BadRequestException('A rejection reason (min 5 characters) is required');
+    const payment = await this.loadPendingRequest(paymentId, adminUser?.tenantId);
+    // Only a PENDING request can be rejected. The old code updated any payment id,
+    // so rejecting an already-REVERSED payment flipped it back to COMPLETED
+    // without restoring the loan. The requester's original reason is now preserved.
+    // Conditional write: if an approval committed between the read above and this
+    // update, nothing matches and we refuse, instead of flipping a REVERSED payment
+    // back to COMPLETED with the loan balance already restored.
+    const res = await this.paymentRepo.update(
+      { id: paymentId, status: PaymentStatus.REVERSAL_REQUESTED, reversalStatus: ReversalStatus.PENDING } as any,
+      {
+        status:               PaymentStatus.COMPLETED,
+        reversalStatus:       ReversalStatus.REJECTED,
+        reversalRejectReason: reason,
+        reversalDecidedBy:    adminUser.email || adminUser.username,
+        reversalDecidedAt:    new Date(),
+      } as any,
+    );
+    if (!res || !res.affected) {
+      throw new ConflictException('This reversal request was already decided by someone else');
+    }
+    try {
+      await this.auditService.logAction({
+        action: 'PAYMENT_REVERSAL_REJECTED', tableName: 'payments', recordId: paymentId,
+        user: adminUser.email || adminUser.username, description: `Reversal rejected. Reason: ${reason}`,
+        tenantId: payment.tenantId ?? undefined,
+      });
+    } catch (e: any) {
+      this.logger.error(`Audit write failed for reversal rejection on payment ${paymentId}: ${e?.message}`);
+    }
     return { success: true, message: 'Reversal request rejected.' };
   }
 }

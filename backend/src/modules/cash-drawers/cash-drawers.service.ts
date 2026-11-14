@@ -6,7 +6,7 @@ import { Repository, EntityManager }       from 'typeorm';
 import { CashDrawer }       from './entities/cash-drawer.entity';
 import { Payment }          from '../payments/entities/payment.entity';
 import { Expense }          from '../expenses/entities/expense.entity';
-import { getUserId, RequestUser, getEffectiveRole } from '../../common/helpers/role-helper';
+import { getUserId, RequestUser, getEffectiveRole, isAdmin, hasPermission } from '../../common/helpers/role-helper';
 import { startOfKampalaDay, kampalaDateString } from '../../common/utils/kampala-time';
 
 /**
@@ -111,7 +111,21 @@ export class CashDrawerService {
         isOverrideOpen:   isOverride,
         overrideOpenReason: isOverride ? (opts?.overrideReason || null) : null,
       });
-      return drawers.save(drawer);
+      const saved = await drawers.save(drawer);
+
+      // Pick up refunds for payments reversed after their drawer closed (and not yet carried).
+      // They are deducted from THIS drawer's expected cash; the closed drawers stay unchanged.
+      await em.query(
+        `UPDATE payments p
+            SET reversal_carry_drawer_id = $1
+           FROM cash_drawers cd
+          WHERE p.cash_drawer_id = cd.id
+            AND cd.tenant_id = $2 AND cd.branch_id = $3
+            AND p.reversed_after_close = true
+            AND p.reversal_carry_drawer_id IS NULL`,
+        [saved.id, user.tenantId, user.branchId],
+      );
+      return saved;
     });
   }
 
@@ -169,7 +183,10 @@ export class CashDrawerService {
     opts?: { forceClose?: boolean; forceReason?: string; discrepancyReason?: string },
   ): Promise<CashDrawer> {
     if (!user.tenantId) throw new ForbiddenException('No tenant assigned');
-    if (!user.branchId) {
+    // Admins and holders of drawer.force_close may close drawers at ANY branch of
+    // their tenant (head-office oversight). Everyone else is branch-bound.
+    const crossBranch = isAdmin(user) || hasPermission(user, 'drawer.force_close');
+    if (!user.branchId && !crossBranch) {
       throw new ForbiddenException('Branch assignment required for financial operations.');
     }
 
@@ -190,7 +207,7 @@ export class CashDrawerService {
       if (drawer.status !== 'open') {
         throw new BadRequestException(`Drawer is already ${drawer.status}. Cannot close.`);
       }
-      if (drawer.branchId !== user.branchId) {
+      if (!crossBranch && drawer.branchId !== user.branchId) {
         throw new ForbiddenException('You can only close a drawer at your own branch');
       }
 
@@ -222,7 +239,15 @@ export class CashDrawerService {
         .getRepository(Payment)
         .createQueryBuilder('p')
         .where('p.cashDrawerId = :drawerId', { drawerId })
-        .andWhere('p.status != :rev', { rev: 'REVERSED' })
+        .andWhere('(p.status != :rev OR p.reversedAfterClose = true)', { rev: 'REVERSED' })
+        .select('COALESCE(SUM(p.amount),0)', 'sum')
+        .getRawOne();
+
+      // Refunds carried in from drawers that were already closed when the reversal happened.
+      const carriedRow = await em
+        .getRepository(Payment)
+        .createQueryBuilder('p')
+        .where('p.reversalCarryDrawerId = :drawerId', { drawerId })
         .select('COALESCE(SUM(p.amount),0)', 'sum')
         .getRawOne();
 
@@ -236,7 +261,8 @@ export class CashDrawerService {
 
       const collections = Number(payRow?.sum ?? 0);
       const expenses    = Number(expRow?.sum  ?? 0);
-      const expectedBal = Number(drawer.openingBalance) + collections - expenses;
+      const carried     = Number(carriedRow?.sum ?? 0);
+      const expectedBal = Number(drawer.openingBalance) + collections - expenses - carried;
       const difference  = Number(actualCash) - expectedBal;
 
       // Require explanation when there is a non-zero difference
@@ -308,7 +334,7 @@ export class CashDrawerService {
     const payRow = await this.paymentRepo
       .createQueryBuilder('p')
       .where('p.cashDrawerId = :drawerId', { drawerId })
-      .andWhere('p.status != :rev', { rev: 'REVERSED' })
+      .andWhere('(p.status != :rev OR p.reversedAfterClose = true)', { rev: 'REVERSED' })
       .select('COALESCE(SUM(p.amount),0)', 'total')
       .addSelect('COUNT(*)', 'count')
       .getRawOne();
@@ -321,14 +347,23 @@ export class CashDrawerService {
       .addSelect('COUNT(*)', 'count')
       .getRawOne();
 
+    const carriedRows = await this.paymentRepo
+      .createQueryBuilder('p')
+      .where('p.reversalCarryDrawerId = :drawerId', { drawerId })
+      .select(['p.id', 'p.amount', 'p.receiptNumber', 'p.reversedAt', 'p.reversalReason'])
+      .orderBy('p.reversedAt', 'ASC')
+      .getMany();
+    const carriedReversals = carriedRows.reduce((s, r) => s + Number(r.amount), 0);
+
     const totalPayments   = Number(payRow?.total ?? 0);
     const totalExpenses   = Number(expRow?.total ?? 0);
     const paymentCount    = Number(payRow?.count ?? 0);
     const expenseCount    = Number(expRow?.count ?? 0);
-    const expectedBalance = Number(drawer.openingBalance) + totalPayments - totalExpenses;
+    const expectedBalance = Number(drawer.openingBalance) + totalPayments - totalExpenses - carriedReversals;
 
     return {
       drawer, totalPayments, totalExpenses, expectedBalance,
+      carriedReversals, carriedReversalItems: carriedRows,
       currentBalance: Number(drawer.currentBalance),
       paymentCount, expenseCount,
       transactionCount: paymentCount + expenseCount,

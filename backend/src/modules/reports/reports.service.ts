@@ -583,7 +583,7 @@ export class ReportsService {
       const payRows: any[] = await this.paymentRepo.manager.query(
         `SELECT cash_drawer_id, COALESCE(SUM(amount),0) AS total
            FROM payments
-          WHERE cash_drawer_id = ANY($1) AND status != 'REVERSED'
+          WHERE cash_drawer_id = ANY($1) AND (status != 'REVERSED' OR reversed_after_close = true)
           GROUP BY cash_drawer_id`,
         [drawerIds],
       );

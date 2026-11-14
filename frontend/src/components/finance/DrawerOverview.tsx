@@ -3,6 +3,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api/client';
+import { useAuth } from '@/contexts/AuthContext';
+import CloseDrawerModal, { type CloseTarget } from '@/components/finance/CloseDrawerModal';
 import { formatUGX } from '@/shared/api-types';
 import { RefreshCw, Wallet, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
 
@@ -28,6 +30,9 @@ type DrawerSummary = {
 };
 
 export default function DrawerOverview({ branchId }: { branchId?: number }) {
+  const { user, can } = useAuth();
+  const [closing, setClosing] = useState<{ target: CloseTarget; force: boolean } | null>(null);
+  const isAdminRole = ['admin', 'superadmin'].includes((user?.role ?? '').toLowerCase());
   const [summaries, setSummaries] = useState<DrawerSummary[]>([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState('');
@@ -175,10 +180,40 @@ export default function DrawerOverview({ branchId }: { branchId?: number }) {
                   ? 'Balanced vs expected'
                   : `Variance ${formatUGX(diff)}`}
               </div>
+
+              {(() => {
+                const day = String(s.drawer.drawerDate).slice(0, 10);
+                const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Kampala' }).format(new Date());
+                const overdue = day < today;
+                const sameBranch = s.drawer.branchId === user?.branchId;
+                const mayForce = can('drawer.force_close');
+                const mayClose = can('drawer.close') && (sameBranch || isAdminRole || mayForce);
+                const target: CloseTarget = {
+                  id: s.drawer.id, branchName: s.drawer.branch?.name,
+                  expectedBalance: Number(s.expectedBalance), overdue,
+                };
+                return (
+                  <div className="flex flex-wrap gap-2 items-center">
+                    {overdue && <span className="text-xs font-semibold text-bv-danger">Overdue – past business day</span>}
+                    {mayClose && !overdue && (
+                      <button type="button" onClick={() => setClosing({ target, force: false })}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-bv-action text-white">Close drawer</button>
+                    )}
+                    {mayForce && (
+                      <button type="button" onClick={() => setClosing({ target, force: true })}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-bv-danger text-bv-danger">Force close</button>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           );
         })}
       </div>
+      {closing && (
+        <CloseDrawerModal target={closing.target} force={closing.force}
+          onClose={() => setClosing(null)} onDone={() => { setClosing(null); load(); }} />
+      )}
     </div>
   );
 }

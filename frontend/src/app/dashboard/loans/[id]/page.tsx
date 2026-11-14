@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import LoanCorrectionPanel, { type CorrectionRequest } from '@/components/loans/LoanCorrectionPanel';
 import {
   ChevronLeft, Loader2, AlertTriangle, CheckCircle2, Clock,
   User, Phone, Mail, Calendar, DollarSign, Bike, Banknote,
@@ -54,6 +55,7 @@ export default function LoanDetailPage() {
   const canEdit    = isAdmin;
   const canReverse = isAdmin || can('payment.reverse');
 
+  const [correctionRequest, setCorrectionRequest] = useState<CorrectionRequest | null>(null);
   const [loan, setLoan]               = useState<any>(null);
   const [sched, setSched]             = useState<any>(null);
   const [loading, setLoading]         = useState(true);
@@ -286,6 +288,15 @@ export default function LoanDetailPage() {
                 <ThumbsUp className="w-4 h-4" /> Review
               </button>
             )}
+            {/* ── Correct balance: permission-driven, opens the Corrections panel ── */}
+            {can('loan.correct_balance') && ['ACTIVE', 'COMPLETED', 'DEFAULTED'].includes(String(loan.status)) && (
+              <button
+                onClick={() => setCorrectionRequest({ mode: 'balance', n: Date.now() })}
+                className="flex items-center gap-2 px-4 py-2 border border-bv-border hover:bg-bv-hover text-bv-text rounded-xl text-sm font-bold"
+              >
+                Correct balance
+              </button>
+            )}
             {/* ── Edit Loan Button ────────────────────────────────── */}
             {canEdit && (
               <button
@@ -401,6 +412,8 @@ export default function LoanDetailPage() {
             )}
           </div>
         </div>
+
+        <LoanCorrectionPanel loan={loan} onChanged={load} request={correctionRequest} />
 
         {/* Schedule preview */}
         {schedSummary && (

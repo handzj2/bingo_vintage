@@ -33,6 +33,8 @@ type DrawerSummary = {
   totalPayments: number;
   totalExpenses: number;
   expectedBalance: number;
+  carriedReversals?: number;
+  carriedReversalItems?: { id: number; amount: number | string; receiptNumber?: string; reversalReason?: string }[];
   currentBalance: number;
   paymentCount: number;
   expenseCount: number;
@@ -383,6 +385,19 @@ export default function MyDrawerPage() {
               <p className="text-sm font-semibold text-bv-text">{formatUGX(summary.expectedBalance)}</p>
             </div>
           </div>
+          {Number(summary.carriedReversals ?? 0) > 0 && (
+            <div className="mt-3 rounded-md border border-bv-border bg-bv-surface p-3 text-xs text-bv-muted">
+              <p className="font-semibold text-bv-text">
+                Carried reversals: {formatUGX(Number(summary.carriedReversals))} deducted from expected cash
+              </p>
+              <p className="mt-1">These payments were reversed after their own drawer was closed, so that drawer is unchanged and the refund is taken from today&apos;s cash.</p>
+              <ul className="mt-1 list-disc pl-4">
+                {(summary.carriedReversalItems ?? []).map(r => (
+                  <li key={r.id}>{r.receiptNumber || `Payment #${r.id}`}: {formatUGX(Number(r.amount))}{r.reversalReason ? ` (${r.reversalReason})` : ''}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {!showClose && (canClose || (overdue && canForce)) && (
             <button

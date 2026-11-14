@@ -45,7 +45,7 @@ export class BranchesController {
   @ApiOperation({ summary: 'Create a branch (admin only)' })
   create(@Body() data: any, @Request() req: AuthRequest) {
     this.assertAdmin(req);
-    return this.branchesService.create(data);
+    return this.branchesService.create(data, req.user?.tenantId);
   }
 
   @Patch(':id')

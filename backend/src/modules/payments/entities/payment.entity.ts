@@ -105,6 +105,14 @@ export class Payment {
   @Column({ name: 'reversed_at', nullable: true })
   reversedAt: Date;
 
+  // Reversal after the payment's drawer was closed: closed figures stay untouched and the
+  // refund is deducted from the drawer in reversal_carry_drawer_id (migration 035).
+  @Column({ name: 'reversed_after_close', default: false })
+  reversedAfterClose: boolean;
+
+  @Column({ name: 'reversal_carry_drawer_id', type: 'int', nullable: true })
+  reversalCarryDrawerId: number | null;
+
   @Column({ name: 'reversal_reason', nullable: true })
   reversalReason: string;
 
@@ -129,6 +137,21 @@ export class Payment {
     default:  null,
   })
   reversalStatus: ReversalStatus | null;
+
+  @Column({ name: 'reversal_requested_by', type: 'varchar', nullable: true })
+  reversalRequestedBy: string | null;
+
+  @Column({ name: 'reversal_requested_at', type: 'timestamp', nullable: true })
+  reversalRequestedAt: Date | null;
+
+  @Column({ name: 'reversal_decided_by', type: 'varchar', nullable: true })
+  reversalDecidedBy: string | null;
+
+  @Column({ name: 'reversal_decided_at', type: 'timestamp', nullable: true })
+  reversalDecidedAt: Date | null;
+
+  @Column({ name: 'reversal_reject_reason', type: 'text', nullable: true })
+  reversalRejectReason: string | null;
 
   // ── Creator ───────────────────────────────────────────────────────────────
 
