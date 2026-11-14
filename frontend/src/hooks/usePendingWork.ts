@@ -56,6 +56,8 @@ export function usePendingWork() {
       can('expense.approve') ||
       can('payment.reverse') ||
       can('payment.reversal.approve') ||
+      can('loan.approve_correction') ||
+      can('drawer.force_close') ||
       user.role === 'admin' ||
       user.role === 'superadmin' ||
       user.role === 'manager');

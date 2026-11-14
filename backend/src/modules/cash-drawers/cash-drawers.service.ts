@@ -6,7 +6,7 @@ import { Repository, EntityManager }       from 'typeorm';
 import { CashDrawer }       from './entities/cash-drawer.entity';
 import { Payment }          from '../payments/entities/payment.entity';
 import { Expense }          from '../expenses/entities/expense.entity';
-import { getUserId, RequestUser, getEffectiveRole } from '../../common/helpers/role-helper';
+import { getUserId, RequestUser, getEffectiveRole, isAdmin, hasPermission } from '../../common/helpers/role-helper';
 import { startOfKampalaDay, kampalaDateString } from '../../common/utils/kampala-time';
 
 /**
@@ -169,7 +169,10 @@ export class CashDrawerService {
     opts?: { forceClose?: boolean; forceReason?: string; discrepancyReason?: string },
   ): Promise<CashDrawer> {
     if (!user.tenantId) throw new ForbiddenException('No tenant assigned');
-    if (!user.branchId) {
+    // Admins and holders of drawer.force_close may close drawers at ANY branch of
+    // their tenant (head-office oversight). Everyone else is branch-bound.
+    const crossBranch = isAdmin(user) || hasPermission(user, 'drawer.force_close');
+    if (!user.branchId && !crossBranch) {
       throw new ForbiddenException('Branch assignment required for financial operations.');
     }
 
@@ -190,7 +193,7 @@ export class CashDrawerService {
       if (drawer.status !== 'open') {
         throw new BadRequestException(`Drawer is already ${drawer.status}. Cannot close.`);
       }
-      if (drawer.branchId !== user.branchId) {
+      if (!crossBranch && drawer.branchId !== user.branchId) {
         throw new ForbiddenException('You can only close a drawer at your own branch');
       }
 

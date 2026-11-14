@@ -10,6 +10,7 @@ import { CloseDrawerDto } from './dto/close-drawer.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
+import { isAdmin, hasPermission } from '../../common/helpers/role-helper';
 
 @ApiTags('cash-drawers')
 @ApiBearerAuth()
@@ -59,10 +60,11 @@ export class CashDrawerController {
     @Request() req,
     @Query('branchId') branchId?: string,
   ) {
-    return this.drawerService.getOpenDrawerSummaries(
-      req.user.tenantId,
-      branchId ? +branchId : req.user.branchId,
-    );
+    // Explicit branchId wins. Admins / force-close holders without one see every
+    // branch of their tenant; everyone else is scoped to their own branch.
+    const crossBranch = isAdmin(req.user) || hasPermission(req.user, 'drawer.force_close');
+    const scope = branchId ? +branchId : (crossBranch ? undefined : req.user.branchId);
+    return this.drawerService.getOpenDrawerSummaries(req.user.tenantId, scope);
   }
 
   @Get('history')

@@ -1,0 +1,188 @@
+module,method,endpoint,guard,frontend,status,notes
+audit,GET,/audit,any authenticated user,"app.module.ts, app/dashboard/audit/page.tsx, app/dashboard/page.tsx",Implemented but not verified,
+auth,POST,/auth/login,any authenticated user,"app/auth/login/reset-password/page.tsx, app/auth/set-new-password/page.tsx, app/dashboard/finance/drawers/history/page.tsx",Implemented but not verified,No permission/role guard on a write endpoint — verify
+auth,POST,/auth/register,any authenticated user,contract/api.ts,Implemented but not verified,No permission/role guard on a write endpoint — verify
+auth,GET,/auth/me,any authenticated user,"app/dashboard/settings/page.tsx, components/layout/Sidebar/Sidebar.tsx, contexts/AuthContext.tsx",Implemented but not verified,
+bikes,POST,/bikes,"role: admin,manager","app.module.ts, app/dashboard/inventory/add/page.tsx, app/dashboard/inventory/page.tsx",Implemented but not verified,Role-only backend guard (no permission code)
+bikes,GET,/bikes,any authenticated user,"app.module.ts, app/dashboard/inventory/add/page.tsx, app/dashboard/inventory/page.tsx",Implemented but not verified,
+bikes,GET,/bikes/available,any authenticated user,app/dashboard/loans/create/page.tsx,Implemented but not verified,
+bikes,GET,/bikes/:id,any authenticated user,"app.module.ts, app/dashboard/inventory/[id]/page.tsx, app/dashboard/inventory/page.tsx",Implemented but not verified,
+bikes,PATCH,/bikes/:id,"role: admin,manager","app.module.ts, app/dashboard/inventory/[id]/page.tsx, app/dashboard/inventory/page.tsx",Implemented but not verified,Role-only backend guard (no permission code)
+bikes,DELETE,/bikes/:id,role: admin,"app.module.ts, app/dashboard/inventory/[id]/page.tsx, app/dashboard/inventory/page.tsx",Implemented but not verified,Role-only backend guard (no permission code)
+bikes,PATCH,/bikes/:id/maintenance,"role: admin,manager",—,Frontend missing,Role-only backend guard (no permission code)
+branches,GET,/admin/branches,any authenticated user,app/dashboard/settings/page.tsx,Implemented but not verified,
+branches,GET,/admin/branches/:id,any authenticated user,—,Frontend missing,
+branches,POST,/admin/branches,any authenticated user,app/dashboard/settings/page.tsx,Implemented but not verified,No permission/role guard on a write endpoint — verify
+branches,PATCH,/admin/branches/:id,any authenticated user,—,Frontend missing,No permission/role guard on a write endpoint — verify
+branches,DELETE,/admin/branches/:id,any authenticated user,—,Frontend missing,No permission/role guard on a write endpoint — verify
+cash-drawers,POST,/cash-drawers/open,drawer.open,"app/dashboard/my-drawer/page.tsx, shared/api-types.ts",Implemented but not verified,
+cash-drawers,GET,/cash-drawers/current,drawer.view,app/dashboard/my-drawer/page.tsx,Implemented but not verified,
+cash-drawers,GET,/cash-drawers,drawer.view,"app.module.ts, app/dashboard/payments/page.tsx, components/expenses/ExpenseForm.tsx",Implemented but not verified,
+cash-drawers,GET,/cash-drawers/summaries,drawer.view,components/finance/DrawerOverview.tsx,Frontend added in this pass (not verified),Was scoped to caller branch for everyone; admins/force-close holders now see all branches.
+cash-drawers,GET,/cash-drawers/history,drawer.view,app/dashboard/finance/drawers/history/page.tsx,Frontend added in this pass (not verified),
+cash-drawers,GET,/cash-drawers/:id/summary,drawer.view,app/dashboard/my-drawer/page.tsx,Implemented but not verified,
+cash-drawers,GET,/cash-drawers/:id,drawer.view,"app.module.ts, app/dashboard/finance/drawers/history/page.tsx, app/dashboard/my-drawer/page.tsx",Implemented but not verified,
+cash-drawers,POST,/cash-drawers/close/:id,drawer.close,"app/dashboard/my-drawer/page.tsx, components/finance/CloseDrawerModal.tsx, shared/api-types.ts",Frontend added in this pass (not verified),Service now lets admin / drawer.force_close close any branch of their tenant. Cashiers stay branch-bound.
+cash-drawers,POST,/cash-drawers/force-close/:id,drawer.force_close,"app/dashboard/my-drawer/page.tsx, components/finance/CloseDrawerModal.tsx",Frontend added in this pass (not verified),
+clients,POST,/clients,any authenticated user,"app.module.ts, app/dashboard/clients/[id]/edit/page.tsx, app/dashboard/clients/[id]/page.tsx",Implemented but not verified,No permission/role guard on a write endpoint — verify
+clients,POST,/clients/register,any authenticated user,—,Frontend missing,No permission/role guard on a write endpoint — verify
+clients,GET,/clients,any authenticated user,"app.module.ts, app/dashboard/clients/[id]/edit/page.tsx, app/dashboard/clients/[id]/page.tsx",Implemented but not verified,
+clients,GET,/clients/:id,any authenticated user,"app.module.ts, app/dashboard/clients/[id]/edit/page.tsx, app/dashboard/clients/[id]/page.tsx",Implemented but not verified,
+clients,PATCH,/clients/:id,any authenticated user,"app.module.ts, app/dashboard/clients/[id]/edit/page.tsx, app/dashboard/clients/[id]/page.tsx",Implemented but not verified,No permission/role guard on a write endpoint — verify
+clients,DELETE,/clients/:id,any authenticated user,"app.module.ts, app/dashboard/clients/[id]/edit/page.tsx, app/dashboard/clients/[id]/page.tsx",Implemented but not verified,No permission/role guard on a write endpoint — verify
+dashboard,GET,/dashboard/summary,any authenticated user,—,Frontend missing,
+dashboard,GET,/dashboard/product-kpis,any authenticated user,—,Frontend missing,
+dashboard,GET,/dashboard/pending-work,any authenticated user,hooks/usePendingWork.ts,Implemented but not verified,
+expenses,GET,/expenses/categories,any authenticated user,components/expenses/ExpenseForm.tsx,Implemented but not verified,
+expenses,POST,/expenses/categories,expense.create,components/expenses/ExpenseForm.tsx,Implemented but not verified,
+expenses,PATCH,/expenses/categories/:id,any authenticated user,—,Frontend missing,No permission/role guard on a write endpoint — verify
+expenses,DELETE,/expenses/categories/:id,expense.delete,—,Frontend missing,
+expenses,POST,/expenses,expense.create,"app.module.ts, app/dashboard/expenses/[id]/page.tsx, app/dashboard/expenses/approval/page.tsx",Implemented but not verified,
+expenses,GET,/expenses,any authenticated user,"app.module.ts, app/dashboard/expenses/[id]/page.tsx, app/dashboard/expenses/approval/page.tsx",Implemented but not verified,
+expenses,GET,/expenses/:id,any authenticated user,"app.module.ts, app/dashboard/expenses/[id]/page.tsx, app/dashboard/expenses/approval/page.tsx",Implemented but not verified,
+expenses,PATCH,/expenses/:id,any authenticated user,"app.module.ts, app/dashboard/expenses/[id]/page.tsx, app/dashboard/expenses/approval/page.tsx",Implemented but not verified,No permission/role guard on a write endpoint — verify
+expenses,PATCH,/expenses/:id/approve,expense.approve,"app/dashboard/expenses/approval/page.tsx, components/expenses/ExpenseApprovalPanel.tsx",Implemented but not verified,
+expenses,PATCH,/expenses/:id/reject,expense.approve,"app/dashboard/expenses/approval/page.tsx, components/expenses/ExpenseApprovalPanel.tsx",Implemented but not verified,
+expenses,DELETE,/expenses/:id,expense.delete,"app.module.ts, app/dashboard/expenses/[id]/page.tsx, app/dashboard/expenses/approval/page.tsx",Implemented but not verified,
+health,GET,/health,any authenticated user,"app.module.ts, main.ts",Not user-facing,
+loan-products,GET,/admin/loan-products,any authenticated user,—,Frontend added in this pass (not verified),Controller now tenant-scoped (previously returned every tenant's products and allowed cross-tenant update/delete).
+loan-products,GET,/admin/loan-products/:id,any authenticated user,—,Frontend added in this pass (not verified),
+loan-products,POST,/admin/loan-products,any authenticated user,—,Frontend added in this pass (not verified),No permission/role guard on a write endpoint — verify
+loan-products,PATCH,/admin/loan-products/:id,any authenticated user,—,Frontend added in this pass (not verified),No permission/role guard on a write endpoint — verify
+loan-products,DELETE,/admin/loan-products/:id,any authenticated user,—,Frontend added in this pass (not verified),No permission/role guard on a write endpoint — verify
+loans,POST,/loans/apply,any authenticated user,"app/dashboard/loans/create/page.tsx, contract/api.ts, features/loans/loan.api.ts",Implemented but not verified,No permission/role guard on a write endpoint — verify
+loans,GET,/loans,any authenticated user,"app.module.ts, app/dashboard/import/page.tsx, app/dashboard/layout.tsx",Implemented but not verified,
+loans,POST,/loans/search,any authenticated user,—,Frontend missing,No permission/role guard on a write endpoint — verify
+loans,POST,/loans/cash/calculate,any authenticated user,contract/api.ts,Implemented but not verified,No permission/role guard on a write endpoint — verify
+loans,POST,/loans/bike/calculate,any authenticated user,contract/api.ts,Implemented but not verified,No permission/role guard on a write endpoint — verify
+loans,GET,/loans/bike/preview,any authenticated user,—,Frontend missing,
+loans,POST,/loans/historical-import,"role: admin,superadmin",app/dashboard/import/page.tsx,Implemented but not verified,Role-only backend guard (no permission code)
+loans,POST,/loans/create-bike-loan,any authenticated user,"app/dashboard/loans/create/page.tsx, contract/api.ts, features/loans/loan.api.ts",Implemented but not verified,No permission/role guard on a write endpoint — verify
+loans,POST,/loans/:id/approve,loan.approve,"app/dashboard/loans/[id]/page.tsx, app/dashboard/loans/page.tsx, contract/api.ts",Implemented but not verified,
+loans,POST,/loans/:id/reverse,role: admin,"contract/api.ts, features/admin/components/ReversalModal.tsx",Implemented but not verified,Role-only backend guard (no permission code)
+loans,PUT,/loans/:id,role: admin,"app.module.ts, app/dashboard/clients/[id]/page.tsx, app/dashboard/import/page.tsx",Implemented but not verified,Role-only backend guard (no permission code)
+loans,DELETE,/loans/:id,role: admin,"app.module.ts, app/dashboard/clients/[id]/page.tsx, app/dashboard/import/page.tsx",Implemented but not verified,Role-only backend guard (no permission code)
+loans,PATCH,/loans/:id/status,role: admin,—,Frontend missing,Role-only backend guard (no permission code)
+loans,PATCH,/loans/:id/reschedule,loan.reschedule,components/loans/LoanCorrectionPanel.tsx,Frontend added in this pass (not verified),
+loans,PATCH,/loans/:id/backdate,"role: admin,manager",—,Frontend missing,Role-only backend guard (no permission code)
+loans,PATCH,/loans/:id/edit-details,loan.correct_terms,"app/dashboard/loans/[id]/page.tsx, components/loans/LoanCorrectionPanel.tsx",Frontend added in this pass (not verified),
+loans,PATCH,/loans/:id/correct-balance,loan.correct_balance,components/loans/LoanCorrectionPanel.tsx,Frontend added in this pass (not verified),
+loans,GET,/loans/:id/correction-history,loan.view_correction_history,components/loans/LoanCorrectionPanel.tsx,Frontend added in this pass (not verified),
+loans,POST,/loans/corrections/:correctionId/decide,loan.approve_correction,components/loans/LoanCorrectionPanel.tsx,Backend incomplete,Works for BALANCE corrections (queued PENDING unless actor can self-approve). TERMS/RESCHEDULE apply immediately and a PENDING one would not be re-applied on approval.
+loans,GET,/loans/reports/summary,"role: admin,manager",contract/api.ts,Implemented but not verified,Role-only backend guard (no permission code)
+loans,GET,/loans/reports/overdue,"role: admin,manager,agent",contract/api.ts,Implemented but not verified,Role-only backend guard (no permission code)
+loans,GET,/loans/reports/audit/:loanId,role: admin,contract/api.ts,Implemented but not verified,Role-only backend guard (no permission code)
+loans,GET,/loans/:id,any authenticated user,"app.module.ts, app/dashboard/clients/[id]/page.tsx, app/dashboard/import/page.tsx",Implemented but not verified,
+password-reset,POST,/auth/request-reset,any authenticated user,app/auth/login/reset-password/page.tsx,Implemented but not verified,No permission/role guard on a write endpoint — verify
+password-reset,POST,/auth/verify-reset-otp,any authenticated user,app/auth/login/page.tsx,Implemented but not verified,No permission/role guard on a write endpoint — verify
+password-reset,POST,/auth/set-new-password,any authenticated user,"app/auth/login/page.tsx, app/auth/set-new-password/page.tsx, app/dashboard/layout.tsx",Implemented but not verified,No permission/role guard on a write endpoint — verify
+password-reset,POST,/auth/set-new-password-authenticated,any authenticated user,app/auth/set-new-password/page.tsx,Implemented but not verified,No permission/role guard on a write endpoint — verify
+password-reset,GET,/auth,any authenticated user,app.module.ts,Implemented but not verified,
+password-reset,POST,/auth/:id/approve,any authenticated user,—,Frontend missing,No permission/role guard on a write endpoint — verify
+payments,POST,/payments,any authenticated user,"app.module.ts, app/dashboard/clients/[id]/page.tsx, app/dashboard/page.tsx",Implemented but not verified,No permission/role guard on a write endpoint — verify
+payments,GET,/payments,any authenticated user,"app.module.ts, app/dashboard/clients/[id]/page.tsx, app/dashboard/page.tsx",Implemented but not verified,
+payments,GET,/payments/loan/:loanId,any authenticated user,contract/api.ts,Implemented but not verified,
+payments,GET,/payments/receipt/:receiptNumber,any authenticated user,app/dashboard/payments/page.tsx,Implemented but not verified,Find-receipt box added (payments pass)
+payments,GET,/payments/today,any authenticated user,contract/api.ts,Implemented but not verified,
+payments,GET,/payments/summary,any authenticated user,"app/dashboard/page.tsx, app/dashboard/payments/page.tsx, contract/api.ts",Implemented but not verified,
+payments,GET,/payments/search/range,any authenticated user,app/dashboard/payments/page.tsx,Implemented but not verified,"Server date-range search, Kampala days (payments pass)"
+payments,GET,/payments/preview-allocation,any authenticated user,"features/payments/components/AllocationPreview.tsx, features/payments/payments.api.ts",Implemented but not verified,
+payments,GET,/payments/reversal-requests,any authenticated user,"app/dashboard/reversals/page.tsx, app/dashboard/payments/page.tsx",Implemented but not verified,Admin/payment.reverse or manager (read-only). Confirm usePendingWork badge uses this endpoint
+payments,POST,/payments/:id/reverse,role: admin,"app/dashboard/payments/page.tsx, features/admin/PaymentReversalModal.tsx",Implemented but not verified,Now payment.reverse permission (admin/superadmin always)
+payments,PATCH,/payments/:id/reverse,any authenticated user,"app/dashboard/payments/page.tsx, features/admin/PaymentReversalModal.tsx",Implemented but not verified,Now payment.reverse permission
+payments,GET,/payments/:id,any authenticated user,"app.module.ts, app/dashboard/page.tsx, app/dashboard/payments/page.tsx",Implemented but not verified,
+payments,POST,/payments/:id/request-reversal,any authenticated user,"app/dashboard/payments/page.tsx, app/dashboard/reversals/page.tsx",Implemented but not verified,Permission check added: payment.create/payment.reverse or manager/cashier
+payments,POST,/payments/:id/approve-reversal,any authenticated user,app/dashboard/reversals/page.tsx,Implemented but not verified,payment.reverse; tenant-scoped; decider written in same transaction
+payments,POST,/payments/:id/reject-reversal,any authenticated user,app/dashboard/reversals/page.tsx,Implemented but not verified,payment.reverse; conditional write closes approve/reject race
+payments,DELETE,/payments/:id,any authenticated user,—,Not user-facing,Deliberate 403 by policy; not a missing guard
+permissions,GET,/permissions,any authenticated user,"app.module.ts, app/dashboard/settings/page.tsx",Implemented but not verified,
+permissions,POST,/permissions,role: admin,"app.module.ts, app/dashboard/settings/page.tsx",Implemented but not verified,Role-only backend guard (no permission code)
+permissions,DELETE,/permissions/:code,role: admin,app.module.ts,Implemented but not verified,Role-only backend guard (no permission code)
+receipts,GET,/receipts/payment/:id,any authenticated user,"app/dashboard/payments/page.tsx, features/payments/components/receipt.api.ts",Implemented but not verified,
+receipts,GET,/receipts/by-number/:receiptNumber,any authenticated user,features/payments/components/receipt.api.ts,Implemented but not verified,
+receipts,GET,/receipts/loan/:loanId,any authenticated user,—,Frontend missing,
+reconciliation,GET,/reconciliation,finance.reconcile,"app.module.ts, app/dashboard/finance/reconciliation/page.tsx, app/dashboard/page.tsx",Implemented but not verified,
+reconciliation,POST,/reconciliation,finance.reconcile,"app.module.ts, app/dashboard/finance/reconciliation/page.tsx, app/dashboard/page.tsx",Implemented but not verified,
+reconciliation,GET,/reconciliation/expected,finance.reconcile,components/finance/ReconciliationDashboard.tsx,Implemented but not verified,
+reports,GET,/reports/daily-summary,any authenticated user,"app/dashboard/reports/page.tsx, contract/api.ts",Implemented but not verified,
+reports,GET,/reports/weekly-collections,any authenticated user,"app/dashboard/page.tsx, app/dashboard/reports/page.tsx",Implemented but not verified,
+reports,GET,/reports/arrears,any authenticated user,"app/dashboard/reports/page.tsx, contract/api.ts",Implemented but not verified,
+reports,GET,/reports/portfolio-aging,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/summary,any authenticated user,"app/dashboard/page.tsx, app/dashboard/reports/page.tsx, contract/api.ts",Implemented but not verified,
+reports,GET,/reports/export/payments,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/export/loans,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/export/clients,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/daily-accountability,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/export/daily-accountability,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/upcoming-due,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/export/upcoming-due,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/drawer-balancing,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/export/drawer-balancing,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/npl,any authenticated user,"app/dashboard/page.tsx, app/dashboard/reports/page.tsx",Implemented but not verified,
+reports,GET,/reports/portfolio-aging-detailed,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/daily-collection-sheet,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/export/daily-collection-sheet,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/weekly-signoff-pack,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/weekly-signoffs,any authenticated user,—,Frontend missing,
+reports,POST,/reports/weekly-signoff,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,No permission/role guard on a write endpoint — verify
+reports,GET,/reports/export/arrears.xlsx,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/export/npl.xlsx,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/export/portfolio-aging.xlsx,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/export/summary.xlsx,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/export/weekly-signoff.xlsx,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/export/payments.xlsx,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/export/loans.xlsx,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/export/clients.xlsx,any authenticated user,app/dashboard/reports/page.tsx,Implemented but not verified,
+reports,GET,/reports/export/npl.pdf,any authenticated user,—,Frontend missing,
+reports,GET,/reports/export/weekly-signoff.pdf,any authenticated user,—,Frontend missing,
+roles,GET,/roles,any authenticated user,"app.module.ts, app/dashboard/settings/page.tsx",Implemented but not verified,
+roles,GET,/roles/:id,any authenticated user,app.module.ts,Implemented but not verified,
+roles,POST,/roles,role: admin,"app.module.ts, app/dashboard/settings/page.tsx",Implemented but not verified,Role-only backend guard (no permission code)
+roles,PATCH,/roles/:id,role: admin,app.module.ts,Implemented but not verified,Role-only backend guard (no permission code)
+roles,DELETE,/roles/:id,role: admin,app.module.ts,Implemented but not verified,Role-only backend guard (no permission code)
+roles,POST,/roles/:id/permissions,role: admin,—,Frontend missing,Role-only backend guard (no permission code)
+roles,POST,/roles/:id/permissions/set,role: admin,—,Frontend missing,Role-only backend guard (no permission code)
+roles,DELETE,/roles/:id/permissions/:code,role: admin,—,Frontend missing,Role-only backend guard (no permission code)
+schedules,GET,/schedules/loan/:loanId,any authenticated user,"app/dashboard/loans/[id]/page.tsx, app/dashboard/payments/page.tsx, app/dashboard/schedules/[loanId]/page.tsx",Implemented but not verified,
+schedules,GET,/schedules/alerts,any authenticated user,app/dashboard/alerts/page.tsx,Implemented but not verified,
+schedules,GET,/schedules/alerts/summary,any authenticated user,"app/dashboard/alerts/page.tsx, app/dashboard/page.tsx",Implemented but not verified,
+schedules,PATCH,/schedules/alerts/mark-all-read,any authenticated user,app/dashboard/alerts/page.tsx,Implemented but not verified,No permission/role guard on a write endpoint — verify
+schedules,PATCH,/schedules/alerts/:id/read,any authenticated user,app/dashboard/alerts/page.tsx,Implemented but not verified,No permission/role guard on a write endpoint — verify
+schedules,PATCH,/schedules/alerts/:id/resolve,any authenticated user,app/dashboard/alerts/page.tsx,Implemented but not verified,No permission/role guard on a write endpoint — verify
+schedules,POST,/schedules/run-overdue-scan,any authenticated user,—,Frontend missing,No permission/role guard on a write endpoint — verify
+settings,GET,/settings,"role: admin,manager,superadmin","app.module.ts, app/dashboard/finance/drawers/settings/page.tsx, app/dashboard/settings/page.tsx",Frontend added in this pass (not verified),Role-only backend guard (no permission code)
+settings,PATCH,/settings/:key,"role: admin,superadmin","app.module.ts, app/dashboard/finance/drawers/settings/page.tsx, app/dashboard/settings/page.tsx",Frontend added in this pass (not verified),Role-only backend guard (no permission code)
+superadmin,GET,/superadmin/stats,any authenticated user,lib/api/superadmin.ts,Implemented but not verified,
+superadmin,GET,/superadmin/tenants,any authenticated user,"app/superadmin/layout.tsx, app/superadmin/main/page.tsx, app/superadmin/page.tsx",Implemented but not verified,
+superadmin,GET,/superadmin/tenants/:id,any authenticated user,lib/api/superadmin.ts,Implemented but not verified,
+superadmin,POST,/superadmin/tenants,any authenticated user,"app/superadmin/layout.tsx, app/superadmin/main/page.tsx, app/superadmin/page.tsx",Implemented but not verified,No permission/role guard on a write endpoint — verify
+superadmin,PATCH,/superadmin/tenants/:id/activate,any authenticated user,lib/api/superadmin.ts,Implemented but not verified,No permission/role guard on a write endpoint — verify
+superadmin,PATCH,/superadmin/tenants/:id/deactivate,any authenticated user,lib/api/superadmin.ts,Implemented but not verified,No permission/role guard on a write endpoint — verify
+superadmin,GET,/superadmin/users,any authenticated user,"app/superadmin/layout.tsx, app/superadmin/main/page.tsx, app/superadmin/page.tsx",Implemented but not verified,
+superadmin,POST,/superadmin/impersonate,any authenticated user,lib/api/superadmin.ts,Implemented but not verified,No permission/role guard on a write endpoint — verify
+superadmin,GET,/superadmin/tenants/:id/branches,any authenticated user,lib/api/superadmin.ts,Implemented but not verified,
+superadmin,POST,/superadmin/tenants/:id/branches,any authenticated user,lib/api/superadmin.ts,Implemented but not verified,No permission/role guard on a write endpoint — verify
+superadmin,PATCH,/superadmin/branches/:id/activate,any authenticated user,lib/api/superadmin.ts,Implemented but not verified,No permission/role guard on a write endpoint — verify
+superadmin,PATCH,/superadmin/branches/:id/deactivate,any authenticated user,lib/api/superadmin.ts,Implemented but not verified,No permission/role guard on a write endpoint — verify
+superadmin,GET,/superadmin/audit-logs,any authenticated user,lib/api/superadmin.ts,Implemented but not verified,
+sync,POST,/sync/reconcile,role: admin,—,Not user-facing,Role-only backend guard (no permission code)
+tenants,GET,/admin/tenants,any authenticated user,—,Frontend missing,
+tenants,GET,/admin/tenants/:id,any authenticated user,—,Frontend missing,
+tenants,POST,/admin/tenants,any authenticated user,—,Frontend missing,No permission/role guard on a write endpoint — verify
+tenants,PATCH,/admin/tenants/:id,any authenticated user,—,Frontend missing,No permission/role guard on a write endpoint — verify
+tenants,DELETE,/admin/tenants/:id,any authenticated user,—,Frontend missing,No permission/role guard on a write endpoint — verify
+tenants,GET,/admin/tenants,any authenticated user,—,Frontend missing,
+tenants,GET,/admin/tenants/:id,any authenticated user,—,Frontend missing,
+tenants,POST,/admin/tenants,any authenticated user,—,Frontend missing,No permission/role guard on a write endpoint — verify
+tenants,PATCH,/admin/tenants/:id,any authenticated user,—,Frontend missing,No permission/role guard on a write endpoint — verify
+tenants,DELETE,/admin/tenants/:id,any authenticated user,—,Frontend missing,No permission/role guard on a write endpoint — verify
+users,POST,/users,any authenticated user,"app.module.ts, app/dashboard/settings/page.tsx, app/superadmin/layout.tsx",Implemented but not verified,No permission/role guard on a write endpoint — verify
+users,GET,/users,any authenticated user,"app.module.ts, app/dashboard/settings/page.tsx, app/superadmin/layout.tsx",Implemented but not verified,
+users,GET,/users/stats,any authenticated user,—,Frontend missing,
+users,GET,/users/:id,any authenticated user,"app.module.ts, app/dashboard/loans/[id]/page.tsx, app/dashboard/settings/page.tsx",Implemented but not verified,
+users,PATCH,/users/:id,any authenticated user,"app.module.ts, app/dashboard/loans/[id]/page.tsx, app/dashboard/settings/page.tsx",Implemented but not verified,No permission/role guard on a write endpoint — verify
+users,PUT,/users/:id/change-password,any authenticated user,"app/dashboard/settings/page.tsx, contract/api.ts",Implemented but not verified,No permission/role guard on a write endpoint — verify
+users,PATCH,/users/:id/deactivate,any authenticated user,"app/dashboard/settings/page.tsx, contract/api.ts",Implemented but not verified,No permission/role guard on a write endpoint — verify
+users,PATCH,/users/:id/activate,any authenticated user,"app/dashboard/settings/page.tsx, contract/api.ts",Implemented but not verified,No permission/role guard on a write endpoint — verify
+users,PATCH,/users/:id/permissions,any authenticated user,app/dashboard/settings/page.tsx,Implemented but not verified,No permission/role guard on a write endpoint — verify
+users,DELETE,/users/:id,any authenticated user,"app.module.ts, app/dashboard/loans/[id]/page.tsx, app/dashboard/settings/page.tsx",Implemented but not verified,No permission/role guard on a write endpoint — verify

@@ -30,79 +30,8 @@ import {
   BarChart3, // <-- for Reports
 } from 'lucide-react';
 import Link from 'next/link';
-
-// Navigation items with proper icons
-// roles: who may see this item (empty = all authenticated)
-type NavItem = { name: string; href: string; icon: any; roles?: string[] };
-type NavGroup = { label: string; items: NavItem[] };
-
-const navigationGroups: NavGroup[] = [
-  {
-    label: 'Overview',
-    items: [
-      { name: 'Dashboard', href: '/dashboard', icon: Home },
-    ],
-  },
-  {
-    label: 'Lending',
-    items: [
-      { name: 'All Loans',         href: '/dashboard/loans',           icon: FileText, roles: ['admin','manager','agent','loan_officer','credit_officer','cashier'] },
-      { name: 'Cash Loans',        href: '/dashboard/loans?type=cash', icon: Banknote, roles: ['admin','manager','agent','loan_officer','credit_officer'] },
-      { name: 'Bike Loans',        href: '/dashboard/loans?type=bike', icon: Bike,     roles: ['admin','manager','agent','loan_officer','credit_officer'] },
-      { name: 'Create Loan',       href: '/dashboard/loans/create',    icon: Plus,     roles: ['admin','manager','agent','loan_officer','credit_officer'] },
-      { name: 'Schedules',         href: '/dashboard/schedules',       icon: Calendar, roles: ['admin','manager','cashier','agent','loan_officer'] },
-      { name: 'Historical Import', href: '/dashboard/import',          icon: Upload,   roles: ['admin','manager'] },
-      { name: 'My Drawer',         href: '/dashboard/my-drawer',       icon: Wallet,   roles: ['admin','manager','cashier'] },
-    ],
-  },
-  {
-    label: 'Operations',
-    items: [
-      { name: 'Clients',   href: '/dashboard/clients',   icon: Users,      roles: ['admin','manager','agent','loan_officer','credit_officer','cashier'] },
-      { name: 'Payments',  href: '/dashboard/payments',  icon: CreditCard, roles: ['admin','manager','cashier'] },
-      { name: 'Alerts',    href: '/dashboard/alerts',    icon: Bell,       roles: ['admin','manager','cashier','agent'] },
-      { name: 'Inventory', href: '/dashboard/inventory', icon: Package,    roles: ['admin','manager','cashier'] },
-      { name: 'Expenses',  href: '/dashboard/expenses',  icon: Receipt,    roles: ['admin','manager','cashier'] },
-      { name: 'Pending Approvals', href: '/dashboard/expenses/approval', icon: Clock, roles: ['admin','manager'] },
-    ],
-  },
-  {
-    label: 'Governance',
-    items: [
-      { name: 'Audit Logs', href: '/dashboard/audit',     icon: ClipboardList, roles: ['admin'] },
-      { name: 'Reversals',  href: '/dashboard/reversals', icon: RotateCcw,     roles: ['admin','manager','cashier'] },
-    ],
-  },
-  {
-    label: 'Finance',
-    items: [
-      { name: 'Reconciliation', href: '/dashboard/finance/reconciliation', icon: Wallet,    roles: ['admin','manager'] },
-      { name: 'Reports', href: '/dashboard/reports', icon: BarChart3, roles: ['admin','manager'] },
-    ],
-  },
-  {
-    label: 'System',
-    items: [
-      { name: 'Settings', href: '/dashboard/settings', icon: Settings, roles: ['admin'] },
-    ],
-  },
-];
-
-function canSeeNavItem(role: string, item: NavItem): boolean {
-  const r = (role || '').toLowerCase();
-  if (r === 'superadmin' || r === 'admin') return true;
-  if (!item.roles || item.roles.length === 0) return true;
-  return item.roles.map((x) => x.toLowerCase()).includes(r);
-}
-
-// Mobile navigation (simplified) – optionally add Expenses/Finance here too if needed
-const mobileNavItems = [
-  { name: 'Home',    href: '/dashboard',              icon: Home       },
-  { name: 'Loans',   href: '/dashboard/loans',        icon: FileText   },
-  { name: 'Create',  href: '/dashboard/loans/create', icon: Plus       },
-  { name: 'Clients', href: '/dashboard/clients',      icon: Users      },
-  { name: 'Pay',     href: '/dashboard/payments',     icon: CreditCard },
-];
+import { visibleNavigation, type NavItem, type BadgeKey } from '@/lib/navigation';
+import { usePendingWork } from '@/hooks/usePendingWork';
 
 /**
  * getUserInitials — derives avatar initials from full_name.
@@ -132,7 +61,8 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, can } = useAuth();
+  const { data: pending } = usePendingWork();
   const router = useRouter();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -175,21 +105,32 @@ export default function DashboardLayout({
     }
   }, [user, isLoading, router]);
 
-  const memoizedNavigationGroups = useMemo(() => {
-    const role = (user?.role || '').toLowerCase();
-    return navigationGroups
-      .map((group) => ({
-        ...group,
-        items: group.items.filter((item) => canSeeNavItem(role, item)),
-      }))
-      .filter((group) => group.items.length > 0);
-  }, [user?.role]);
-  const memoizedMobileNavItems = useMemo(() => mobileNavItems, []);
+  const memoizedNavigationGroups = useMemo(
+    () => visibleNavigation({ role: user?.role || '', can }),
+    [user?.role, user?.permissions, can],
+  );
+  const memoizedMobileNavItems = useMemo(
+    () => memoizedNavigationGroups.flatMap((g) => g.items).filter((i) => i.mobileBar).slice(0, 5),
+    [memoizedNavigationGroups],
+  );
+  const badgeFor = (item: NavItem): number =>
+    item.badge ? (item.badge === 'total' ? pending.total : (pending as any)[item.badge === 'overdueDrawers' ? 'overdueDrawers' : item.badge]?.count ?? 0) : 0;
+  const Badge = ({ item }: { item: NavItem }) => {
+    const n = badgeFor(item);
+    return n > 0 ? (
+      <span className="ml-auto min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center" aria-label={`${n} pending`}>
+        {n > 99 ? '99+' : n}
+      </span>
+    ) : null;
+  };
 
-  const getIsActive = (href: string) => {
+  const EXACT_ONLY = ['/dashboard', '/dashboard/finance/drawers', '/dashboard/expenses'];
+  const getIsActive = (rawHref: string) => {
+    const href = rawHref.split('?')[0];
     if (href === '/dashboard/loans') {
-      return pathname.startsWith('/dashboard/loans') && !pathname.includes('/create');
+      return pathname.startsWith('/dashboard/loans') && !pathname.includes('/create') && !rawHref.includes('?');
     }
+    if (EXACT_ONLY.includes(href)) return pathname === href;
     return pathname === href || pathname.startsWith(`${href}/`);
   };
 
@@ -275,6 +216,7 @@ export default function DashboardLayout({
                     >
                       <item.icon className="h-5 w-5" />
                       {item.name}
+                      <Badge item={item} />
                     </Link>
                   );
                 })}
@@ -348,6 +290,7 @@ export default function DashboardLayout({
                       >
                         <item.icon className="h-6 w-6" />
                         {item.name}
+                        <Badge item={item} />
                       </Link>
                     );
                   })}
@@ -450,7 +393,10 @@ export default function DashboardLayout({
                   }
                 }}
               >
-                <item.icon className={`h-5 w-5 mb-1 transition-transform ${isActive ? 'text-white' : 'text-blue-200'}`} />
+                <span className="relative">
+                  <item.icon className={`h-5 w-5 mb-1 transition-transform ${isActive ? 'text-white' : 'text-blue-200'}`} />
+                  {badgeFor(item) > 0 && <span className="absolute -top-1 -right-2 h-2.5 w-2.5 rounded-full bg-red-500" />}
+                </span>
                 <span className="text-xs font-medium">{item.name}</span>
               </Link>
             );

@@ -22,13 +22,11 @@ export default function DrawerOverviewPage() {
   const role      = (user?.role ?? '').toLowerCase();
   const canAccess =
     role === 'admin' ||
-    role === 'manager' ||
     role === 'superadmin' ||
     can('drawer.view') ||
-    can('drawer.manage') ||
-    can('drawer.open') ||
     can('drawer.close') ||
-    can('drawer.force_close');
+    can('drawer.force_close') ||
+    can('drawer.reconcile');
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -56,7 +54,7 @@ export default function DrawerOverviewPage() {
           <div>
             <h2 className="text-base font-semibold text-bv-text">Access restricted</h2>
             <p className="text-sm text-bv-muted mt-1">
-              Drawer overview is for managers and administrators. Cashiers use My drawer.
+              You need drawer close, force-close or reconcile permission to oversee branch drawers. Use My drawer for your own branch drawer.
             </p>
           </div>
           <button
@@ -72,7 +70,7 @@ export default function DrawerOverviewPage() {
 
   // Admin/superadmin see all branches by omitting branchId; managers/cashiers
   // are scoped to their own branch automatically (backend defaults to req.user.branchId).
-  const isBranchScoped = role === 'manager';
+  const isBranchScoped = !(role === 'admin' || role === 'superadmin' || can('drawer.force_close'));
 
   // ── Main content ──────────────────────────────────────────────────────────
   return (

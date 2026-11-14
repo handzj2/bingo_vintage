@@ -233,7 +233,7 @@ export class EditLoanDetailsDto {
 @ApiTags('Loans')
 @Controller('loans')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionGuard)
 export class LoansController {
   constructor(
     private readonly loansService: LoansService,

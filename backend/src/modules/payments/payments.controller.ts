@@ -1,4 +1,4 @@
-import { assertAdmin, assertRole, getEffectiveRole } from '../../common/helpers/role-helper';
+import { assertPermission, getEffectiveRole, isAdmin, hasPermission } from '../../common/helpers/role-helper';
 import { AuthRequest } from '../../common/helpers/role-helper';
 import { Throttle } from '@nestjs/throttler';
 import { 
@@ -14,12 +14,10 @@ import {
   ForbiddenException,
   BadRequestException,
   Query,
-  SetMetadata,
   ParseIntPipe,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { PaymentsService } from './payments.service';
 import { AuditService } from '../audit/audit.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
@@ -136,14 +134,14 @@ export class PaymentsController {
 
   @Get('loan/:loanId')
   @ApiOperation({ summary: 'Get payments by loan ID' })
-  findByLoanId(@Param('loanId', ParseIntPipe) loanId: number) {
-    return this.paymentsService.findByLoanId(loanId);
+  findByLoanId(@Param('loanId', ParseIntPipe) loanId: number, @Request() req: AuthRequest) {
+    return this.paymentsService.findByLoanId(loanId, req?.user?.tenantId);
   }
 
   @Get('receipt/:receiptNumber')
   @ApiOperation({ summary: 'Get payment by receipt number' })
-  findByReceiptNumber(@Param('receiptNumber') receiptNumber: string) {
-    return this.paymentsService.findByReceiptNumber(receiptNumber);
+  findByReceiptNumber(@Param('receiptNumber') receiptNumber: string, @Request() req: AuthRequest) {
+    return this.paymentsService.findByReceiptNumber(receiptNumber, req?.user?.tenantId);
   }
 
   @Get('today')
@@ -165,7 +163,17 @@ export class PaymentsController {
     @Query('startDate') start: string,
     @Query('endDate') end: string,
   ) {
-    return this.paymentsService.findByDateRange(new Date(start), new Date(end), req?.user?.tenantId);
+    // Dates are Kampala calendar days (UTC+3, no DST). new Date('2026-11-01') would be
+    // UTC midnight = 03:00 Kampala, silently dropping the first three hours of the day.
+    const DAY = /^\d{4}-\d{2}-\d{2}$/;
+    if (!DAY.test(start || '') || !DAY.test(end || '')) {
+      throw new BadRequestException('startDate and endDate are required (YYYY-MM-DD)');
+    }
+    return this.paymentsService.findByDateRange(
+      new Date(`${start}T00:00:00.000+03:00`),
+      new Date(`${end}T23:59:59.999+03:00`),
+      req?.user?.tenantId,
+    );
   }
 
   @Get('preview-allocation')
@@ -182,23 +190,28 @@ export class PaymentsController {
   @ApiOperation({ summary: 'Get all pending reversal requests (Admin only)' })
   async getPendingReversalRequests(@Request() req: AuthRequest) {
     const user = req.user;
-    assertRole(user, ['admin', 'manager'], 'Admin or manager access required');
+    // Same rule as approve/reject: whoever can act on the queue may see it.
+    // Managers can still LOOK (read-only) as before.
+    if (!isAdmin(user) && !hasPermission(user, 'payment.reverse') && getEffectiveRole(user) !== 'manager') {
+      throw new ForbiddenException('Admin, manager or payment.reverse permission required');
+    }
     return this.paymentsService.getPendingReversalRequests(user?.tenantId);
   }
 
   @Post(':id/reverse')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @SetMetadata('roles', ['admin'])
   @ApiOperation({
     summary: 'Reverse a payment (Admin Only)',
     description:
       'Policy [2026-01-10]: Only administrators can reverse transactions. This creates a complete audit trail and restores loan balance.',
   })
   async reversePayment(
-    @Param('id') id: number,
+    @Param('id', ParseIntPipe) id: number,
     @Body('reason') reason: string,
     @Request() req: AuthRequest,
   ) {
+    // Permission-based (admin/superadmin always pass). The old RolesGuard(['admin'])
+    // locked out superadmin and ignored the payment.reverse permission the UI checks.
+    assertPermission(req.user, 'payment.reverse', 'Policy [2026-01-10]: You are not authorised to reverse payments');
     return await this.paymentsService.reversePayment(id, req.user, reason);
   }
 
@@ -210,8 +223,8 @@ export class PaymentsController {
     @Body() reverseDto: ReversePaymentDto,
     @Request() req: AuthRequest,
   ) {
-    assertAdmin(req.user, 'Policy [2026-01-10]: Only administrators can reverse payments');
-    return this.paymentsService.reversePayment(id, req.user, reverseDto.reversal_reason);
+    assertPermission(req.user, 'payment.reverse', 'Policy [2026-01-10]: You are not authorised to reverse payments');
+    return this.paymentsService.reversePayment(id, req.user, reverseDto.reversal_reason ?? '');
   }
 
   @Get(':id')
@@ -229,14 +242,22 @@ export class PaymentsController {
     @Request() req: AuthRequest,
   ) {
     const user = req.user;
-    const requestedBy = user.email || user.username;
-    return this.paymentsService.requestReversal(id, requestedBy, reason);
+    // Same population the payments page offers the action to (see canRecord there):
+    // anyone who can record payments, or who can reverse them. Agents/others: 403.
+    const role = getEffectiveRole(user);
+    const mayRequest = isAdmin(user) || hasPermission(user, 'payment.create') || hasPermission(user, 'payment.reverse')
+      || ['manager', 'cashier', 'superadmin'].includes(role);
+    if (!mayRequest) {
+      throw new ForbiddenException('You are not authorised to request payment reversals');
+    }
+    const requestedBy = user.email || user.username || '';
+    return this.paymentsService.requestReversal(id, requestedBy, reason, user?.tenantId);
   }
 
   @Post(':id/approve-reversal')
   @ApiOperation({ summary: 'Approve a reversal request (Admin only)' })
   async approveReversal(@Param('id', ParseIntPipe) id: number, @Request() req: AuthRequest) {
-    assertAdmin(req.user, 'Policy [2026-01-10]: Only administrators can approve payment reversals');
+    assertPermission(req.user, 'payment.reverse', 'Policy [2026-01-10]: You are not authorised to approve payment reversals');
     return this.paymentsService.approveReversalRequest(id, req.user);
   }
 
@@ -247,7 +268,7 @@ export class PaymentsController {
     @Body('reason') reason: string,
     @Request() req: AuthRequest,
   ) {
-    assertAdmin(req.user, 'Policy [2026-01-10]: Only administrators can reject payment reversals');
+    assertPermission(req.user, 'payment.reverse', 'Policy [2026-01-10]: You are not authorised to reject payment reversals');
     return this.paymentsService.rejectReversalRequest(id, req.user, reason);
   }
 
