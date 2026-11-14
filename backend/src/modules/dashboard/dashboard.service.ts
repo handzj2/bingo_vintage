@@ -105,4 +105,232 @@ export class DashboardService {
       };
     });
   }
+
+  /**
+   * Pending-work summary for notification centre + sidebar badges.
+   * Tenant-scoped. Optional branch filter for branch-scoped roles.
+   * Returns counts + lightweight item lists for each approval queue.
+   */
+  async getPendingWork(tenantId: number, branchId?: number | null, permissions?: Set<string> | string[]) {
+    if (!tenantId) {
+      return {
+        loans: { count: 0, items: [] },
+        expenses: { count: 0, items: [] },
+        reversals: { count: 0, items: [] },
+        total: 0,
+      };
+    }
+
+    const permSet = permissions instanceof Set
+      ? permissions
+      : new Set(Array.isArray(permissions) ? permissions : []);
+
+    const canLoan = permSet.has('loan.approve') || permSet.size === 0; // empty = caller already authorised
+    const canExpense = permSet.has('expense.approve') || permSet.size === 0;
+    const canReversal = permSet.has('payment.reverse') || permSet.has('payment.reversal.approve') || permSet.size === 0;
+
+    const branchClause = branchId ? 'AND branch_id = $2' : '';
+    const params: any[] = branchId ? [tenantId, branchId] : [tenantId];
+
+    let loans = { count: 0, items: [] as any[] };
+    let expenses = { count: 0, items: [] as any[] };
+    let reversals = { count: 0, items: [] as any[] };
+
+    if (canLoan) {
+      const loanRows = await this.paymentRepo.manager.query(
+        `SELECT l.id, l.loan_number AS reference, l.principal_amount AS amount,
+                l.branch_id, l.created_at AS submitted_at, l.status,
+                u.full_name AS submitted_by, u.username AS submitted_by_username,
+                c.full_name AS client_name
+           FROM loans l
+           LEFT JOIN users u ON u.id = l.created_by_id
+           LEFT JOIN clients c ON c.id = l.client_id
+          WHERE l.tenant_id = $1
+            AND l.status IN ('PENDING_APPROVAL', 'PENDING')
+            ${branchClause}
+          ORDER BY l.created_at ASC
+          LIMIT 20`,
+        params,
+      );
+      loans = {
+        count: loanRows.length,
+        items: loanRows.map((r: any) => ({
+          id: r.id,
+          type: 'loan',
+          reference: r.reference || `LOAN-${r.id}`,
+          amount: Number(r.amount),
+          branchId: r.branch_id,
+          submittedAt: r.submitted_at,
+          status: r.status,
+          submittedBy: r.submitted_by || r.submitted_by_username || '—',
+          clientName: r.client_name,
+          href: `/dashboard/loans/${r.id}`,
+        })),
+      };
+      // Accurate count (not limited)
+      const [{ cnt }] = await this.paymentRepo.manager.query(
+        `SELECT COUNT(*)::int AS cnt FROM loans
+          WHERE tenant_id = $1 AND status IN ('PENDING_APPROVAL','PENDING') ${branchClause}`,
+        params,
+      );
+      loans.count = cnt;
+    }
+
+    if (canExpense) {
+      const expRows = await this.paymentRepo.manager.query(
+        `SELECT e.id, e.amount, e.branch_id, e.created_at AS submitted_at, e.status,
+                e.description, u.full_name AS submitted_by, u.username AS submitted_by_username
+           FROM expenses e
+           LEFT JOIN users u ON u.id = e.created_by_id
+          WHERE e.tenant_id = $1
+            AND e.status = 'pending'
+            ${branchClause}
+          ORDER BY e.created_at ASC
+          LIMIT 20`,
+        params,
+      );
+      const [{ cnt }] = await this.paymentRepo.manager.query(
+        `SELECT COUNT(*)::int AS cnt FROM expenses
+          WHERE tenant_id = $1 AND status = 'pending' ${branchClause}`,
+        params,
+      );
+      expenses = {
+        count: cnt,
+        items: expRows.map((r: any) => ({
+          id: r.id,
+          type: 'expense',
+          reference: `EXP-${r.id}`,
+          amount: Number(r.amount),
+          branchId: r.branch_id,
+          submittedAt: r.submitted_at,
+          status: r.status,
+          submittedBy: r.submitted_by || r.submitted_by_username || '—',
+          description: r.description,
+          href: `/dashboard/expenses/approval`,
+        })),
+      };
+    }
+
+    if (canReversal) {
+      // Reversals pending approval (uses reversal_status column from earlier migration)
+      try {
+        const revRows = await this.paymentRepo.manager.query(
+          `SELECT p.id, p.amount, p.branch_id, p.created_at AS submitted_at,
+                  p.reversal_status AS status, p.receipt_number AS reference,
+                  u.full_name AS submitted_by, u.username AS submitted_by_username
+             FROM payments p
+             LEFT JOIN users u ON u.id = p.created_by_id
+            WHERE p.tenant_id = $1
+              AND p.reversal_status = 'PENDING'
+              ${branchClause}
+            ORDER BY p.created_at ASC
+            LIMIT 20`,
+          params,
+        );
+        const [{ cnt }] = await this.paymentRepo.manager.query(
+          `SELECT COUNT(*)::int AS cnt FROM payments
+            WHERE tenant_id = $1 AND reversal_status = 'PENDING' ${branchClause}`,
+          params,
+        );
+        reversals = {
+          count: cnt,
+          items: revRows.map((r: any) => ({
+            id: r.id,
+            type: 'reversal',
+            reference: r.reference || `PAY-${r.id}`,
+            amount: Number(r.amount),
+            branchId: r.branch_id,
+            submittedAt: r.submitted_at,
+            status: r.status,
+            submittedBy: r.submitted_by || r.submitted_by_username || '—',
+            href: `/dashboard/reversals`,
+          })),
+        };
+      } catch {
+        // Column may not exist on very old DBs — leave empty
+      }
+    }
+
+
+    // Pending loan corrections (dual-control queue)
+    let corrections = { count: 0, items: [] as any[] };
+    const canApproveCorrection = permSet.has('loan.approve_correction') || permSet.size === 0;
+    if (canApproveCorrection) {
+      try {
+        const corrRows = await this.paymentRepo.manager.query(
+          `SELECT c.id, c.loan_id, c.correction_type, c.reason, c.created_at AS submitted_at,
+                  c.status, u.full_name AS submitted_by, u.username AS submitted_by_username,
+                  l.loan_number AS reference
+             FROM loan_corrections c
+             LEFT JOIN users u ON u.id = c.requested_by_id
+             LEFT JOIN loans l ON l.id = c.loan_id
+            WHERE c.tenant_id = $1 AND c.status = 'PENDING'
+            ORDER BY c.created_at ASC LIMIT 20`,
+          [tenantId],
+        );
+        const [{ cnt }] = await this.paymentRepo.manager.query(
+          `SELECT COUNT(*)::int AS cnt FROM loan_corrections WHERE tenant_id = $1 AND status = 'PENDING'`,
+          [tenantId],
+        );
+        corrections = {
+          count: cnt,
+          items: corrRows.map((r: any) => ({
+            id: r.id,
+            type: 'correction',
+            reference: r.reference || `CORR-${r.id}`,
+            submittedAt: r.submitted_at,
+            status: r.status,
+            submittedBy: r.submitted_by || r.submitted_by_username || '—',
+            description: `${r.correction_type}: ${r.reason || ''}`.slice(0, 120),
+            href: `/dashboard/loans/${r.loan_id}`,
+          })),
+        };
+      } catch { /* table may not exist yet */ }
+    }
+
+    let overdueDrawers = { count: 0, items: [] as any[] };
+    const canDrawer = permSet.has('drawer.force_close') || permSet.has('drawer.view') || permSet.size === 0;
+    if (canDrawer) {
+      try {
+        const drRows = await this.paymentRepo.manager.query(
+          `SELECT d.id, d.branch_id, d.drawer_date, d.status, u.full_name AS opened_by
+             FROM cash_drawers d
+             LEFT JOIN users u ON u.id = d.user_id
+            WHERE d.tenant_id = $1 AND d.status = 'open'
+              AND d.drawer_date < (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Kampala')::date
+            ORDER BY d.drawer_date ASC LIMIT 20`,
+          [tenantId],
+        );
+        overdueDrawers = {
+          count: drRows.length,
+          items: drRows.map((r: any) => ({
+            id: r.id,
+            type: 'overdue_drawer',
+            reference: `DRW-${r.id}`,
+            branchId: r.branch_id,
+            submittedAt: r.drawer_date,
+            status: 'overdue',
+            submittedBy: r.opened_by || '—',
+            description: `Open since ${r.drawer_date} — requires force-close`,
+            href: `/dashboard/finance/drawers`,
+          })),
+        };
+      } catch { /* ignore */ }
+    }
+
+    return {
+      loans,
+      expenses,
+      reversals,
+      corrections,
+      overdueDrawers,
+      total:
+        loans.count +
+        expenses.count +
+        reversals.count +
+        corrections.count +
+        overdueDrawers.count,
+      generatedAt: new Date().toISOString(),
+    };
+  }
 }

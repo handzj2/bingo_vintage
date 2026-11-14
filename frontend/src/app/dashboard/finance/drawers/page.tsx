@@ -20,7 +20,15 @@ export default function DrawerOverviewPage() {
   const router = useRouter();
 
   const role      = (user?.role ?? '').toLowerCase();
-  const canAccess = role === 'admin' || role === 'manager' || role === 'superadmin' || can('drawer.view');
+  const canAccess =
+    role === 'admin' ||
+    role === 'manager' ||
+    role === 'superadmin' ||
+    can('drawer.view') ||
+    can('drawer.manage') ||
+    can('drawer.open') ||
+    can('drawer.close') ||
+    can('drawer.force_close');
 
   useEffect(() => {
     if (!isLoading && !user) {

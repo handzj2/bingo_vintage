@@ -19,15 +19,18 @@ export class CashDrawerController {
   constructor(private readonly drawerService: CashDrawerService) {}
 
   @Post('open')
-  @RequirePermission('drawer.manage')
-  @ApiOperation({ summary: 'Open a new cash drawer' })
+  @RequirePermission('drawer.open')
+  @ApiOperation({ summary: 'Open a new cash drawer for the branch/business day' })
   async open(@Body() dto: OpenDrawerDto, @Request() req) {
-    return this.drawerService.open(req.user, dto.openingBalance);
+    return this.drawerService.open(req.user, dto.openingBalance, {
+      isOverride: dto.isOverride,
+      overrideReason: dto.overrideReason,
+    });
   }
 
   @Get('current')
   @RequirePermission('drawer.view')
-  @ApiOperation({ summary: "Get current open drawer for logged-in user" })
+  @ApiOperation({ summary: "Get current open drawer for logged-in user's branch" })
   async getCurrent(@Request() req) {
     return this.drawerService.getCurrent(req.user);
   }
@@ -49,11 +52,9 @@ export class CashDrawerController {
     );
   }
 
-  // Bulk version of getSummary — avoids N+1 calls when a manager views
-  // all open drawers at a branch side by side (one cashier per drawer).
   @Get('summaries')
   @RequirePermission('drawer.view')
-  @ApiOperation({ summary: 'Today\'s transaction totals + balance for every open drawer at a branch' })
+  @ApiOperation({ summary: "Today's transaction totals + balance for every open drawer at a branch" })
   async getSummaries(
     @Request() req,
     @Query('branchId') branchId?: string,
@@ -64,18 +65,14 @@ export class CashDrawerController {
     );
   }
 
-  // Single-drawer version of getSummary — used by the "My Drawer" self-service
-  // page so a cashier can see their own live balance + today's totals.
-  // history must be before :id so it is not mistakenly routed as an ID
   @Get('history')
-  @RequirePermission('drawer.manage')
+  @RequirePermission('drawer.view')
   @ApiOperation({ summary: 'Get drawer history' })
   async getHistory(
     @Request() req,
     @Query('branchId') branchId?: number,
     @Query('userId')   userId?:   number,
   ) {
-    // Phase 5.1 RESTORED: branchId and userId filters forwarded to service
     return this.drawerService.findAll(
       req.user.tenantId,
       undefined,
@@ -86,12 +83,12 @@ export class CashDrawerController {
 
   @Get(':id/summary')
   @RequirePermission('drawer.view')
-  @ApiOperation({ summary: 'Today\'s transaction totals + balance for one drawer' })
+  @ApiOperation({ summary: "Today's transaction totals + balance for one drawer" })
   async getDrawerSummary(@Param('id', ParseIntPipe) id: number, @Request() req) {
     return this.drawerService.getSummary(id, req.user.tenantId);
   }
 
-    @Get(':id')
+  @Get(':id')
   @RequirePermission('drawer.view')
   @ApiOperation({ summary: 'Get a single cash drawer' })
   async findOne(@Param('id', ParseIntPipe) id: number, @Request() req) {
@@ -99,16 +96,35 @@ export class CashDrawerController {
   }
 
   @Post('close/:id')
-  @RequirePermission('drawer.manage')
-  @ApiOperation({ summary: 'Close a drawer' })
+  @RequirePermission('drawer.close')
+  @ApiOperation({ summary: 'Close a drawer (same-day)' })
   async close(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: CloseDrawerDto,
     @Request() req,
   ) {
+    // Force-close is a stricter permission; controller still accepts the flag
+    // but service + PermissionGuard combination enforces drawer.force_close
+    // for late drawers (PermissionGuard is checked first; service re-validates).
     return this.drawerService.close(id, req.user, dto.actualCash, {
       forceClose: dto.forceClose,
       forceReason: dto.forceReason,
+      discrepancyReason: (dto as any).discrepancyReason,
+    });
+  }
+
+  @Post('force-close/:id')
+  @RequirePermission('drawer.force_close')
+  @ApiOperation({ summary: 'Force-close an overdue drawer (requires counted cash + reason)' })
+  async forceClose(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CloseDrawerDto,
+    @Request() req,
+  ) {
+    return this.drawerService.close(id, req.user, dto.actualCash, {
+      forceClose: true,
+      forceReason: dto.forceReason,
+      discrepancyReason: (dto as any).discrepancyReason,
     });
   }
 }

@@ -68,6 +68,30 @@ export class CashDrawer {
   @Column({ name: 'closed_at', nullable: true })
   closedAt: Date;
 
+  /** Force-close metadata (persisted — was previously only transient) */
+  @Column({ name: 'force_close_reason', type: 'text', nullable: true })
+  forceCloseReason: string | null;
+
+  @Column({ name: 'force_closed_by_id', nullable: true })
+  forceClosedById: number | null;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'force_closed_by_id' })
+  forceClosedBy: User;
+
+  @Column({ name: 'force_closed_at', type: 'timestamptz', nullable: true })
+  forceClosedAt: Date | null;
+
+  @Column({ type: 'text', nullable: true })
+  notes: string | null;
+
+  /** True when a manager/admin opened the drawer outside normal cashier flow */
+  @Column({ name: 'is_override_open', default: false })
+  isOverrideOpen: boolean;
+
+  @Column({ name: 'override_open_reason', type: 'text', nullable: true })
+  overrideOpenReason: string | null;
+
   @OneToMany(() => Payment, payment => payment.cashDrawer)
   payments: Payment[];
 

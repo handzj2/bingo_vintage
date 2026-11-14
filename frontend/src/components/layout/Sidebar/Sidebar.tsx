@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePendingWork } from '@/hooks/usePendingWork';
 import {
   Home,
   Users,
@@ -99,32 +100,42 @@ export default function Sidebar() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
   const { user, logout } = useAuth();
-
-  useEffect(() => {
-    if (user) {
-      const filtered = ALL_NAV.filter(item => canView(user, item.permKey, item.defaultRoles));
-      console.log('Filtered sidebar items:', filtered.map(i => i.name));
-    }
-  }, [user]);
+  const { data: pending } = usePendingWork();
 
   const filteredNavigation = ALL_NAV.filter(item =>
     canView(user, item.permKey, item.defaultRoles)
   );
 
-  const SidebarItem = ({ href, icon: Icon, isActive, children }: any) => (
+  /** Live badge count for operational nav items */
+  const badgeFor = (href: string, name: string): number => {
+    if (name === 'Pending Approvals' || href.includes('expenses/approval')) {
+      return pending.expenses.count + pending.loans.count + pending.reversals.count;
+    }
+    if (href.includes('/loans') && !href.includes('approval')) return pending.loans.count;
+    if (href.includes('/expenses') && !href.includes('approval')) return pending.expenses.count;
+    if (href.includes('/reversals')) return pending.reversals.count;
+    return 0;
+  };
+
+  const SidebarItem = ({ href, icon: Icon, isActive, children, badge }: any) => (
     <Link
       href={href}
       onClick={() => setSidebarOpen(false)}
       className={`group flex items-center px-2 py-2 text-sm font-medium rounded-lg transition-colors ${
         isActive
-          ? 'bg-blue-50 text-blue-700'
-          : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+          ? 'bg-slate-100 text-slate-900'
+          : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
       }`}
     >
-      <Icon className={`mr-3 h-5 w-5 ${
-        isActive ? 'text-blue-500' : 'text-gray-400 group-hover:text-gray-500'
+      <Icon className={`mr-3 h-5 w-5 shrink-0 ${
+        isActive ? 'text-slate-700' : 'text-slate-400 group-hover:text-slate-500'
       }`} />
-      {children}
+      <span className="flex-1 truncate">{children}</span>
+      {badge > 0 && (
+        <span className="ml-2 min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full bg-red-600 text-white text-[10px] font-bold leading-none">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
     </Link>
   );
 
@@ -165,7 +176,8 @@ export default function Sidebar() {
               key={item.name}
               href={item.href}
               icon={item.icon}
-              isActive={pathname.startsWith(item.href)}
+              isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
+              badge={badgeFor(item.href, item.name)}
             >
               {item.name}
             </SidebarItem>

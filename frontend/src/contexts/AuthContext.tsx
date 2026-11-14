@@ -134,42 +134,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshUser = useCallback(async (throwOn401 = false) => {
     try {
-    const res = await api.get<MeResponse>('/auth/me');
+      const res = await api.get<MeResponse>('/auth/me');
 
-    if (res.success && res.data) {
-      const d = res.data;
-      persistUser({
-        id:                 d.id,
-        username:           d.username,
-        email:              d.email,
-        full_name:          d.full_name ?? d.username,
-        role:               d.role_name ?? d.roleName ?? d.role ?? 'unknown',
-        tenantId:           d.tenantId ?? d.tenant_id ?? undefined,
-        branchId:           d.branchId ?? d.branch_id ?? undefined,
-        // Normalize permissions: /me returns string[] (serialized Set), 
-        // but we also support Record<string,boolean> for custom overrides.
-        permissions:        Array.isArray(d.permissions)
-                              ? d.permissions
-                              : (d.permissions && typeof d.permissions === 'object'
-                                  ? d.permissions
-                                  : []),
-        mustChangePassword: d.must_change_password ?? false,
-      });
-    } else {
-      // 401 = token expired, missing branch, or tenant check failed
-      api.clearToken();
-      clearUser();
-      if (throwOn401) {
-        throw new Error(res.message ?? 'Account setup incomplete. Contact your administrator.');
+      if (res.success && res.data) {
+        const d = res.data;
+        persistUser({
+          id:                 d.id,
+          username:           d.username,
+          email:              d.email,
+          full_name:          d.full_name ?? d.username,
+          role:               d.role_name ?? d.roleName ?? d.role ?? 'unknown',
+          tenantId:           d.tenantId ?? d.tenant_id ?? undefined,
+          branchId:           d.branchId ?? d.branch_id ?? undefined,
+          permissions:        Array.isArray(d.permissions)
+                                ? d.permissions
+                                : (d.permissions && typeof d.permissions === 'object'
+                                    ? d.permissions
+                                    : []),
+          mustChangePassword: d.must_change_password ?? false,
+        });
+        return;
       }
-    }
-    } catch (err: any) {
-      // Re-throw during login flow so login page can surface the message
-      if (throwOn401) throw err;
-      // Background refresh failure — clear session gracefully
-      console.warn('refreshUser failed:', err);
+
+      // Distinguish account-setup failures from true auth failures.
+      // Backend prefixes these with ACCOUNT_SETUP: so the login page can show a clear message.
+      const msg = res.message ?? '';
+      const isAccountSetup = msg.includes('ACCOUNT_SETUP') || msg.includes('not assigned to a');
+      const isNetwork = res.status === 0;
+
+      if (throwOn401) {
+        // During login: surface the real reason, do not pretend credentials were wrong
+        if (isNetwork) {
+          throw new Error('Network error — could not reach the server. Check your connection and try again.');
+        }
+        if (isAccountSetup) {
+          // Keep the token cleared so the user is not left in a half-logged-in state
+          api.clearToken();
+          clearUser();
+          throw new Error(
+            msg.replace(/^ACCOUNT_SETUP:\s*/i, '') ||
+            'Your account is missing a required tenant or branch assignment. Contact your administrator.',
+          );
+        }
+        api.clearToken();
+        clearUser();
+        throw new Error(msg || 'Session could not be established. Please try again.');
+      }
+
+      // Background refresh: only clear session on real auth failures, not transient network errors
+      if (isNetwork) {
+        console.warn('refreshUser: network error — leaving existing session intact');
+        return;
+      }
       api.clearToken();
       clearUser();
+    } catch (err: any) {
+      if (throwOn401) throw err;
+      // Background: do not destroy session on unexpected exceptions (e.g. JSON parse)
+      console.warn('refreshUser failed:', err?.message || err);
     }
   }, [persistUser, clearUser]);
 

@@ -33,6 +33,8 @@ import { CreateLoanDto } from './dto/create-loan.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionGuard } from '../auth/guards/permission.guard';
+import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 import { BikesService } from '../bikes/bikes.service';
 import { assertAdmin, assertRole, AuthRequest } from '../../common/helpers/role-helper';
 import { ApplyLoanDto } from './dto/apply-loan.dto';
@@ -426,14 +428,15 @@ export class LoansController {
 
   @Post(':id/approve')
   @ApiOperation({
-    summary: 'Admin or Manager: Approve or reject a loan',
-    description: 'Administrators and Managers can approve or reject loans. '
-      + 'Managers handle day-to-day portfolio approvals; Admins retain strategic override.',
+    summary: 'Approve or reject a loan (permission-based)',
+    description:
+      'Requires loan.approve permission (role or individual grant). ' +
+      'Tenant isolation and pending-status checks are enforced in the service.',
   })
   @ApiParam({ name: 'id', example: 1, description: 'Loan ID' })
-  @SetMetadata('roles', ['admin', 'manager'])
+  @RequirePermission('loan.approve')
   @ApiResponse({ status: 200, description: 'Loan approval processed successfully' })
-  @ApiResponse({ status: 403, description: 'Forbidden - Admin or Manager role required' })
+  @ApiResponse({ status: 403, description: 'Forbidden - loan.approve permission required' })
   @ApiResponse({ status: 404, description: 'Loan not found' })
   async approveLoan(
     @Param('id', ParseIntPipe) id: number,
@@ -442,7 +445,8 @@ export class LoansController {
   ) {
     try {
       const user = req.user;
-      assertRole(user, ['admin', 'manager'], 'Loan approval requires Admin or Manager role.');
+      // PermissionGuard + @RequirePermission('loan.approve') already enforced.
+      // Service still enforces tenant isolation and valid status transitions.
       const result = await this.loansService.approveOrRejectLoan(id, approvalDto, user);
       // Phase 3 — Area 6: audit sensitive financial action (loan approval/rejection)
       try {
@@ -562,18 +566,25 @@ export class LoansController {
 
   @Patch(':id/reschedule')
   @ApiOperation({
-    summary: 'Correct a loan start date and regenerate its schedule',
-    description: 'Deletes the existing schedule and rebuilds it from the new start date. ' +
-                 'Only allowed when no payments have been recorded against this loan.',
+    summary: 'Safely reschedule a loan (preserves payment history)',
+    description:
+      'Corrects start date / regenerates schedule even when payments exist. ' +
+      'Original payment IDs, receipts and cash-drawer links are preserved. ' +
+      'Old schedule is versioned (superseded), not deleted.',
   })
-  @SetMetadata('roles', ['admin', 'manager'])
+  @RequirePermission('loan.reschedule')
   async rescheduleLoan(
     @Param('id', ParseIntPipe) id: number,
     @Body('startDate') startDate: string,
+    @Body('reason') reason: string,
     @Request() req: AuthRequest,
   ) {
-    assertRole(req.user, ['admin', 'manager'], 'Admin or manager access required');
-    return await this.loansService.rescheduleLoan(id, startDate, req.user);
+    if (!startDate) throw new BadRequestException('startDate is required');
+    return await this.loansService.safeRestructureLoan(
+      id,
+      { startDate, reason: reason || 'Start date correction via reschedule', correctionType: 'RESCHEDULE' },
+      req.user,
+    );
   }
 
   @Patch(':id/backdate')
@@ -599,33 +610,98 @@ export class LoansController {
     );
   }
 
-  // ==================== NEW: Edit Loan Details (admin correction with schedule regeneration) ====================
+  // ==================== SAFE LOAN CORRECTION (preserves payment history) ====================
 
   @Patch(':id/edit-details')
   @ApiOperation({
-    summary: 'Admin only: Correct loan details and regenerate the schedule',
-    description: 'Updates the loan principal, term, weekly amount, interest rate, or start date. ' +
-                 'The schedule is regenerated using the loan calculator, and all existing payments are replayed. ' +
-                 'The loan balance is recalculated unless a specific newBalance is provided.',
+    summary: 'Correct loan terms / schedule (SAFE — does not delete payments)',
+    description:
+      'Updates principal, term, rate, start date etc. Regenerates schedule via versioning. ' +
+      'Original payment IDs, receipts, cash-drawer links and reversal history are preserved. ' +
+      'Requires loan.correct_terms permission and a written reason.',
   })
   @ApiParam({ name: 'id', example: 1, description: 'Loan ID' })
-  @SetMetadata('roles', ['admin'])
-  @ApiResponse({ status: 200, description: 'Loan details updated and schedule regenerated' })
-  @ApiResponse({ status: 400, description: 'Invalid input' })
-  @ApiResponse({ status: 404, description: 'Loan not found' })
+  @RequirePermission('loan.correct_terms')
+  @ApiResponse({ status: 200, description: 'Loan corrected; payments preserved' })
   async editLoanDetails(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: EditLoanDetailsDto,
+    @Body() dto: EditLoanDetailsDto & { reason?: string },
     @Request() req: AuthRequest,
   ) {
     try {
-      const user = req.user;
-      assertAdmin(user, 'Only administrators can edit loan details');
-      return await this.loansService.editLoanDetails(id, dto, user);
+      return await this.loansService.safeRestructureLoan(
+        id,
+        {
+          principalAmount: dto.principalAmount,
+          termWeeks: dto.termWeeks,
+          termMonths: dto.termMonths,
+          weeklyAmount: dto.weeklyAmount,
+          interestRate: dto.interestRate,
+          startDate: dto.startDate,
+          reason: dto.reason || 'Loan terms correction',
+          correctionType: 'TERMS',
+        },
+        req.user,
+      );
     } catch (error) {
       if (error instanceof ForbiddenException || error instanceof BadRequestException) throw error;
-      throw new BadRequestException(errorMessage(error, 'Failed to edit loan details'));
+      throw new BadRequestException(errorMessage(error, 'Failed to correct loan details'));
     }
+  }
+
+  @Patch(':id/correct-balance')
+  @ApiOperation({
+    summary: 'Audited balance correction (does not alter principal or payment history)',
+    description: 'Requires loan.correct_balance permission and a written reason.',
+  })
+  @RequirePermission('loan.correct_balance')
+  async correctBalance(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('newBalance') newBalance: number,
+    @Body('reason') reason: string,
+    @Request() req: AuthRequest,
+  ) {
+    if (newBalance === undefined || newBalance === null) {
+      throw new BadRequestException('newBalance is required');
+    }
+    return this.loansService.correctBalance(id, Number(newBalance), reason, req.user);
+  }
+
+  @Get(':id/correction-history')
+  @ApiOperation({ summary: 'View loan correction / reschedule history' })
+  @RequirePermission('loan.view_correction_history')
+  async getCorrectionHistory(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: AuthRequest,
+  ) {
+    const rows = await this.loansService['loansRepo'].manager.query(
+      `SELECT id, correction_type, previous_snapshot, new_snapshot, reason,
+              status, requested_by_id, approved_by_id, applied_at, schedule_version, created_at
+         FROM loan_corrections
+        WHERE loan_id = $1
+        ORDER BY created_at DESC
+        LIMIT 50`,
+      [id],
+    );
+    return { loanId: id, corrections: rows };
+  }
+
+  @Post('corrections/:correctionId/decide')
+  @ApiOperation({
+    summary: 'Approve or reject a pending loan correction (dual control)',
+    description: 'Requires loan.approve_correction. Approver must differ from requester.',
+  })
+  @RequirePermission('loan.approve_correction')
+  async decideCorrection(
+    @Param('correctionId', ParseIntPipe) correctionId: number,
+    @Body('decision') decision: 'APPROVE' | 'REJECT',
+    @Body('reason') reason: string | undefined,
+    @Request() req: AuthRequest,
+  ) {
+    if (decision !== 'APPROVE' && decision !== 'REJECT') {
+      throw new BadRequestException('decision must be APPROVE or REJECT');
+    }
+    return this.loansService.decideCorrection(correctionId, decision, reason, req.user);
   }
 
   // ==================== REPORT ENDPOINTS ====================

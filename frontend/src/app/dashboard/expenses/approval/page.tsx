@@ -92,7 +92,7 @@ export default function ExpenseApprovalPage() {
   }
 
   return (
-    <RouteGuard permission="expense.approve" roles={['admin','manager']}>
+    <RouteGuard permission="expense.approve">
 
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       {/* Header */}

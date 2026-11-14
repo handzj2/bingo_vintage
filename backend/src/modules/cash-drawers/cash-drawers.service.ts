@@ -33,47 +33,69 @@ export class CashDrawerService {
   ) {}
 
   // ── Open drawer ─────────────────────────────────────────────────────────────
-  // Branch-shared model: one open drawer per BRANCH, not per cashier.
-  // Any cashier at that branch can transact against it once it's open —
-  // no close-then-reopen handover needed between shift changes. userId
-  // records who opened it (audit trail); individual transaction
-  // accountability lives on payments.created_by_id / expenses.created_by_id,
-  // independent of who the drawer itself belongs to.
-  async open(user: RequestUser, openingBalance: number): Promise<CashDrawer> {
+  // Branch-shared model: one open drawer per BRANCH + business day.
+  // Permission-driven (drawer.open). userId records who opened it (audit).
+  // Individual transaction accountability lives on payments.created_by_id /
+  // expenses.created_by_id, independent of who the drawer itself belongs to.
+  async open(
+    user: RequestUser,
+    openingBalance: number,
+    opts?: { isOverride?: boolean; overrideReason?: string },
+  ): Promise<CashDrawer> {
     if (!user.tenantId) throw new ForbiddenException('No tenant assigned to your account');
-
-    // Business rule: only cashiers open/use a drawer. Admin/manager monitor
-    // drawers via the branch overview endpoint instead.
-    const roleName = (user as any).roleName?.toLowerCase() || '';
-    if (roleName !== 'cashier') {
-      throw new ForbiddenException('Only cashiers can open a cash drawer');
-    }
-
     if (!user.branchId) {
-      throw new ForbiddenException(
-        'Branch assignment required for financial operations.',
-      );
+      throw new ForbiddenException('Branch assignment required for financial operations.');
     }
 
-    // One open drawer per BRANCH (not per user) — if a colleague at this
-    // branch already has one open, join it instead of opening a duplicate.
-    const existing = await this.drawerRepo.findOne({
-      where: { branchId: user.branchId, tenantId: user.tenantId, status: 'open' },
-    });
+    // One open drawer per BRANCH — prevent concurrent duplicate opens.
+    const existing = await this.drawerRepo
+      .createQueryBuilder('d')
+      .setLock('pessimistic_write')
+      .where('d.branch_id = :branchId', { branchId: user.branchId })
+      .andWhere('d.tenant_id = :tenantId', { tenantId: user.tenantId })
+      .andWhere('d.status = :status', { status: 'open' })
+      .getOne();
     if (existing) {
       throw new BadRequestException(
         'This branch already has an open drawer. Use the existing one instead of opening a new one.',
       );
     }
 
+    // Also block opening a second drawer for the same business day if a closed one exists
+    // (prevents "forgotten close" workarounds). Managers may override with reason.
+    const today = startOfKampalaDay(new Date());
+    const sameDayClosed = await this.drawerRepo
+      .createQueryBuilder('d')
+      .where('d.branch_id = :branchId', { branchId: user.branchId })
+      .andWhere('d.tenant_id = :tenantId', { tenantId: user.tenantId })
+      .andWhere('d.drawer_date = :d', { d: today.toISOString().slice(0, 10) })
+      .andWhere('d.status IN (:...st)', { st: ['closed', 'reconciled'] })
+      .getOne();
+
+    const isOverride = !!opts?.isOverride;
+    if (sameDayClosed && !isOverride) {
+      throw new BadRequestException(
+        'A drawer already exists for this business day and was closed. ' +
+        'A manager/admin may perform an override open with a written reason if policy permits.',
+      );
+    }
+    if (isOverride) {
+      const reason = (opts?.overrideReason || '').trim();
+      if (reason.length < 5) {
+        throw new BadRequestException('overrideReason is required (min 5 characters) for override open.');
+      }
+    }
+
     const drawer = this.drawerRepo.create({
-      tenantId:       user.tenantId,
-      branchId:       user.branchId,
-      userId:         getUserId(user),
+      tenantId:         user.tenantId,
+      branchId:         user.branchId,
+      userId:           getUserId(user),
       openingBalance,
-      currentBalance: openingBalance,
-      drawerDate:     new Date(),
-      status:         'open',
+      currentBalance:   openingBalance,
+      drawerDate:       today,
+      status:           'open',
+      isOverrideOpen:   isOverride,
+      overrideOpenReason: isOverride ? (opts?.overrideReason || null) : null,
     });
     return this.drawerRepo.save(drawer);
   }
@@ -122,24 +144,29 @@ export class CashDrawerService {
   }
 
   // ── Close drawer ─────────────────────────────────────────────────────────────
-  // Branch-shared: any cashier at the SAME branch as the drawer can close it
-  // (not just whoever opened it — shifts rotate). closedById records who
-  // actually closed it, since that may differ from userId (who opened it).
-  async close(drawerId: number, user: RequestUser, actualCash: number, opts?: { forceClose?: boolean; forceReason?: string }): Promise<CashDrawer> {
+  // Branch-shared: authorised users at the SAME branch can close.
+  // closedById records who actually closed it.
+  // Force-close reason is now persisted (force_close_reason + force_closed_by_id).
+  async close(
+    drawerId: number,
+    user: RequestUser,
+    actualCash: number,
+    opts?: { forceClose?: boolean; forceReason?: string; discrepancyReason?: string },
+  ): Promise<CashDrawer> {
     if (!user.tenantId) throw new ForbiddenException('No tenant assigned');
-
     if (!user.branchId) {
-      throw new ForbiddenException(
-        'Branch assignment required for financial operations.',
-      );
+      throw new ForbiddenException('Branch assignment required for financial operations.');
     }
 
-    const drawer = await this.drawerRepo.findOne({
-      where: { id: drawerId, tenantId: user.tenantId },
-    });
+    // Pessimistic lock to prevent concurrent double-close
+    const drawer = await this.drawerRepo
+      .createQueryBuilder('d')
+      .setLock('pessimistic_write')
+      .where('d.id = :id', { id: drawerId })
+      .andWhere('d.tenant_id = :tenantId', { tenantId: user.tenantId })
+      .getOne();
     if (!drawer) throw new NotFoundException('Drawer not found');
 
-    // FIX-CD01: state guard
     if (drawer.status !== 'open') {
       throw new BadRequestException(`Drawer is already ${drawer.status}. Cannot close.`);
     }
@@ -147,25 +174,16 @@ export class CashDrawerService {
       throw new ForbiddenException('You can only close a drawer at your own branch');
     }
 
-    // ── Same-day close policy (Kampala) ─────────────────────────────────────
-    // Cashier must close on the drawer business day. After that day ends,
-    // only manager / admin / superadmin may force-close with a written reason.
+    // ── Same-day close policy (Kampala / configured timezone) ───────────────
     const drawerDay = startOfKampalaDay(new Date(drawer.drawerDate));
     const today = startOfKampalaDay(new Date());
     const isLateClose = drawerDay.getTime() < today.getTime();
-    const role = getEffectiveRole(user).toLowerCase();
-    const canForce = ['manager', 'admin', 'superadmin', 'super_admin', 'md'].includes(role);
 
     if (isLateClose) {
       if (!opts?.forceClose) {
         throw new BadRequestException(
-          'This drawer is past its business day (Kampala). ' +
-          'A manager or admin must force-close it with a reason.',
-        );
-      }
-      if (!canForce) {
-        throw new ForbiddenException(
-          'Only a manager or administrator can force-close a late drawer.',
+          'This drawer is past its business day. ' +
+          'A user with drawer.force_close permission must force-close it with a reason and counted cash.',
         );
       }
       const reason = (opts.forceReason || '').trim();
@@ -174,13 +192,12 @@ export class CashDrawerService {
           'forceReason is required (min 5 characters) when force-closing a late drawer.',
         );
       }
-      // Stash reason on notes-like fields if present; difference already tracked
-      // Reason retained for API response / callers; no extra DB column required
-      (drawer as any)._forceCloseReason = reason;
+      drawer.forceCloseReason = reason;
+      drawer.forceClosedById = getUserId(user);
+      drawer.forceClosedAt = new Date();
     }
 
-
-    // FIX-CD03: sum collections linked to this drawer
+    // Calculate expected balance from linked transactions
     const payRow = await this.paymentRepo
       .createQueryBuilder('p')
       .where('p.cashDrawerId = :drawerId', { drawerId })
@@ -198,10 +215,22 @@ export class CashDrawerService {
     const collections = Number(payRow?.sum ?? 0);
     const expenses    = Number(expRow?.sum  ?? 0);
     const expectedBal = Number(drawer.openingBalance) + collections - expenses;
+    const difference  = Number(actualCash) - expectedBal;
+
+    // Require explanation when there is a non-zero difference
+    if (Math.abs(difference) > 0.009) {
+      const discReason = (opts?.discrepancyReason || opts?.forceReason || '').trim();
+      if (discReason.length < 3) {
+        throw new BadRequestException(
+          'A non-zero cash difference requires an explanation (discrepancyReason).',
+        );
+      }
+      drawer.notes = discReason;
+    }
 
     drawer.closingBalance  = actualCash;
     drawer.expectedBalance = expectedBal;
-    drawer.difference      = actualCash - expectedBal;
+    drawer.difference      = difference;
     drawer.currentBalance  = actualCash;
     drawer.status          = 'closed';
     drawer.closedAt        = new Date();
@@ -210,12 +239,21 @@ export class CashDrawerService {
     return this.drawerRepo.save(drawer);
   }
 
-  // ── Guard: reject payment/expense against non-open drawer ───────────────────
+  // ── Guard: reject payment/expense against non-open or stale drawer ───────────
   async assertOpen(drawerId: number, tenantId: number): Promise<CashDrawer> {
     const drawer = await this.findOne(drawerId, tenantId);
     if (drawer.status !== 'open') {
       throw new BadRequestException(
         `Cash drawer #${drawerId} is ${drawer.status}. Operations not allowed.`,
+      );
+    }
+    // Previous-day drawers must not accept new transactions
+    const drawerDay = startOfKampalaDay(new Date(drawer.drawerDate));
+    const today = startOfKampalaDay(new Date());
+    if (drawerDay.getTime() < today.getTime()) {
+      throw new BadRequestException(
+        `Cash drawer #${drawerId} belongs to a previous business day and is overdue for closing. ` +
+        `Force-close it before recording new transactions. Open a new drawer for today.`,
       );
     }
     return drawer;

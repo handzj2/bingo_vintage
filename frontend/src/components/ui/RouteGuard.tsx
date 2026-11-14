@@ -13,11 +13,18 @@ interface RouteGuardProps {
 
 /**
  * Wraps a page and enforces permission/role access.
- * Redirects to /dashboard on unauthorised access.
+ *
+ * Rules (permission-first):
+ * - Admin / superadmin always pass.
+ * - If `permission` is provided → grant when can(permission) is true.
+ *   The optional `roles` list is then ignored (permission is the source of truth).
+ * - If only `roles` is provided → grant when user.role is in the list.
+ * - This prevents the previous bug where permission="expense.approve" AND
+ *   roles={['admin','manager']} blocked authorised non-managers.
  *
  * Usage:
- *   <RouteGuard permission="report.view">
- *     <ReportsPage />
+ *   <RouteGuard permission="expense.approve">
+ *     <ExpenseApprovalPage />
  *   </RouteGuard>
  */
 export default function RouteGuard({
@@ -28,9 +35,17 @@ export default function RouteGuard({
 
   const hasAccess = (): boolean => {
     if (!user) return false;
-    if (user.role === 'admin' || user.role === 'superadmin') return true;
-    if (permission && !can(permission)) return false;
-    if (roles && !roles.includes(user.role ?? '')) return false;
+    const role = (user.role ?? '').toLowerCase();
+    if (role === 'admin' || role === 'superadmin' || role === 'super_admin') return true;
+
+    // Permission is authoritative when supplied
+    if (permission) {
+      return can(permission);
+    }
+    // Fallback to role list only when no permission is specified
+    if (roles && roles.length > 0) {
+      return roles.map(r => r.toLowerCase()).includes(role);
+    }
     return true;
   };
 

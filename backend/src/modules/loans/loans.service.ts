@@ -1021,4 +1021,481 @@ export class LoansService {
 
     return { success, skipped, errors };
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // OPERATIONAL CONTROL UPGRADE — Safe loan restructuring / correction
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Safe reschedule / terms correction that NEVER deletes historical payments.
+   *
+   * Steps:
+   * 1. Lock loan
+   * 2. Load existing COMPLETED payments (keep original IDs & references)
+   * 3. Validate proposed terms
+   * 4. Calculate new schedule via existing product calculator
+   * 5. Supersede old active schedule rows (versioning)
+   * 6. Insert new active schedule (next version)
+   * 7. Re-allocate existing payments onto the new schedule (update allocations only)
+   * 8. Recalculate balance / arrears
+   * 9. Write loan_corrections audit row
+   */
+  async safeRestructureLoan(
+    id: number,
+    dto: {
+      principalAmount?: number;
+      termWeeks?: number;
+      termMonths?: number;
+      weeklyAmount?: number;
+      interestRate?: number;
+      startDate?: string;
+      reason: string;
+      correctionType?: 'TERMS' | 'RESCHEDULE' | 'SCHEDULE';
+    },
+    user: RequestUser,
+  ) {
+    if (!dto.reason || dto.reason.trim().length < 5) {
+      throw new BadRequestException('A meaningful correction reason (min 5 chars) is required');
+    }
+
+    return this.loansRepo.manager.transaction(async (em) => {
+      const loan = await em.findOne(Loan, {
+        where: { id },
+        relations: ['client'],
+        lock: { mode: 'pessimistic_write' } as any,
+      });
+      if (!loan) throw new NotFoundException(`Loan ${id} not found`);
+      if (loan.status === LoanStatus.CANCELLED || (loan as any).deletedAt) {
+        throw new BadRequestException('Cannot restructure a cancelled or deleted loan');
+      }
+      if (loan.tenantId && user.tenantId && loan.tenantId !== user.tenantId) {
+        throw new ForbiddenException('Tenant isolation violation');
+      }
+
+      // Snapshot previous state for audit
+      const previousSnapshot = {
+        principalAmount: Number(loan.principalAmount),
+        interestRate: Number(loan.interestRate),
+        termWeeks: loan.termWeeks,
+        termMonths: loan.termMonths,
+        weeklyAmount: loan.weeklyAmount ? Number(loan.weeklyAmount) : null,
+        startDate: loan.startDate,
+        endDate: loan.endDate,
+        totalAmount: Number(loan.totalAmount),
+        balance: Number(loan.balance),
+      };
+
+      // Apply proposed term changes
+      if (dto.principalAmount !== undefined) loan.principalAmount = dto.principalAmount;
+      if (dto.termWeeks !== undefined) loan.termWeeks = dto.termWeeks;
+      if (dto.termMonths !== undefined) loan.termMonths = dto.termMonths;
+      if (dto.weeklyAmount !== undefined) loan.weeklyAmount = dto.weeklyAmount;
+      if (dto.interestRate !== undefined) loan.interestRate = dto.interestRate;
+      if (dto.startDate) {
+        const newStart = new Date(dto.startDate);
+        if (isNaN(newStart.getTime())) throw new BadRequestException('Invalid start date');
+        loan.startDate = newStart;
+      }
+
+      const weeks = loan.termWeeks || 0;
+      const termCount = weeks > 0 ? weeks : (loan.termMonths || 12);
+      const principal = Number(loan.principalAmount);
+      const startDate = new Date(loan.startDate);
+
+      const calculationMethod = (loan as any).loanType === 'bike' || weeks > 0
+        ? 'weekly_flat' : 'monthly_flat';
+      const calculator = this.loanCalculatorRegistry.resolve(calculationMethod);
+      const calculation = calculator.calculate({
+        principal,
+        termCount,
+        annualInterestRate: Number(loan.interestRate),
+        processingFee: Number(loan.processingFee ?? 0),
+        startDate,
+        ...(weeks > 0 && loan.weeklyAmount
+          ? { installmentOverride: Number(loan.weeklyAmount) }
+          : {}),
+      });
+
+      // Determine next schedule version
+      const verRow = await em.query(
+        `SELECT COALESCE(MAX(version), 0) AS max_v FROM loan_schedules WHERE loan_id = $1`,
+        [id],
+      );
+      const nextVersion = Number(verRow[0]?.max_v || 0) + 1;
+
+      // Supersede current active schedule
+      await em.query(
+        `UPDATE loan_schedules
+            SET is_active = false,
+                superseded_at = NOW(),
+                superseded_by_version = $2
+          WHERE loan_id = $1 AND is_active = true`,
+        [id, nextVersion],
+      );
+
+      // Insert new active schedule (do NOT delete old rows)
+      for (const inst of calculation.installments) {
+        const dueDateStr = inst.dueDate.toISOString().slice(0, 10);
+        await em.query(
+          `INSERT INTO loan_schedules
+             (loan_id, installment_number, due_date, amount_due, principal_due,
+              interest_due, amount_paid, status, tenant_id, branch_id,
+              version, is_active, created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,0,'PENDING',$7,$8,$9,true,NOW(),NOW())`,
+          [
+            id, inst.installmentNumber, dueDateStr, inst.amountDue,
+            inst.principalDue, inst.interestDue,
+            loan.tenantId ?? null, loan.branchId ?? null, nextVersion,
+          ],
+        );
+      }
+
+      // Load original COMPLETED payments (preserve every field)
+      const originalPayments = await em.query(
+        `SELECT id, amount, payment_date, payment_method, receipt_number,
+                notes, cash_drawer_id, created_by_id, status, reversed_at
+           FROM payments
+          WHERE loan_id = $1
+            AND status = 'COMPLETED'
+            AND (reversed_at IS NULL)
+          ORDER BY payment_date, id`,
+        [id],
+      );
+
+      // Clear previous allocations that pointed at superseded schedules
+      // (payment rows themselves stay untouched)
+      await em.query(
+        `DELETE FROM payment_allocations
+          WHERE payment_id IN (SELECT id FROM payments WHERE loan_id = $1)`,
+        [id],
+      );
+
+      // Re-allocate existing payments onto the new active schedule
+      const totalApplied = await this.reallocateExistingPayments(
+        em, id, originalPayments, nextVersion,
+      );
+
+      // Mark overdue installments on the new schedule
+      const todayStr = new Date().toISOString().slice(0, 10);
+      await em.query(
+        `UPDATE loan_schedules
+            SET status = 'OVERDUE'
+          WHERE loan_id = $1 AND is_active = true
+            AND status = 'PENDING' AND due_date < $2`,
+        [id, todayStr],
+      );
+
+      const newTotal = calculation.totalPayable;
+      const finalBalance = Math.max(0, newTotal - totalApplied);
+
+      // Update loan header
+      if (dto.startDate) {
+        const newEnd = calculationMethod === 'weekly_flat'
+          ? new Date(startDate.getTime() + (termCount * 7 * 24 * 60 * 60 * 1000))
+          : addMonths(startDate, termCount);
+        loan.endDate = newEnd;
+      }
+      loan.totalAmount = newTotal as any;
+      loan.balance = finalBalance as any;
+
+      await em.save(Loan, loan);
+
+      // Audit row
+      await em.query(
+        `INSERT INTO loan_corrections
+           (tenant_id, branch_id, loan_id, correction_type,
+            previous_snapshot, new_snapshot, reason, status,
+            requested_by_id, applied_at, schedule_version, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,'APPLIED',$8,NOW(),$9,NOW(),NOW())`,
+        [
+          loan.tenantId, loan.branchId, id,
+          dto.correctionType || 'TERMS',
+          JSON.stringify(previousSnapshot),
+          JSON.stringify({
+            principalAmount: principal,
+            interestRate: Number(loan.interestRate),
+            termWeeks: loan.termWeeks,
+            termMonths: loan.termMonths,
+            weeklyAmount: loan.weeklyAmount,
+            startDate: loan.startDate,
+            endDate: loan.endDate,
+            totalAmount: newTotal,
+            balance: finalBalance,
+            scheduleVersion: nextVersion,
+            paymentsPreserved: originalPayments.length,
+            totalApplied,
+          }),
+          dto.reason.trim(),
+          (user as any).userId || (user as any).id,
+          nextVersion,
+        ],
+      );
+
+      loan.addAuditNote(
+        'SAFE_RESTRUCTURE',
+        `User ${(user as any).userId || (user as any).id}`,
+        `${dto.correctionType || 'TERMS'} correction. Reason: ${dto.reason.trim()}. ` +
+        `Schedule v${nextVersion}. ${originalPayments.length} payments preserved. ` +
+        `Balance ${previousSnapshot.balance} → ${finalBalance}`,
+      );
+      await em.save(Loan, loan);
+
+      return {
+        success: true,
+        loanNumber: loan.loanNumber,
+        scheduleVersion: nextVersion,
+        totalAmount: newTotal,
+        balance: finalBalance,
+        paymentsPreserved: originalPayments.length,
+        totalApplied,
+        installmentsGenerated: calculation.installments.length,
+      };
+    });
+  }
+
+  /**
+   * Re-allocate existing payment rows onto the current active schedule.
+   * Does NOT create or delete payment records. Only writes payment_allocations
+   * and updates amount_paid / status on the new schedule rows.
+   */
+  private async reallocateExistingPayments(
+    em: any,
+    loanId: number,
+    payments: any[],
+    scheduleVersion: number,
+  ): Promise<number> {
+    const schedules = await em.query(
+      `SELECT id, installment_number, amount_due, due_date
+         FROM loan_schedules
+        WHERE loan_id = $1 AND is_active = true
+        ORDER BY installment_number`,
+      [loanId],
+    );
+
+    let totalApplied = 0;
+    // Work on a mutable copy of remaining amounts per original payment
+    const queue = payments.map((p) => ({
+      id: p.id,
+      remaining: Number(p.amount),
+      paymentDate: p.payment_date,
+    }));
+
+    for (const sched of schedules) {
+      if (queue.every((q) => q.remaining <= 0)) break;
+
+      const due = Number(sched.amount_due);
+      let paidOnThis = 0;
+
+      for (const p of queue) {
+        if (p.remaining <= 0 || paidOnThis >= due) continue;
+        const apply = Math.min(p.remaining, due - paidOnThis);
+        if (apply <= 0) continue;
+
+        paidOnThis += apply;
+        p.remaining -= apply;
+        totalApplied += apply;
+
+        // Create allocation linking original payment → new schedule row
+        await em.query(
+          `INSERT INTO payment_allocations
+             (payment_id, schedule_id, amount_applied, instalment_applied, penalty_applied,
+              schedule_version, created_at)
+           VALUES ($1, $2, $3, $3, 0, $4, NOW())`,
+          [p.id, sched.id, apply, scheduleVersion],
+        );
+      }
+
+      // Update the schedule row itself
+      const status = paidOnThis >= due - 0.009 ? 'PAID' : (paidOnThis > 0 ? 'PARTIAL' : 'PENDING');
+      await em.query(
+        `UPDATE loan_schedules
+            SET amount_paid = $1, status = $2, updated_at = NOW()
+          WHERE id = $3`,
+        [paidOnThis, status, sched.id],
+      );
+    }
+
+    // Any remaining unallocated amount is left on the payments (excess / future)
+    // We do not invent schedule rows for it.
+    return totalApplied;
+  }
+
+  /**
+   * Audited balance-only correction. Does not alter principal, interest earned,
+   * or historical payments. Creates a loan_corrections record.
+   *
+   * Dual-control: if the actor does not also hold loan.approve_correction,
+   * the correction is stored as PENDING and does not change the loan balance
+   * until a different authorised user approves it.
+   */
+  async correctBalance(
+    id: number,
+    newBalance: number,
+    reason: string,
+    user: RequestUser,
+  ) {
+    if (!reason || reason.trim().length < 5) {
+      throw new BadRequestException('A meaningful reason is required for balance correction');
+    }
+    if (newBalance < 0) {
+      throw new BadRequestException('Balance cannot be negative');
+    }
+
+    return this.loansRepo.manager.transaction(async (em) => {
+      const loan = await em.findOne(Loan, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' } as any,
+      });
+      if (!loan) throw new NotFoundException(`Loan ${id} not found`);
+      if (loan.tenantId && user.tenantId && loan.tenantId !== user.tenantId) {
+        throw new ForbiddenException('Tenant isolation violation');
+      }
+
+      const previousBalance = Number(loan.balance);
+      const previousSnapshot = { balance: previousBalance, totalAmount: Number(loan.totalAmount) };
+      const actorId = (user as any).userId || (user as any).id;
+      const perms: Set<string> = (user as any).permissions instanceof Set
+        ? (user as any).permissions
+        : new Set(Array.isArray((user as any).permissions) ? (user as any).permissions : []);
+      const canSelfApply = perms.has('loan.approve_correction')
+        || ['admin', 'superadmin', 'super_admin'].includes(((user as any).roleName || '').toLowerCase());
+
+      if (!canSelfApply) {
+        // Dual-control: queue only — do not change balance yet
+        const [row] = await em.query(
+          `INSERT INTO loan_corrections
+             (tenant_id, branch_id, loan_id, correction_type,
+              previous_snapshot, new_snapshot, reason, status,
+              requested_by_id, created_at, updated_at)
+           VALUES ($1,$2,$3,'BALANCE',$4::jsonb,$5::jsonb,$6,'PENDING',$7,NOW(),NOW())
+           RETURNING id`,
+          [
+            loan.tenantId, loan.branchId, id,
+            JSON.stringify(previousSnapshot),
+            JSON.stringify({ balance: newBalance }),
+            reason.trim(),
+            actorId,
+          ],
+        );
+        return {
+          success: true,
+          status: 'PENDING',
+          correctionId: row?.id,
+          message: 'Balance correction submitted for approval. A second authorised user must approve.',
+          previousBalance,
+          newBalance,
+        };
+      }
+
+      loan.balance = newBalance as any;
+      await em.save(Loan, loan);
+
+      await em.query(
+        `INSERT INTO loan_corrections
+           (tenant_id, branch_id, loan_id, correction_type,
+            previous_snapshot, new_snapshot, reason, status,
+            requested_by_id, approved_by_id, applied_at, created_at, updated_at)
+         VALUES ($1,$2,$3,'BALANCE',$4::jsonb,$5::jsonb,$6,'APPLIED',$7,$7,NOW(),NOW(),NOW())`,
+        [
+          loan.tenantId, loan.branchId, id,
+          JSON.stringify(previousSnapshot),
+          JSON.stringify({ balance: newBalance }),
+          reason.trim(),
+          actorId,
+        ],
+      );
+
+      loan.addAuditNote(
+        'BALANCE_CORRECTION',
+        `User ${actorId}`,
+        `Balance corrected ${previousBalance} → ${newBalance}. Reason: ${reason.trim()}`,
+      );
+      await em.save(Loan, loan);
+
+      return {
+        success: true,
+        status: 'APPLIED',
+        loanNumber: loan.loanNumber,
+        previousBalance,
+        newBalance,
+      };
+    });
+  }
+
+  /**
+   * Dual-control: approve or reject a PENDING loan correction.
+   * Approver must differ from requester. Applies balance change only on approve.
+   */
+  async decideCorrection(
+    correctionId: number,
+    decision: 'APPROVE' | 'REJECT',
+    reason: string | undefined,
+    user: RequestUser,
+  ) {
+    const actorId = (user as any).userId || (user as any).id;
+    return this.loansRepo.manager.transaction(async (em) => {
+      const [corr] = await em.query(
+        `SELECT * FROM loan_corrections WHERE id = $1 FOR UPDATE`,
+        [correctionId],
+      );
+      if (!corr) throw new NotFoundException('Correction not found');
+      if (corr.tenant_id && user.tenantId && corr.tenant_id !== user.tenantId) {
+        throw new ForbiddenException('Tenant isolation violation');
+      }
+      if (corr.status !== 'PENDING') {
+        throw new BadRequestException(`Correction is already ${corr.status}`);
+      }
+      if (Number(corr.requested_by_id) === Number(actorId)) {
+        throw new ForbiddenException(
+          'You cannot approve or reject your own correction request (dual control).',
+        );
+      }
+
+      if (decision === 'REJECT') {
+        await em.query(
+          `UPDATE loan_corrections
+              SET status = 'REJECTED', approved_by_id = $1, updated_at = NOW()
+            WHERE id = $2`,
+          [actorId, correctionId],
+        );
+        return { success: true, status: 'REJECTED', correctionId };
+      }
+
+      // APPROVE
+      const snapshot = typeof corr.new_snapshot === 'string'
+        ? JSON.parse(corr.new_snapshot)
+        : corr.new_snapshot;
+
+      if (corr.correction_type === 'BALANCE' && snapshot?.balance != null) {
+        await em.query(
+          `UPDATE loans SET balance = $1, updated_at = NOW() WHERE id = $2`,
+          [snapshot.balance, corr.loan_id],
+        );
+      }
+      // TERMS / RESCHEDULE that were queued as PENDING would need re-application;
+      // current path applies balance immediately on approve.
+
+      await em.query(
+        `UPDATE loan_corrections
+            SET status = 'APPLIED', approved_by_id = $1, applied_at = NOW(), updated_at = NOW()
+          WHERE id = $2`,
+        [actorId, correctionId],
+      );
+
+      await em.query(
+        `UPDATE loans SET notes = COALESCE(notes,'') || $1, updated_at = NOW() WHERE id = $2`,
+        [
+          `\n[CORRECTION_APPROVED] #${correctionId} by user ${actorId}. ${reason || ''}`.slice(0, 500),
+          corr.loan_id,
+        ],
+      );
+
+      return {
+        success: true,
+        status: 'APPLIED',
+        correctionId,
+        loanId: corr.loan_id,
+      };
+    });
+  }
 }

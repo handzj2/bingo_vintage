@@ -80,25 +80,35 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     // Rule 1: tenantId must never be null UNLESS the user is a superadmin
-    const isSuperAdmin = (row.roleName ?? '').toLowerCase() === 'superadmin';
+    const isSuperAdmin = (row.roleName ?? '').toLowerCase() === 'superadmin'
+      || (row.roleName ?? '').toLowerCase() === 'super_admin';
     if (!row.tenantId && !isSuperAdmin) {
+      this.logger.warn(`User ${row.id} (${row.username}) has no tenant_id`);
       throw new UnauthorizedException(
-        'Your account is not assigned to a tenant. Contact your administrator.',
+        'ACCOUNT_SETUP: Your account is not assigned to a tenant. Contact your administrator.',
       );
     }
 
     const roleName: string = row.roleName ?? payload.roleName ?? 'unknown';
     if (roleName === 'unknown') {
+      this.logger.warn(`User ${row.id} (${row.username}) has no role assigned`);
       throw new UnauthorizedException(
-        'Your account has no role assigned. Contact your administrator.',
+        'ACCOUNT_SETUP: Your account has no role assigned. Contact your administrator.',
       );
     }
 
     // Rule 2: branchId required only for branch-scoped operational roles
+    // Do NOT remove this check — it is a legitimate security boundary.
+    // Cross-device login failures for these roles almost always mean missing branch_id.
     const requiresBranch = BRANCH_REQUIRED_ROLES.includes(roleName.toLowerCase());
     if (requiresBranch && !row.branchId) {
+      this.logger.warn(
+        `User ${row.id} (${row.username}) role=${roleName} has no branch_id — login will fail on /auth/me`,
+      );
       throw new UnauthorizedException(
-        'Your account is not assigned to a branch. Contact your administrator.',
+        'ACCOUNT_SETUP: Your account is not assigned to a branch. ' +
+        'Cashiers, tellers and branch staff must have a branch before they can log in. ' +
+        'Contact your administrator.',
       );
     }
 
