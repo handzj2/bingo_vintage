@@ -40,7 +40,7 @@ export class BranchesService {
     if (!fields.name) throw new BadRequestException('Branch name is required');
     const tenantId = callerTenantId ?? (data as any)?.tenantId;
     if (!tenantId) throw new BadRequestException('Tenant is required');
-    const branch = this.branchRepo.create({ ...fields, tenantId });
+    const branch = this.branchRepo.create({ ...fields, tenantId }) as Branch;
     return this.branchRepo.save(branch);
   }
 
