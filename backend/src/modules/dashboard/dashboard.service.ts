@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Payment } from '../payments/entities/payment.entity';
@@ -148,7 +148,7 @@ export class DashboardService {
                 u.full_name AS submitted_by, u.username AS submitted_by_username,
                 c.full_name AS client_name
            FROM loans l
-           LEFT JOIN users u ON u.id = l.created_by_id
+           LEFT JOIN users u ON u.id = l.created_by
            LEFT JOIN clients c ON c.id = l.client_id
           WHERE l.tenant_id = $1
             AND l.status IN ('PENDING_APPROVAL', 'PENDING')
@@ -257,8 +257,17 @@ export class DashboardService {
           })),
         };
       } catch (e: any) {
-        // Surface it: a silent empty queue hides real failures (e.g. migration 034 not run).
-        this.logger.error(`pending-work reversals query failed: ${e?.message}`);
+        // Do not present a failed query as an empty queue. Log structured detail and rethrow
+        // so the controller / frontend can surface a clear error state.
+        this.logger.error(
+          `pending-work reversals query failed (tenant=${tenantId}, branch=${branchId ?? 'all'}): ${e?.message}`,
+          e?.stack,
+        );
+        throw new ServiceUnavailableException(
+          `Unable to load pending payment reversals. Database query failed. ` +
+          `This often indicates a missing migration (e.g. 034 PaymentReversalRequestTracking) ` +
+          `or a schema mismatch. Check server logs for details.`,
+        );
       }
     }
 
@@ -295,7 +304,17 @@ export class DashboardService {
             href: `/dashboard/loans/${r.loan_id}#loan-corrections`,
           })),
         };
-      } catch { /* table may not exist yet */ }
+      } catch (e: any) {
+        this.logger.error(
+          `pending-work corrections query failed (tenant=${tenantId}): ${e?.message}`,
+          e?.stack,
+        );
+        throw new ServiceUnavailableException(
+          `Unable to load pending loan corrections. Database query failed. ` +
+          `This often indicates a missing migration (e.g. 032 LoanScheduleVersioningAndCorrection) ` +
+          `or a schema mismatch on loan_corrections. Check server logs for details.`,
+        );
+      }
     }
 
     let overdueDrawers = { count: 0, items: [] as any[] };
@@ -334,7 +353,16 @@ export class DashboardService {
             href: `/dashboard/finance/drawers`,
           })),
         };
-      } catch { /* ignore */ }
+      } catch (e: any) {
+        this.logger.error(
+          `pending-work overdue-drawers query failed (tenant=${tenantId}, branch=${branchId ?? 'all'}): ${e?.message}`,
+          e?.stack,
+        );
+        throw new ServiceUnavailableException(
+          `Unable to load overdue cash drawers. Database query failed. ` +
+          `Check server logs for missing columns or schema mismatch on cash_drawers.`,
+        );
+      }
     }
 
     return {
