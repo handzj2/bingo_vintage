@@ -1177,13 +1177,12 @@ export class LoansService {
         [id],
       );
 
-      // Clear previous allocations that pointed at superseded schedules
-      // (payment rows themselves stay untouched)
-      await em.query(
-        `DELETE FROM payment_allocations
-          WHERE payment_id IN (SELECT id FROM payments WHERE loan_id = $1)`,
-        [id],
-      );
+      // Do NOT delete prior payment_allocations. Old rows remain linked to the
+      // superseded (is_active = false) schedule versions and form the immutable
+      // allocation history. New allocations are written only against the new
+      // active schedule (with schedule_version set). This preserves original
+      // payment IDs, receipt references, payment dates, drawer links and
+      // reversal history.
 
       // Re-allocate existing payments onto the new active schedule
       const totalApplied = await this.reallocateExistingPayments(
@@ -1310,13 +1309,17 @@ export class LoansService {
         p.remaining -= apply;
         totalApplied += apply;
 
-        // Create allocation linking original payment → new schedule row
+        // Create allocation linking original payment → new schedule row.
+        // previous_status / new_status are NOT NULL on the table (migration 027).
+        // For a restructure we treat the schedule as having been PENDING before
+        // this historical re-allocation.
+        const newStatus = paidOnThis >= due - 0.009 ? 'PAID' : 'PARTIAL';
         await em.query(
           `INSERT INTO payment_allocations
              (payment_id, schedule_id, amount_applied, instalment_applied, penalty_applied,
-              schedule_version, created_at)
-           VALUES ($1, $2, $3, $3, 0, $4, NOW())`,
-          [p.id, sched.id, apply, scheduleVersion],
+              previous_status, new_status, schedule_version, created_at)
+           VALUES ($1, $2, $3, $3, 0, 'PENDING', $4, $5, NOW())`,
+          [p.id, sched.id, apply, newStatus, scheduleVersion],
         );
       }
 
@@ -1490,24 +1493,29 @@ export class LoansService {
         return { success: true, status: 'REJECTED', correctionId };
       }
 
-      // APPROVE
+      // APPROVE — only mark APPLIED after the requested change has been applied successfully.
       const snapshot = typeof corr.new_snapshot === 'string'
         ? JSON.parse(corr.new_snapshot)
         : corr.new_snapshot;
+      const prev = typeof corr.previous_snapshot === 'string'
+        ? JSON.parse(corr.previous_snapshot) : corr.previous_snapshot;
 
       if (corr.correction_type === 'BALANCE' && snapshot?.balance != null) {
         const [loanRow] = await em.query(
-          `SELECT id, balance, status, tenant_id FROM loans WHERE id = $1 FOR UPDATE`,
+          `SELECT id, balance, status, tenant_id, branch_id FROM loans WHERE id = $1 FOR UPDATE`,
           [corr.loan_id],
         );
         if (!loanRow) throw new NotFoundException(`Loan ${corr.loan_id} not found`);
         if (loanRow.tenant_id && user.tenantId && loanRow.tenant_id !== user.tenantId) {
           throw new ForbiddenException('Tenant isolation violation');
         }
+        // Optional branch scope check when the correction recorded a branch
+        if (corr.branch_id != null && loanRow.branch_id != null
+            && Number(corr.branch_id) !== Number(loanRow.branch_id)) {
+          throw new ForbiddenException('Branch scope mismatch for this correction');
+        }
         // The request stored an ABSOLUTE balance. If payments/reversals changed the balance
         // while it waited, applying it would silently wipe them out.
-        const prev = typeof corr.previous_snapshot === 'string'
-          ? JSON.parse(corr.previous_snapshot) : corr.previous_snapshot;
         if (prev?.balance != null && Number(loanRow.balance) !== Number(prev.balance)) {
           throw new ConflictException(
             `The loan balance changed since this correction was requested (was ${Number(prev.balance)}, now ${Number(loanRow.balance)}). ` +
@@ -1516,16 +1524,37 @@ export class LoansService {
         }
         const nextStatus = statusAfterBalanceCorrection(String(loanRow.status), Number(snapshot.balance));
         if (nextStatus !== String(loanRow.status)) {
-          await em.query(`UPDATE loans SET balance = $1, status = $2, updated_at = NOW() WHERE id = $3`,
-            [snapshot.balance, nextStatus, corr.loan_id]);
+          await em.query(
+            `UPDATE loans SET balance = $1, status = $2, updated_at = NOW() WHERE id = $3`,
+            [snapshot.balance, nextStatus, corr.loan_id],
+          );
         } else {
-          await em.query(`UPDATE loans SET balance = $1, updated_at = NOW() WHERE id = $2`,
-            [snapshot.balance, corr.loan_id]);
+          await em.query(
+            `UPDATE loans SET balance = $1, updated_at = NOW() WHERE id = $2`,
+            [snapshot.balance, corr.loan_id],
+          );
         }
+      } else if (
+        corr.correction_type === 'TERMS' ||
+        corr.correction_type === 'RESCHEDULE' ||
+        corr.correction_type === 'SCHEDULE'
+      ) {
+        // These types require a full safeRestructure path (new schedule version,
+        // payment re-allocation). They must not be marked APPLIED from the queue
+        // decision endpoint until that path is wired for dual-control approval.
+        throw new BadRequestException(
+          `Correction type '${corr.correction_type}' cannot be approved from the work-queue decision endpoint. ` +
+          `Only BALANCE corrections are applied here. Reject this request and re-submit via the reschedule / terms endpoint, ` +
+          `or implement dual-control application for this type.`,
+        );
+      } else {
+        throw new BadRequestException(
+          `Unsupported or unknown correction type '${corr.correction_type}'. ` +
+          `Only BALANCE corrections can be approved through this path. Reject the request.`,
+        );
       }
-      // TERMS / RESCHEDULE that were queued as PENDING would need re-application;
-      // current path applies balance immediately on approve.
 
+      // Only reached when the change above succeeded (or was a no-op status-wise).
       await em.query(
         `UPDATE loan_corrections
             SET status = 'APPLIED', approved_by_id = $1, applied_at = NOW(), updated_at = NOW()
