@@ -33,6 +33,7 @@ export default function LoanCorrectionPanel({ loan, onChanged, request }: { loan
   const [reason, setReason] = useState('');
   const [startDate, setStartDate] = useState('');
   const [balance, setBalance] = useState('');
+  const [booksPaid, setBooksPaid] = useState('');
   const [terms, setTerms] = useState({ principalAmount: '', interestRate: '', termWeeks: '', termMonths: '', weeklyAmount: '' });
   const [history, setHistory] = useState<any[] | null>(null);
   const [histErr, setHistErr] = useState('');
@@ -63,7 +64,7 @@ export default function LoanCorrectionPanel({ loan, onChanged, request }: { loan
 
   if (!(mayResched || mayTerms || mayBal || mayHist)) return null;
 
-  const close = () => { setMode(null); setErr(''); setReason(''); setBalance(''); setConfirmed(false); };
+  const close = () => { setMode(null); setErr(''); setReason(''); setBalance(''); setBooksPaid(''); setConfirmed(false); };
   const done = (msg: string) => { toast.success(msg); close(); onChanged(); loadHistory(); };
 
   const submit = async () => {
@@ -106,6 +107,10 @@ export default function LoanCorrectionPanel({ loan, onChanged, request }: { loan
   const balanceCorrectable = ['ACTIVE', 'COMPLETED', 'DEFAULTED'].includes(String(loan.status));
   const appliesNow = mayDecide || ['admin', 'superadmin'].includes(String(user?.role ?? '').toLowerCase());
   const curBal = Number(loan.balance ?? 0);
+  // Align-to-books helper: contract total minus what the books say was collected.
+  const contractTotal = Number(loan.totalAmount ?? loan.total_amount ?? NaN);
+  const systemPaid = Number.isFinite(contractTotal) ? contractTotal - curBal : NaN;
+  const booksPaidNum = booksPaid.trim() === '' ? NaN : Number(booksPaid);
   const newBalNum = balance.trim() === '' ? NaN : Number(balance);
   const delta = Number.isFinite(newBalNum) ? newBalNum - curBal : null;
   const fmt = (n: number) => Math.abs(n).toLocaleString();
@@ -127,6 +132,23 @@ export default function LoanCorrectionPanel({ loan, onChanged, request }: { loan
         <div className="border border-bv-border rounded-bv p-3 space-y-3 bg-bv-hover/40">
           <h3 className="text-sm font-semibold">{mode === 'reschedule' ? 'Reschedule loan' : mode === 'balance' ? 'Correct balance' : 'Correct loan terms'}</h3>
           {mode === 'reschedule' && <label className="block text-sm">New start date<input type="date" className={field} value={startDate} onChange={(e) => setStartDate(e.target.value)} /></label>}
+          {mode === 'balance' && Number.isFinite(contractTotal) && (
+            <div className="text-sm border border-bv-border rounded-bv p-3 space-y-2 bg-bv-surface">
+              <p className="font-medium">Align to the books</p>
+              <p className="text-xs text-bv-meta">Contract total {contractTotal.toLocaleString()} · system shows {systemPaid.toLocaleString()} paid · balance {curBal.toLocaleString()}</p>
+              <label className="block text-sm">Total paid per books (UGX)
+                <input type="number" min={0} className={field} value={booksPaid} placeholder="e.g. 7880000"
+                  onChange={(e) => {
+                    setBooksPaid(e.target.value); setConfirmed(false);
+                    const n = Number(e.target.value);
+                    setBalance(e.target.value.trim() !== '' && Number.isFinite(n) && n >= 0 ? String(Math.max(0, contractTotal - n)) : '');
+                  }} /></label>
+              {Number.isFinite(booksPaidNum) && (
+                <p className="text-xs">{contractTotal.toLocaleString()} − {booksPaidNum.toLocaleString()} = <b>{Math.max(0, contractTotal - booksPaidNum).toLocaleString()}</b>{booksPaidNum > contractTotal ? ' (books show more paid than the contract total; balance set to 0)' : ''}</p>
+              )}
+              <p className="text-xs text-bv-meta">If the system and books differ because some payments were wrong, reverse those payments first (client → Payments tab) instead of overriding the balance.</p>
+            </div>
+          )}
           {mode === 'balance' && <label className="block text-sm">New outstanding balance (UGX) <span className="text-bv-meta">— currently {Number(loan.balance ?? 0).toLocaleString()}</span>
             <input type="number" min={0} className={field} value={balance} onChange={(e) => { setBalance(e.target.value); setConfirmed(false); }} /></label>}
           {mode === 'balance' && delta !== null && delta !== 0 && (

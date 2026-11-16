@@ -11,13 +11,19 @@ import {
   CreditCard, Calendar, Home, ExternalLink, Plus
 } from 'lucide-react';
 import { toast } from 'sonner';
+import ClientPaymentsPanel from '@/components/clients/ClientPaymentsPanel';
+
+/** Loan statuses that still carry a balance the client is repaying. */
+const OPEN_LOAN_STATUSES = ['ACTIVE', 'DELINQUENT'];
+
+type TabKey = 'overview' | 'loans' | 'payments' | 'personal' | 'contact' | 'employment' | 'banking' | 'kin' | 'business' | 'references' | 'system';
 
 export default function ViewClientPage() {
   const router = useRouter();
   const params = useParams();
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'personal' | 'contact' | 'employment' | 'banking' | 'kin' | 'business' | 'references' | 'system'>('overview');
+  const [activeTab, setActiveTab] = useState<TabKey>('overview');
 
   useEffect(() => {
     const id = params?.id as string;
@@ -74,6 +80,11 @@ export default function ViewClientPage() {
     }
   };
 
+  // Figures come from the client's real loans, not from a stored client column.
+  const loans = client.loans ?? [];
+  const openLoans = loans.filter((l) => OPEN_LOAN_STATUSES.includes(l.status));
+  const outstanding = openLoans.reduce((sum, l) => sum + l.balance, 0);
+
   const formatCurrency = (amount: number | undefined) => {
     if (amount === undefined || amount === null) return 'UGX 0';
     return new Intl.NumberFormat('en-UG', {
@@ -90,9 +101,10 @@ export default function ViewClientPage() {
     </div>
   );
 
-  const tabs: { key: string; label: string }[] = [
+  const tabs: { key: TabKey; label: string }[] = [
     { key: 'overview',    label: 'Overview'    },
     { key: 'loans',       label: 'Loans'       },
+    { key: 'payments',    label: 'Payments'    },
     { key: 'personal',    label: 'Personal'    },
     { key: 'contact',     label: 'Contact'     },
     { key: 'employment',  label: 'Employment'  },
@@ -149,7 +161,7 @@ export default function ViewClientPage() {
                   <button
                     key={key}
                     type="button"
-                    onClick={() => setActiveTab(key as any)}
+                    onClick={() => setActiveTab(key)}
                     className={`px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                       activeTab === key
                         ? 'border-bv-action text-bv-accent'
@@ -212,22 +224,27 @@ export default function ViewClientPage() {
                       <p className="text-sm font-semibold text-bv-text tabular-nums">{formatCurrency(client.loan_limit)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-bv-meta">Account Balance</p>
-                      <p className="text-sm font-semibold text-bv-text tabular-nums">{formatCurrency(client.account_balance)}</p>
+                      <p className="text-xs text-bv-meta">Open Loans</p>
+                      <p className="text-sm font-semibold text-bv-text tabular-nums">{openLoans.length}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-bv-meta">Sync Status</p>
-                      <p className="text-sm font-semibold text-bv-text capitalize">{client.sync_status ?? 'N/A'}</p>
+                      <p className="text-xs text-bv-meta">Outstanding Balance</p>
+                      <p className="text-sm font-semibold text-bv-text tabular-nums">{formatCurrency(outstanding)}</p>
                     </div>
                   </div>
                 </div>
               )}
 
+              {/* Payments — per-client history with single / bulk reverse */}
+              {activeTab === 'payments' && (
+                <ClientPaymentsPanel clientId={String(params?.id)} />
+              )}
+
               {/* Loans */}
-              {(activeTab as any) === 'loans' && (
+              {activeTab === 'loans' && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-bv-text text-sm">Loan History</h3>
+                    <h3 className="font-semibold text-bv-text text-sm">Loan History ({loans.length})</h3>
                     <button
                       type="button"
                       onClick={() => router.push(`/dashboard/loans/create?clientId=${params?.id}`)}
@@ -236,15 +253,15 @@ export default function ViewClientPage() {
                       <Plus className="w-3.5 h-3.5" /> New Loan
                     </button>
                   </div>
-                  {(!(client as any).loans || (client as any).loans.length === 0) ? (
+                  {loans.length === 0 ? (
                     <div className="text-center py-10 text-bv-meta">
                       <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
                       <p className="text-sm">No loans found for this client</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {((client as any).loans as any[]).map((loan: any) => {
-                        const status = (loan.status || '').toUpperCase();
+                      {loans.map((loan) => {
+                        const isOpen = OPEN_LOAN_STATUSES.includes(loan.status);
                         const statusCls: Record<string, string> = {
                           ACTIVE: 'bg-bv-success-bg text-bv-success',
                           DELINQUENT: 'bg-bv-danger-bg text-bv-danger',
@@ -252,7 +269,6 @@ export default function ViewClientPage() {
                           PENDING_APPROVAL: 'bg-bv-warning-bg text-bv-warning',
                           REJECTED: 'bg-bv-hover text-bv-muted',
                         };
-                        const fmtUGX = (n: any) => `UGX ${Number(n || 0).toLocaleString()}`;
                         return (
                           <div
                             key={loan.id}
@@ -260,26 +276,36 @@ export default function ViewClientPage() {
                             onClick={() => router.push(`/dashboard/loans/${loan.id}`)}
                           >
                             <div className="flex items-center justify-between mb-2">
-                              <span className="font-mono text-sm font-bold text-bv-text">
-                                {loan.loanNumber || loan.loan_number || `#${loan.id}`}
-                              </span>
-                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusCls[status] || 'bg-bv-hover text-bv-meta'}`}>
-                                {status}
+                              <span className="font-mono text-sm font-bold text-bv-text">{loan.loanNumber}</span>
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusCls[loan.status] || 'bg-bv-hover text-bv-meta'}`}>
+                                {loan.status}
                               </span>
                             </div>
-                            <div className="grid grid-cols-3 gap-3 text-xs text-bv-meta">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-bv-meta">
                               <div>
-                                <p className="font-semibold text-bv-text tabular-nums">{fmtUGX(loan.principalAmount ?? loan.principal_amount)}</p>
+                                <p className="font-semibold text-bv-text tabular-nums">{formatCurrency(loan.principalAmount)}</p>
                                 <p>Principal</p>
                               </div>
                               <div>
-                                <p className="font-semibold text-bv-text tabular-nums">{fmtUGX(loan.balance)}</p>
+                                <p className="font-semibold text-bv-text tabular-nums">{formatCurrency(loan.totalAmount - loan.balance)}</p>
+                                <p>Paid (contract − balance)</p>
+                              </div>
+                              <div>
+                                <p className="font-semibold text-bv-text tabular-nums">{formatCurrency(loan.balance)}</p>
                                 <p>Balance</p>
                               </div>
                               <div>
-                                <p className="font-semibold text-bv-text">{loan.loanType || loan.loan_type || 'CASH'}</p>
+                                <p className="font-semibold text-bv-text">{loan.loanType || 'CASH'}</p>
                                 <p>Type</p>
                               </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-bv-border" onClick={(e) => e.stopPropagation()}>
+                              {isOpen && (
+                                <button type="button" onClick={() => router.push(`/dashboard/payments?loanId=${loan.id}`)} className="text-xs font-semibold px-2.5 py-1 bg-bv-action text-white rounded-lg hover:bg-bv-action-hover">Record payment</button>
+                              )}
+                              <button type="button" onClick={() => router.push(`/dashboard/schedules/${loan.id}`)} className="text-xs font-semibold px-2.5 py-1 border border-bv-border rounded-lg hover:bg-bv-surface">Schedule</button>
+                              <button type="button" onClick={() => setActiveTab('payments')} className="text-xs font-semibold px-2.5 py-1 border border-bv-border rounded-lg hover:bg-bv-surface">Payments</button>
+                              <button type="button" onClick={() => router.push(`/dashboard/loans/${loan.id}#loan-corrections`)} className="text-xs font-semibold px-2.5 py-1 border border-bv-border rounded-lg hover:bg-bv-surface">Corrections</button>
                             </div>
                           </div>
                         );
@@ -476,7 +502,7 @@ export default function ViewClientPage() {
               </button>
               <button
                 type="button"
-                onClick={() => router.push(`/dashboard/payments?clientId=${params?.id}`)}
+                onClick={() => router.push(`/dashboard/payments?clientId=${params?.id}&record=1`)}
                 className="w-full flex items-center gap-2 px-3 py-2.5 text-sm border border-bv-border rounded-bv hover:bg-bv-hover text-bv-text"
               >
                 <CreditCard className="h-4 w-4 text-bv-meta" />

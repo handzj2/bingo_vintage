@@ -56,6 +56,7 @@ export class PenaltyCalculationJob {
            FROM loan_schedules ls
            JOIN loans l ON l.id = ls.loan_id
           WHERE ls.status = 'OVERDUE'
+            AND COALESCE(ls.is_active, true) = true
             AND (ls.last_penalty_applied IS NULL
                  OR ls.last_penalty_applied < $1::date)`,
         [todayStr],
@@ -107,6 +108,7 @@ export class PenaltyCalculationJob {
                         ls.penalty_amount, ls.last_penalty_applied::text
                    FROM loan_schedules ls JOIN loans l ON l.id = ls.loan_id
                   WHERE ls.status = 'OVERDUE' AND l.tenant_id = $1
+                    AND COALESCE(ls.is_active, true) = true
                     AND (ls.last_penalty_applied IS NULL OR ls.last_penalty_applied < $2::date)
                   ORDER BY ls.id ASC LIMIT $3 OFFSET $4`,
                 [tenantId, todayStr, BATCH_SIZE, offset],
@@ -116,6 +118,7 @@ export class PenaltyCalculationJob {
                         ls.penalty_amount, ls.last_penalty_applied::text
                    FROM loan_schedules ls JOIN loans l ON l.id = ls.loan_id
                   WHERE ls.status = 'OVERDUE' AND l.tenant_id IS NULL
+                    AND COALESCE(ls.is_active, true) = true
                     AND (ls.last_penalty_applied IS NULL OR ls.last_penalty_applied < $1::date)
                   ORDER BY ls.id ASC LIMIT $2 OFFSET $3`,
                 [todayStr, BATCH_SIZE, offset],

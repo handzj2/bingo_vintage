@@ -91,17 +91,20 @@ export class ReportsService {
              FROM loan_schedules ls2
             WHERE ls2.loan_id = l.id AND ls2.status IN ('OVERDUE','PENDING')
               AND ls2.due_date <= CURRENT_DATE
+              AND COALESCE(ls2.is_active, true) = true
          ), 0)                                   AS expected_collections,
          COALESCE((
            SELECT SUM(ls3.amount_paid)
              FROM loan_schedules ls3
             WHERE ls3.loan_id = l.id
+              AND COALESCE(ls3.is_active, true) = true
          ), 0)                                   AS actual_collected
        FROM loans l
        LEFT JOIN loan_products lp ON lp.id = l.loan_product_id
        JOIN clients c ON c.id = l.client_id
        JOIN loan_schedules ls ON ls.loan_id = l.id
         AND ls.status = 'OVERDUE'
+        AND COALESCE(ls.is_active, true) = true
        WHERE l.status IN ('ACTIVE','DELINQUENT') AND l.tenant_id = $1
        GROUP BY l.id, l.loan_number, l.balance, l.loan_type, l.loan_product_id,
                 lp.name, lp.code, c.first_name, c.last_name, c.phone
@@ -145,6 +148,7 @@ export class ReportsService {
            SUM(ls.amount_due - ls.amount_paid) AS at_risk
          FROM loans l
          JOIN loan_schedules ls ON ls.loan_id = l.id AND ls.status = 'OVERDUE'
+           AND COALESCE(ls.is_active, true) = true
          WHERE l.status IN ('ACTIVE','DELINQUENT') AND l.tenant_id = $1
            AND l.deleted_at IS NULL
          GROUP BY l.id

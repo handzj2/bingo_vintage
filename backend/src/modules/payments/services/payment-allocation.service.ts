@@ -96,6 +96,7 @@ export class PaymentAllocationService {
               COALESCE(penalty_amount, 0) AS penalty_amount, status
          FROM loan_schedules
         WHERE loan_id = $1
+          AND COALESCE(is_active, true) = true
           AND status IN (
             'PENDING'::loan_schedules_status_enum,
             'PARTIAL'::loan_schedules_status_enum,
@@ -281,6 +282,7 @@ export class PaymentAllocationService {
               COALESCE(penalty_amount, 0) AS penalty_amount, status
          FROM loan_schedules
         WHERE loan_id = $1
+          AND COALESCE(is_active, true) = true
           AND status IN (
             'PENDING'::loan_schedules_status_enum,
             'PARTIAL'::loan_schedules_status_enum,

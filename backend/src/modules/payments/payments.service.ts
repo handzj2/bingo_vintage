@@ -605,6 +605,63 @@ export class PaymentsService {
     };
   }
 
+  /**
+   * Bulk reverse — builds on the existing reversePayment() engine.
+   * Each payment is reversed in its own transaction so one failure
+   * does not roll back the others. Returns a clear succeeded/failed summary.
+   */
+  async bulkReversePayments(paymentIds: number[], adminUser: any, reason: string) {
+    reason = (reason || '').trim();
+    if (reason.length < 10) {
+      throw new BadRequestException('Reversal reason must be at least 10 characters');
+    }
+    if (!Array.isArray(paymentIds) || paymentIds.length === 0) {
+      throw new BadRequestException('At least one payment ID is required');
+    }
+    if (paymentIds.length > 50) {
+      throw new BadRequestException('Maximum 50 payments per bulk reverse');
+    }
+
+    // Deduplicate, then reverse NEWEST FIRST (highest id first). Allocation restores each
+    // instalment to the status it had before that payment touched it (previous_status), so
+    // payments must be undone in the opposite order to how they were applied. Reversing in
+    // the order the user ticked the boxes could leave a PARTIAL instalment in the wrong state.
+    const uniqueIds = [...new Set(paymentIds.map(Number).filter((id) => Number.isInteger(id) && id > 0))]
+      .sort((a, b) => b - a);
+
+    const succeeded: { paymentId: number; reversedAmount: number; restoredBalance: number }[] = [];
+    const failed: { paymentId: number; error: string }[] = [];
+
+    for (const id of uniqueIds) {
+      try {
+        const result = await this.reversePayment(id, adminUser, reason);
+        succeeded.push({
+          paymentId: id,
+          reversedAmount: result.data?.reversedAmount ?? 0,
+          restoredBalance: result.data?.restoredBalance ?? 0,
+        });
+      } catch (err: any) {
+        failed.push({
+          paymentId: id,
+          error: err?.message || 'Unknown error',
+        });
+      }
+    }
+
+    return {
+      success: failed.length === 0,
+      message:
+        failed.length === 0
+          ? `Successfully reversed ${succeeded.length} payment(s)`
+          : `Reversed ${succeeded.length} payment(s), ${failed.length} failed`,
+      succeeded,
+      failed,
+      totalRequested: uniqueIds.length,
+      totalSucceeded: succeeded.length,
+      totalFailed: failed.length,
+    };
+  }
+
   async findOne(id: number, tenantId?: number) {
     const where: any = { id };
     if (tenantId) where.tenantId = tenantId;
@@ -743,6 +800,20 @@ export class PaymentsService {
       order: { paymentDate: 'DESC' },
       take: 200,   // single loan payments are bounded by term length
     });
+  }
+
+  /** Every payment for one client across all their loans (client profile → Payments tab). Not capped: a single client's history is bounded, and a silent cut-off would hide payments that may need reversing. */
+  async findByClientId(clientId: number, tenantId?: number) {
+    const qb = this.paymentRepo
+      .createQueryBuilder('payment')
+      .innerJoinAndSelect('payment.loan', 'loan')
+      .leftJoinAndSelect('loan.client', 'client')
+      .where('loan.clientId = :clientId', { clientId });
+    if (tenantId) qb.andWhere('payment.tenantId = :tenantId', { tenantId });
+    return qb
+      .orderBy('payment.paymentDate', 'DESC')
+      .addOrderBy('payment.id', 'DESC')
+      .getMany();
   }
 
   async requestReversal(paymentId: number, requestedBy: string, reason: string, tenantId?: number) {

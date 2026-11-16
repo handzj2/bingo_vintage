@@ -90,6 +90,7 @@ export class ArrearsCalculationJob {
               COALESCE(MAX(overdue_days), 0)  AS days_in_arrears
              FROM loan_schedules
             WHERE loan_id = ANY($1)
+              AND COALESCE(is_active, true) = true
               AND status IN ('OVERDUE', 'PARTIAL')
             GROUP BY loan_id`,
           [loanIds],

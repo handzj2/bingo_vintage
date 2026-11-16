@@ -66,6 +66,7 @@ export class OverdueScheduleJob {
                 updated_at = NOW()
           WHERE status   = 'PENDING'
             AND due_date  < $1::date
+            AND COALESCE(is_active, true) = true
           RETURNING id, loan_id`,
         [today],
       );
