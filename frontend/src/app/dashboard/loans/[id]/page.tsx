@@ -187,6 +187,7 @@ export default function LoanDetailPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Action failed');
       toast.success(approveAction === 'approved' ? 'Loan approved' : 'Loan rejected');
+      window.dispatchEvent(new Event('pending-work:refresh')); // refresh sidebar/bell counts
       setShowApproveModal(false);
       setApproveComment('');
       load();

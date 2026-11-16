@@ -40,8 +40,7 @@ export class BranchesService {
     if (!fields.name) throw new BadRequestException('Branch name is required');
     const tenantId = callerTenantId ?? (data as any)?.tenantId;
     if (!tenantId) throw new BadRequestException('Tenant is required');
-    // TypeORM create() overloads can resolve to Branch[]; force single-entity path.
-    const branch = this.branchRepo.create({ ...fields, tenantId }) as unknown as Branch;
+    const branch = this.branchRepo.create({ ...fields, tenantId } as Partial<Branch>);
     return this.branchRepo.save(branch);
   }
 

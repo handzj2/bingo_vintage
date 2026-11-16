@@ -386,6 +386,7 @@ export class PaymentAllocationService {
          FROM payment_allocations a
          LEFT JOIN loan_schedules s ON s.id = a.schedule_id
         WHERE a.payment_id = $1
+          AND COALESCE(s.is_active, true)   -- allocations on superseded schedule versions are history, not current
         ORDER BY a.id ASC`,
       [paymentId],
     );
@@ -413,6 +414,7 @@ export class PaymentAllocationService {
               previous_status
          FROM payment_allocations
         WHERE payment_id = $1 AND reversed_at IS NULL
+          AND schedule_id IN (SELECT id FROM loan_schedules WHERE is_active)  -- never undo superseded-version history
         ORDER BY id DESC`,
       [paymentId],
     );
@@ -435,7 +437,8 @@ export class PaymentAllocationService {
     if (allocations.length) {
       await manager.query(
         `UPDATE payment_allocations SET reversed_at = NOW()
-          WHERE payment_id = $1 AND reversed_at IS NULL`,
+          WHERE payment_id = $1 AND reversed_at IS NULL
+            AND schedule_id IN (SELECT id FROM loan_schedules WHERE is_active)`,
         [paymentId],
       );
     }

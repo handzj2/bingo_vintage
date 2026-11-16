@@ -47,6 +47,11 @@ class ApiClient {
       const contentType = res.headers.get('content-type') ?? '';
       const hasBody = res.status !== 204 && contentType.includes('application/json');
       const data = hasBody ? await res.json() : {};
+      // A successful write may have approved/rejected/closed something in a queue: tell the
+      // sidebar / bell / work-queue to refetch instead of waiting for the 60s poll.
+      if (res.ok && options.method && options.method !== 'GET' && typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('pending-work:refresh'));
+      }
       return {
         success: res.ok,
         data: res.ok ? data : undefined,

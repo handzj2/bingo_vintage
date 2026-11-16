@@ -1,4 +1,4 @@
-import { hasPermission } from '../../common/helpers/role-helper';
+import { hasPermission, isAdmin, isBranchScopedRole } from '../../common/helpers/role-helper';
 import { Controller, Get, Query, UseGuards, Req } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
@@ -34,9 +34,7 @@ export class DashboardController {
   @Get('pending-work')
   async getPendingWork(@Req() req) {
     const user = req.user;
-    const branchScoped = ['cashier', 'credit_officer', 'teller', 'branch_manager']
-      .includes((user.roleName || '').toLowerCase());
-    const branchId = branchScoped ? user.branchId : undefined;
+    const branchId = isBranchScopedRole(user) ? user.branchId : undefined;
     // hasPermission() lets admin/superadmin through and reads the real permission set.
     const caps = {
       loan:       hasPermission(user, 'loan.approve'),
@@ -45,6 +43,8 @@ export class DashboardController {
       correction: hasPermission(user, 'loan.approve_correction'),
       drawer:     hasPermission(user, 'drawer.force_close'),
     };
-    return this.dashboardService.getPendingWork(user.tenantId, branchId, caps);
+    // Admins also get the classified database diagnostic for any queue that fails to load;
+    // everyone else gets only a reference id (the full detail is in the server log).
+    return this.dashboardService.getPendingWork(user.tenantId, branchId, caps, { includeDiagnostics: isAdmin(user) });
   }
 }

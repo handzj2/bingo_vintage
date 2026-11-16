@@ -290,6 +290,7 @@ export class ReceiptsService {
          FROM payment_allocations a
          LEFT JOIN loan_schedules s ON s.id = a.schedule_id
         WHERE a.payment_id = $1
+          AND COALESCE(s.is_active, true)
         ORDER BY a.id ASC`,
       [paymentId],
     );

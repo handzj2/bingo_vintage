@@ -49,6 +49,7 @@ function ApprovalModal({ loan, onClose, onDone }: { loan: any; onClose: () => vo
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Approval failed');
       toast.success(action === 'approved' ? 'Loan approved' : 'Loan rejected');
+      window.dispatchEvent(new Event('pending-work:refresh')); // refresh sidebar/bell counts
       onDone();
     } catch (e: any) {
       setError(e.message);

@@ -19,6 +19,7 @@ const apiFetch = async (path: string, opts: RequestInit = {}) => {
   const text = await res.text();
   const json = text ? JSON.parse(text) : {};
   if (!res.ok) throw new Error(Array.isArray(json.message) ? json.message.join(', ') : (json.message || `Error ${res.status}`));
+  if (opts.method && opts.method !== 'GET') window.dispatchEvent(new Event('pending-work:refresh')); // refresh sidebar/bell counts
   return json;
 };
 const fmt = (n: number) => `UGX ${Number(n || 0).toLocaleString()}`;

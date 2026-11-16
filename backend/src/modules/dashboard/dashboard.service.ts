@@ -4,6 +4,17 @@ import { Repository } from 'typeorm';
 import { Payment } from '../payments/entities/payment.entity';
 import { Expense } from '../expenses/entities/expense.entity';
 import { PaymentStatus } from '../enums/payment-status.enum';
+import { classifyDbError, newQueueErrorReference, toQueueError, QueueError } from './queue-error.util';
+
+export type QueueName = 'loans' | 'expenses' | 'reversals' | 'corrections' | 'overdueDrawers';
+export type QueueResult = { count: number; items: any[]; error?: QueueError };
+const QUEUE_LABELS: Record<QueueName, string> = {
+  loans: 'loan approvals',
+  expenses: 'expense approvals',
+  reversals: 'payment reversals',
+  corrections: 'loan corrections',
+  overdueDrawers: 'overdue drawers',
+};
 
 @Injectable()
 export class DashboardService {
@@ -111,258 +122,64 @@ export class DashboardService {
    * Pending-work summary for notification centre + sidebar badges.
    * Tenant-scoped. Optional branch filter for branch-scoped roles.
    * Returns counts + lightweight item lists for each approval queue.
+   *
+   * Failure model: every queue is loaded independently. If a queue's query fails, that queue is
+   * returned with `error` set (and count 0 / no items) — callers MUST check `error` before treating
+   * the queue as empty. The failure is logged with a reference id. If every enabled queue fails the
+   * endpoint answers 503 instead of a misleading "all clear".
    */
   async getPendingWork(
     tenantId: number,
     branchId: number | null | undefined,
     caps: { loan: boolean; expense: boolean; reversal: boolean; correction: boolean; drawer: boolean },
+    opts: { includeDiagnostics?: boolean } = {},
   ) {
     if (!tenantId) {
       return {
         loans: { count: 0, items: [] }, expenses: { count: 0, items: [] },
         reversals: { count: 0, items: [] }, corrections: { count: 0, items: [] },
         overdueDrawers: { count: 0, items: [] }, total: 0,
+        status: 'ok' as const, failedQueues: [] as QueueName[],
       };
     }
 
     // Capabilities are decided by the controller with hasPermission() (admins always pass).
-    // The old code read the raw permission Set and treated an EMPTY set as "already
-    // authorised", so any user whose set was empty received every approval queue.
-    const canLoan = caps.loan;
-    const canExpense = caps.expense;
-    const canReversal = caps.reversal;
-
     // Qualified per table below: users/clients also have branch_id, so an unqualified
     // column made every branch-scoped query fail with "ambiguous column".
     const branchOn = (alias: string) => (branchId ? `AND ${alias}.branch_id = $2` : '');
     const params: any[] = branchId ? [tenantId, branchId] : [tenantId];
+    const ctx = { tenantId, branchId: branchId ?? null, includeDiagnostics: !!opts.includeDiagnostics };
 
-    let loans = { count: 0, items: [] as any[] };
-    let expenses = { count: 0, items: [] as any[] };
-    let reversals = { count: 0, items: [] as any[] };
+    const empty = (): QueueResult => ({ count: 0, items: [] });
+    const failedQueues: QueueName[] = [];
+    let attempted = 0;
 
-    if (canLoan) {
-      const loanRows = await this.paymentRepo.manager.query(
-        `SELECT l.id, l.loan_number AS reference, l.principal_amount AS amount,
-                l.branch_id, l.created_at AS submitted_at, l.status,
-                u.full_name AS submitted_by, u.username AS submitted_by_username,
-                c.full_name AS client_name
-           FROM loans l
-           LEFT JOIN users u ON u.id = l.created_by
-           LEFT JOIN clients c ON c.id = l.client_id
-          WHERE l.tenant_id = $1
-            AND l.status IN ('PENDING_APPROVAL', 'PENDING')
-            ${branchOn('l')}
-          ORDER BY l.created_at ASC
-          LIMIT 20`,
-        params,
-      );
-      loans = {
-        count: loanRows.length,
-        items: loanRows.map((r: any) => ({
-          id: r.id,
-          type: 'loan',
-          reference: r.reference || `LOAN-${r.id}`,
-          amount: Number(r.amount),
-          branchId: r.branch_id,
-          submittedAt: r.submitted_at,
-          status: r.status,
-          submittedBy: r.submitted_by || r.submitted_by_username || '—',
-          clientName: r.client_name,
-          href: `/dashboard/loans/${r.id}`,
-        })),
-      };
-      // Accurate count (not limited)
-      const [{ cnt }] = await this.paymentRepo.manager.query(
-        `SELECT COUNT(*)::int AS cnt FROM loans
-          WHERE tenant_id = $1 AND status IN ('PENDING_APPROVAL','PENDING') ${branchId ? 'AND branch_id = $2' : ''}`,
-        params,
-      );
-      loans.count = cnt;
-    }
-
-    if (canExpense) {
-      const expRows = await this.paymentRepo.manager.query(
-        `SELECT e.id, e.amount, e.branch_id, e.created_at AS submitted_at, e.status,
-                e.description, u.full_name AS submitted_by, u.username AS submitted_by_username
-           FROM expenses e
-           LEFT JOIN users u ON u.id = e.created_by_id
-          WHERE e.tenant_id = $1
-            AND e.status = 'pending'
-            ${branchOn('e')}
-          ORDER BY e.created_at ASC
-          LIMIT 20`,
-        params,
-      );
-      const [{ cnt }] = await this.paymentRepo.manager.query(
-        `SELECT COUNT(*)::int AS cnt FROM expenses
-          WHERE tenant_id = $1 AND status = 'pending' ${branchId ? 'AND branch_id = $2' : ''}`,
-        params,
-      );
-      expenses = {
-        count: cnt,
-        items: expRows.map((r: any) => ({
-          id: r.id,
-          type: 'expense',
-          reference: `EXP-${r.id}`,
-          amount: Number(r.amount),
-          branchId: r.branch_id,
-          submittedAt: r.submitted_at,
-          status: r.status,
-          submittedBy: r.submitted_by || r.submitted_by_username || '—',
-          description: r.description,
-          href: `/dashboard/expenses/approval`,
-        })),
-      };
-    }
-
-    if (canReversal) {
-      // Reversals pending approval (uses reversal_status column from earlier migration)
+    const run = async (name: QueueName, enabled: boolean, load: () => Promise<QueueResult>): Promise<QueueResult> => {
+      if (!enabled) return empty();
+      attempted++;
       try {
-        // Who asked / when they asked come from the request columns added in migration 034.
-        // (Previously this showed the payment's cashier and the payment's creation time.)
-        const revRows = await this.paymentRepo.manager.query(
-          `SELECT p.id, p.amount, p.branch_id,
-                  COALESCE(p.reversal_requested_at, p.updated_at) AS submitted_at,
-                  p.reversal_status AS status, p.receipt_number AS reference,
-                  COALESCE(p.reversal_requested_by, u.full_name, u.username) AS submitted_by,
-                  p.reversal_reason AS reason
-             FROM payments p
-             LEFT JOIN users u ON u.id = p.created_by_id
-            WHERE p.tenant_id = $1
-              AND p.reversal_status = 'PENDING'
-              ${branchOn('p')}
-            ORDER BY COALESCE(p.reversal_requested_at, p.updated_at) ASC
-            LIMIT 20`,
-          params,
-        );
-        const [{ cnt }] = await this.paymentRepo.manager.query(
-          `SELECT COUNT(*)::int AS cnt FROM payments
-            WHERE tenant_id = $1 AND reversal_status = 'PENDING' ${branchId ? 'AND branch_id = $2' : ''}`,
-          params,
-        );
-        reversals = {
-          count: cnt,
-          items: revRows.map((r: any) => ({
-            id: r.id,
-            type: 'reversal',
-            reference: r.reference || `PAY-${r.id}`,
-            amount: Number(r.amount),
-            branchId: r.branch_id,
-            submittedAt: r.submitted_at,
-            status: r.status,
-            submittedBy: r.submitted_by || '—',
-            description: r.reason ? String(r.reason).slice(0, 120) : undefined,
-            href: `/dashboard/reversals`,
-          })),
-        };
+        return await load();
       } catch (e: any) {
-        // Do not present a failed query as an empty queue. Log structured detail and rethrow
-        // so the controller / frontend can surface a clear error state.
-        this.logger.error(
-          `pending-work reversals query failed (tenant=${tenantId}, branch=${branchId ?? 'all'}): ${e?.message}`,
-          e?.stack,
-        );
-        throw new ServiceUnavailableException(
-          `Unable to load pending payment reversals. Database query failed. ` +
-          `This often indicates a missing migration (e.g. 034 PaymentReversalRequestTracking) ` +
-          `or a schema mismatch. Check server logs for details.`,
-        );
+        failedQueues.push(name);
+        return { count: 0, items: [], error: this.reportQueueFailure(name, e, ctx) };
       }
-    }
+    };
 
+    const [loans, expenses, reversals, corrections, overdueDrawers] = await Promise.all([
+      run('loans', caps.loan, () => this.loadLoanQueue(params, branchOn)),
+      run('expenses', caps.expense, () => this.loadExpenseQueue(params, branchOn)),
+      run('reversals', caps.reversal, () => this.loadReversalQueue(params, branchOn)),
+      run('corrections', caps.correction, () => this.loadCorrectionQueue(params, branchOn)),
+      // Only holders of drawer.force_close can act on an overdue drawer, so only they get the queue.
+      run('overdueDrawers', caps.drawer, () => this.loadOverdueDrawerQueue(params, branchOn)),
+    ]);
 
-    // Pending loan corrections (dual-control queue)
-    let corrections = { count: 0, items: [] as any[] };
-    if (caps.correction) {
-      try {
-        const corrRows = await this.paymentRepo.manager.query(
-          `SELECT c.id, c.loan_id, c.correction_type, c.reason, c.created_at AS submitted_at,
-                  c.status, u.full_name AS submitted_by, u.username AS submitted_by_username,
-                  l.loan_number AS reference
-             FROM loan_corrections c
-             LEFT JOIN users u ON u.id = c.requested_by_id
-             LEFT JOIN loans l ON l.id = c.loan_id
-            WHERE c.tenant_id = $1 AND c.status = 'PENDING'
-            ORDER BY c.created_at ASC LIMIT 20`,
-          [tenantId],
-        );
-        const [{ cnt }] = await this.paymentRepo.manager.query(
-          `SELECT COUNT(*)::int AS cnt FROM loan_corrections WHERE tenant_id = $1 AND status = 'PENDING'`,
-          [tenantId],
-        );
-        corrections = {
-          count: cnt,
-          items: corrRows.map((r: any) => ({
-            id: r.id,
-            type: 'correction',
-            reference: r.reference || `CORR-${r.id}`,
-            submittedAt: r.submitted_at,
-            status: r.status,
-            submittedBy: r.submitted_by || r.submitted_by_username || '—',
-            description: `${r.correction_type}: ${r.reason || ''}`.slice(0, 120),
-            href: `/dashboard/loans/${r.loan_id}#loan-corrections`,
-          })),
-        };
-      } catch (e: any) {
-        this.logger.error(
-          `pending-work corrections query failed (tenant=${tenantId}): ${e?.message}`,
-          e?.stack,
-        );
-        throw new ServiceUnavailableException(
-          `Unable to load pending loan corrections. Database query failed. ` +
-          `This often indicates a missing migration (e.g. 032 LoanScheduleVersioningAndCorrection) ` +
-          `or a schema mismatch on loan_corrections. Check server logs for details.`,
-        );
-      }
-    }
-
-    let overdueDrawers = { count: 0, items: [] as any[] };
-    // Only holders of drawer.force_close can act on an overdue drawer, so only they get the queue
-    // (it used to be everyone with drawer.view, i.e. every cashier saw tenant-wide overdue drawers).
-    if (caps.drawer) {
-      try {
-        const drRows = await this.paymentRepo.manager.query(
-          `SELECT d.id, d.branch_id, d.drawer_date, d.status, u.full_name AS opened_by
-             FROM cash_drawers d
-             LEFT JOIN users u ON u.id = d.user_id
-            WHERE d.tenant_id = $1 AND d.status = 'open'
-              AND d.drawer_date < (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Kampala')::date
-              ${branchOn('d')}
-            ORDER BY d.drawer_date ASC LIMIT 20`,
-          params,
-        );
-        const [{ cnt: drCnt }] = await this.paymentRepo.manager.query(
-          `SELECT COUNT(*)::int AS cnt FROM cash_drawers d
-            WHERE d.tenant_id = $1 AND d.status = 'open'
-              AND d.drawer_date < (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Kampala')::date
-              ${branchOn('d')}`,
-          params,
-        );
-        overdueDrawers = {
-          count: drCnt,
-          items: drRows.map((r: any) => ({
-            id: r.id,
-            type: 'overdue_drawer',
-            reference: `DRW-${r.id}`,
-            branchId: r.branch_id,
-            submittedAt: r.drawer_date,
-            status: 'overdue',
-            submittedBy: r.opened_by || '—',
-            description: `Open since ${r.drawer_date} — requires force-close`,
-            href: `/dashboard/finance/drawers`,
-          })),
-        };
-      } catch (e: any) {
-        this.logger.error(
-          `pending-work overdue-drawers query failed (tenant=${tenantId}, branch=${branchId ?? 'all'}): ${e?.message}`,
-          e?.stack,
-        );
-        throw new ServiceUnavailableException(
-          `Unable to load overdue cash drawers. Database query failed. ` +
-          `Check server logs for missing columns or schema mismatch on cash_drawers.`,
-        );
-      }
+    if (attempted > 0 && failedQueues.length === attempted) {
+      const refs = [loans, expenses, reversals, corrections, overdueDrawers]
+        .map((q) => q.error?.reference).filter(Boolean).join(', ');
+      throw new ServiceUnavailableException(
+        `The work queue could not be loaded (no queue returned data). This is not an empty queue. Reference: ${refs}`,
+      );
     }
 
     return {
@@ -371,13 +188,229 @@ export class DashboardService {
       reversals,
       corrections,
       overdueDrawers,
-      total:
-        loans.count +
-        expenses.count +
-        reversals.count +
-        corrections.count +
-        overdueDrawers.count,
+      // Sum of the queues that loaded. When status is 'degraded' this is a lower bound.
+      total: loans.count + expenses.count + reversals.count + corrections.count + overdueDrawers.count,
+      status: (failedQueues.length ? 'degraded' : 'ok') as 'ok' | 'degraded',
+      failedQueues,
       generatedAt: new Date().toISOString(),
+    };
+  }
+
+  /** Structured log + safe, referenced error object for the API. */
+  private reportQueueFailure(
+    queue: QueueName,
+    err: any,
+    ctx: { tenantId: number; branchId: number | null; includeDiagnostics: boolean },
+  ): QueueError {
+    const diagnostic = classifyDbError(err);
+    const reference = newQueueErrorReference();
+    this.logger.error(
+      JSON.stringify({
+        event: 'pending_work_queue_failed',
+        queue,
+        reference,
+        tenantId: ctx.tenantId,
+        branchId: ctx.branchId,
+        category: diagnostic.category,
+        pgCode: diagnostic.pgCode,
+        detail: diagnostic.detail,
+        table: diagnostic.table,
+        column: diagnostic.column,
+        remedy: diagnostic.remedy,
+      }),
+      err?.stack,
+    );
+    return toQueueError(QUEUE_LABELS[queue], diagnostic, reference, ctx.includeDiagnostics);
+  }
+
+  private async loadLoanQueue(params: any[], branchOn: (a: string) => string): Promise<QueueResult> {
+    const q = this.paymentRepo.manager;
+    // loans.created_by (NOT created_by_id) is the creator column — see Loan entity / migration 001.
+    // Soft-deleted loans (deleted_at) are excluded, as in getProductKpis.
+    const rows = await q.query(
+      `SELECT l.id, l.loan_number AS reference, l.principal_amount AS amount,
+              l.branch_id, l.created_at AS submitted_at, l.status,
+              u.full_name AS submitted_by, u.username AS submitted_by_username,
+              c.full_name AS client_name
+         FROM loans l
+         LEFT JOIN users u ON u.id = l.created_by
+         LEFT JOIN clients c ON c.id = l.client_id
+        WHERE l.tenant_id = $1
+          AND l.deleted_at IS NULL
+          AND l.status IN ('PENDING_APPROVAL', 'PENDING')
+          ${branchOn('l')}
+        ORDER BY l.created_at ASC
+        LIMIT 20`,
+      params,
+    );
+    const [{ cnt }] = await q.query(
+      `SELECT COUNT(*)::int AS cnt FROM loans l
+        WHERE l.tenant_id = $1 AND l.deleted_at IS NULL
+          AND l.status IN ('PENDING_APPROVAL','PENDING') ${branchOn('l')}`,
+      params,
+    );
+    return {
+      count: cnt,
+      items: rows.map((r: any) => ({
+        id: r.id,
+        type: 'loan',
+        reference: r.reference || `LOAN-${r.id}`,
+        amount: Number(r.amount),
+        branchId: r.branch_id,
+        submittedAt: r.submitted_at,
+        status: r.status,
+        submittedBy: r.submitted_by || r.submitted_by_username || '—',
+        clientName: r.client_name,
+        href: `/dashboard/loans/${r.id}`,
+      })),
+    };
+  }
+
+  private async loadExpenseQueue(params: any[], branchOn: (a: string) => string): Promise<QueueResult> {
+    const q = this.paymentRepo.manager;
+    const rows = await q.query(
+      `SELECT e.id, e.amount, e.branch_id, e.created_at AS submitted_at, e.status,
+              e.description, u.full_name AS submitted_by, u.username AS submitted_by_username
+         FROM expenses e
+         LEFT JOIN users u ON u.id = e.created_by_id
+        WHERE e.tenant_id = $1
+          AND e.status = 'pending'
+          ${branchOn('e')}
+        ORDER BY e.created_at ASC
+        LIMIT 20`,
+      params,
+    );
+    const [{ cnt }] = await q.query(
+      `SELECT COUNT(*)::int AS cnt FROM expenses e
+        WHERE e.tenant_id = $1 AND e.status = 'pending' ${branchOn('e')}`,
+      params,
+    );
+    return {
+      count: cnt,
+      items: rows.map((r: any) => ({
+        id: r.id,
+        type: 'expense',
+        reference: `EXP-${r.id}`,
+        amount: Number(r.amount),
+        branchId: r.branch_id,
+        submittedAt: r.submitted_at,
+        status: r.status,
+        submittedBy: r.submitted_by || r.submitted_by_username || '—',
+        description: r.description,
+        href: `/dashboard/expenses/approval`,
+      })),
+    };
+  }
+
+  private async loadReversalQueue(params: any[], branchOn: (a: string) => string): Promise<QueueResult> {
+    const q = this.paymentRepo.manager;
+    // Requester columns come from migration 1700000000034 (reversal_requested_by/at).
+    const rows = await q.query(
+      `SELECT p.id, p.amount, p.branch_id,
+              COALESCE(p.reversal_requested_at, p.updated_at) AS submitted_at,
+              p.reversal_status AS status, p.receipt_number AS reference,
+              COALESCE(p.reversal_requested_by, u.full_name, u.username) AS submitted_by,
+              p.reversal_reason AS reason
+         FROM payments p
+         LEFT JOIN users u ON u.id = p.created_by_id
+        WHERE p.tenant_id = $1
+          AND p.reversal_status = 'PENDING'
+          ${branchOn('p')}
+        ORDER BY COALESCE(p.reversal_requested_at, p.updated_at) ASC
+        LIMIT 20`,
+      params,
+    );
+    const [{ cnt }] = await q.query(
+      `SELECT COUNT(*)::int AS cnt FROM payments p
+        WHERE p.tenant_id = $1 AND p.reversal_status = 'PENDING' ${branchOn('p')}`,
+      params,
+    );
+    return {
+      count: cnt,
+      items: rows.map((r: any) => ({
+        id: r.id,
+        type: 'reversal',
+        reference: r.reference || `PAY-${r.id}`,
+        amount: Number(r.amount),
+        branchId: r.branch_id,
+        submittedAt: r.submitted_at,
+        status: r.status,
+        submittedBy: r.submitted_by || '—',
+        description: r.reason ? String(r.reason).slice(0, 120) : undefined,
+        href: `/dashboard/reversals`,
+      })),
+    };
+  }
+
+  private async loadCorrectionQueue(params: any[], branchOn: (a: string) => string): Promise<QueueResult> {
+    const q = this.paymentRepo.manager;
+    // Branch-scoped approvers only see (and may only decide) corrections of their own branch,
+    // matching the check in LoansService.decideCorrection.
+    const rows = await q.query(
+      `SELECT c.id, c.loan_id, c.branch_id, c.correction_type, c.reason, c.created_at AS submitted_at,
+              c.status, u.full_name AS submitted_by, u.username AS submitted_by_username,
+              l.loan_number AS reference
+         FROM loan_corrections c
+         LEFT JOIN users u ON u.id = c.requested_by_id
+         LEFT JOIN loans l ON l.id = c.loan_id
+        WHERE c.tenant_id = $1 AND c.status = 'PENDING'
+          ${branchOn('c')}
+        ORDER BY c.created_at ASC LIMIT 20`,
+      params,
+    );
+    const [{ cnt }] = await q.query(
+      `SELECT COUNT(*)::int AS cnt FROM loan_corrections c
+        WHERE c.tenant_id = $1 AND c.status = 'PENDING' ${branchOn('c')}`,
+      params,
+    );
+    return {
+      count: cnt,
+      items: rows.map((r: any) => ({
+        id: r.id,
+        type: 'correction',
+        reference: r.reference || `CORR-${r.id}`,
+        branchId: r.branch_id,
+        submittedAt: r.submitted_at,
+        status: r.status,
+        submittedBy: r.submitted_by || r.submitted_by_username || '—',
+        description: `${r.correction_type}: ${r.reason || ''}`.slice(0, 120),
+        href: `/dashboard/loans/${r.loan_id}#loan-corrections`,
+      })),
+    };
+  }
+
+  private async loadOverdueDrawerQueue(params: any[], branchOn: (a: string) => string): Promise<QueueResult> {
+    const q = this.paymentRepo.manager;
+    const rows = await q.query(
+      `SELECT d.id, d.branch_id, d.drawer_date::text AS drawer_date, d.status, u.full_name AS opened_by
+         FROM cash_drawers d
+         LEFT JOIN users u ON u.id = d.user_id
+        WHERE d.tenant_id = $1 AND d.status = 'open'
+          AND d.drawer_date < (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Kampala')::date
+          ${branchOn('d')}
+        ORDER BY d.drawer_date ASC LIMIT 20`,
+      params,
+    );
+    const [{ cnt }] = await q.query(
+      `SELECT COUNT(*)::int AS cnt FROM cash_drawers d
+        WHERE d.tenant_id = $1 AND d.status = 'open'
+          AND d.drawer_date < (CURRENT_TIMESTAMP AT TIME ZONE 'Africa/Kampala')::date
+          ${branchOn('d')}`,
+      params,
+    );
+    return {
+      count: cnt,
+      items: rows.map((r: any) => ({
+        id: r.id,
+        type: 'overdue_drawer',
+        reference: `DRW-${r.id}`,
+        branchId: r.branch_id,
+        submittedAt: r.drawer_date,
+        status: 'overdue',
+        submittedBy: r.opened_by || '—',
+        description: `Open since ${r.drawer_date} — requires force-close`,
+        href: `/dashboard/finance/drawers`,
+      })),
     };
   }
 }

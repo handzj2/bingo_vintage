@@ -2,6 +2,7 @@
 import { assertPaymentDateNotFuture } from '../../common/utils/payment-date';
 import {
   Injectable, NotFoundException, BadRequestException, ForbiddenException, ConflictException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository }       from 'typeorm';
@@ -14,7 +15,7 @@ import { sanitiseDto }      from '../../common/utils/sanitise';
 import { LedgerService }    from '../ledger/ledger.service';
 import { BikesService }     from '../bikes/bikes.service';
 import { addMonths } from 'date-fns';
-import { assertAdmin, assertRole, RequestUser } from '../../common/helpers/role-helper';
+import { assertAdmin, assertRole, isBranchScopedRole, RequestUser } from '../../common/helpers/role-helper';
 import { ApplyLoanDto }          from './dto/apply-loan.dto';
 import { AdminApprovalDto }      from './dto/admin-approval.dto';
 import { BikeLoanCalculateDto }  from './dto/bike-loan-calculate.dto';
@@ -1074,11 +1075,10 @@ export class LoansService {
     }
 
     return this.loansRepo.manager.transaction(async (em) => {
-      const loan = await em.findOne(Loan, {
-        where: { id },
-        relations: ['client'],
-        lock: { mode: 'pessimistic_write' } as any,
-      });
+      // Lock the row on its own: findOne({lock}) on Loan fails in PostgreSQL (0A000 "FOR UPDATE
+      // cannot be applied to the nullable side of an outer join") because Loan eagerly joins client.
+      await em.query(`SELECT id FROM loans WHERE id = $1 FOR UPDATE`, [id]);
+      const loan = await em.findOne(Loan, { where: { id }, relations: ['client'] });
       if (!loan) throw new NotFoundException(`Loan ${id} not found`);
       if (loan.status === LoanStatus.CANCELLED || (loan as any).deletedAt) {
         throw new BadRequestException('Cannot restructure a cancelled or deleted loan');
@@ -1177,17 +1177,26 @@ export class LoansService {
         [id],
       );
 
-      // Do NOT delete prior payment_allocations. Old rows remain linked to the
-      // superseded (is_active = false) schedule versions and form the immutable
-      // allocation history. New allocations are written only against the new
-      // active schedule (with schedule_version set). This preserves original
-      // payment IDs, receipt references, payment dates, drawer links and
-      // reversal history.
-
-      // Re-allocate existing payments onto the new active schedule
-      const totalApplied = await this.reallocateExistingPayments(
-        em, id, originalPayments, nextVersion,
+      // Allocation history is IMMUTABLE. Existing payment_allocations rows (including reversed
+      // ones) are never deleted or edited. Superseding the schedule above (is_active=false,
+      // superseded_at, superseded_by_version) is what supersedes them: an allocation is "current"
+      // only while its schedule row is active, and readers that undo or display allocations
+      // (PaymentAllocationService, reversePayment, receipts) filter on that. Record which
+      // allocations were superseded so the correction is fully traceable.
+      const supersededAllocations: { id: number }[] = await em.query(
+        `SELECT pa.id
+           FROM payment_allocations pa
+           JOIN loan_schedules ls ON ls.id = pa.schedule_id
+          WHERE ls.loan_id = $1 AND ls.is_active = false AND ls.superseded_by_version = $2
+          ORDER BY pa.id`,
+        [id, nextVersion],
       );
+
+      // Re-allocate the existing payments onto the new schedule: NEW allocation rows stamped with
+      // the new schedule_version. Payment rows (ids, receipts, dates, drawer links, reversal
+      // fields) are not touched.
+      const realloc = await this.reallocateExistingPayments(em, id, originalPayments, nextVersion);
+      const totalApplied = realloc.totalApplied;
 
       // Mark overdue installments on the new schedule
       const todayStr = new Date().toISOString().slice(0, 10);
@@ -1238,6 +1247,10 @@ export class LoansService {
             scheduleVersion: nextVersion,
             paymentsPreserved: originalPayments.length,
             totalApplied,
+            unallocatedAmount: realloc.unallocated,
+            supersededAllocationIds: supersededAllocations.map((a) => Number(a.id)),
+            newAllocationIds: realloc.newAllocationIds,
+            reallocationBasis: 'waterfall_oldest_payment_first',
           }),
           dto.reason.trim(),
           (user as any).userId || (user as any).id,
@@ -1263,21 +1276,25 @@ export class LoansService {
         paymentsPreserved: originalPayments.length,
         totalApplied,
         installmentsGenerated: calculation.installments.length,
+        allocationsSuperseded: supersededAllocations.length,
+        allocationsCreated: realloc.newAllocationIds.length,
       };
     });
   }
 
   /**
    * Re-allocate existing payment rows onto the current active schedule.
-   * Does NOT create or delete payment records. Only writes payment_allocations
-   * and updates amount_paid / status on the new schedule rows.
+   * Does NOT create, edit or delete payment records and does NOT touch earlier allocation rows:
+   * it only INSERTS new payment_allocations rows (stamped with the new schedule_version) and sets
+   * amount_paid / status on the NEW schedule rows. Each allocation records the real
+   * previous/new status of the schedule row so a later reversal restores it correctly.
    */
   private async reallocateExistingPayments(
     em: any,
     loanId: number,
     payments: any[],
     scheduleVersion: number,
-  ): Promise<number> {
+  ): Promise<{ totalApplied: number; unallocated: number; newAllocationIds: number[] }> {
     const schedules = await em.query(
       `SELECT id, installment_number, amount_due, due_date
          FROM loan_schedules
@@ -1287,11 +1304,11 @@ export class LoansService {
     );
 
     let totalApplied = 0;
+    const newAllocationIds: number[] = [];
     // Work on a mutable copy of remaining amounts per original payment
     const queue = payments.map((p) => ({
       id: p.id,
       remaining: Number(p.amount),
-      paymentDate: p.payment_date,
     }));
 
     for (const sched of schedules) {
@@ -1299,28 +1316,30 @@ export class LoansService {
 
       const due = Number(sched.amount_due);
       let paidOnThis = 0;
+      let runningStatus = 'PENDING';
 
       for (const p of queue) {
         if (p.remaining <= 0 || paidOnThis >= due) continue;
         const apply = Math.min(p.remaining, due - paidOnThis);
         if (apply <= 0) continue;
 
+        const previousStatus = runningStatus;
         paidOnThis += apply;
         p.remaining -= apply;
         totalApplied += apply;
+        runningStatus = paidOnThis >= due - 0.009 ? 'PAID' : 'PARTIAL';
 
-        // Create allocation linking original payment → new schedule row.
-        // previous_status / new_status are NOT NULL on the table (migration 027).
-        // For a restructure we treat the schedule as having been PENDING before
-        // this historical re-allocation.
-        const newStatus = paidOnThis >= due - 0.009 ? 'PAID' : 'PARTIAL';
-        await em.query(
+        // New allocation linking original payment → new schedule row (parameters take the
+        // column's own enum type; no enum type name is hard-coded).
+        const [row] = await em.query(
           `INSERT INTO payment_allocations
              (payment_id, schedule_id, amount_applied, instalment_applied, penalty_applied,
               previous_status, new_status, schedule_version, created_at)
-           VALUES ($1, $2, $3, $3, 0, 'PENDING', $4, $5, NOW())`,
-          [p.id, sched.id, apply, newStatus, scheduleVersion],
+           VALUES ($1, $2, $3, $3, 0, $4, $5, $6, NOW())
+           RETURNING id`,
+          [p.id, sched.id, apply, previousStatus, runningStatus, scheduleVersion],
         );
+        newAllocationIds.push(Number(row.id));
       }
 
       // Update the schedule row itself
@@ -1333,9 +1352,10 @@ export class LoansService {
       );
     }
 
-    // Any remaining unallocated amount is left on the payments (excess / future)
-    // We do not invent schedule rows for it.
-    return totalApplied;
+    // Any remaining unallocated amount stays on the payment (excess / future).
+    // No schedule rows or allocations are invented for it.
+    const unallocated = queue.reduce((sum, q) => sum + Math.max(0, q.remaining), 0);
+    return { totalApplied, unallocated, newAllocationIds };
   }
 
   /**
@@ -1360,10 +1380,10 @@ export class LoansService {
     }
 
     return this.loansRepo.manager.transaction(async (em) => {
-      const loan = await em.findOne(Loan, {
-        where: { id },
-        lock: { mode: 'pessimistic_write' } as any,
-      });
+      // Lock the row on its own: findOne({lock}) on Loan fails in PostgreSQL (0A000 "FOR UPDATE
+      // cannot be applied to the nullable side of an outer join") because Loan eagerly joins client.
+      await em.query(`SELECT id FROM loans WHERE id = $1 FOR UPDATE`, [id]);
+      const loan = await em.findOne(Loan, { where: { id } });
       if (!loan) throw new NotFoundException(`Loan ${id} not found`);
       if (loan.tenantId && user.tenantId && loan.tenantId !== user.tenantId) {
         throw new ForbiddenException('Tenant isolation violation');
@@ -1452,7 +1472,21 @@ export class LoansService {
 
   /**
    * Dual-control: approve or reject a PENDING loan correction.
-   * Approver must differ from requester. Applies balance change only on approve.
+   *
+   * Integrity rules (all inside ONE transaction — any failure rolls everything back):
+   *  - The loan is locked first (same order as correctBalance), then the correction row.
+   *  - A correction becomes APPLIED only after its change has been applied to the loan.
+   *    Only correction_type BALANCE has a pending-apply implementation. Any other type is
+   *    refused with 422 and stays PENDING (it can still be REJECTED) — it is never marked APPLIED
+   *    without being applied.
+   *  - Tenant and (for branch-scoped roles) branch scope are enforced on the correction AND the loan.
+   *  - Approver must differ from the requester (approve and reject).
+   *  - The original financial state recorded at request time (balance, total, status) is
+   *    revalidated against the locked loan; any drift => 409, nothing changes.
+   *  - Schedules are intentionally NOT touched for BALANCE: it is an audited balance-only override
+   *    (same as the immediate path in correctBalance) — principal, interest, schedule and payments
+   *    are unchanged.
+   *  - An `audit` row and a loan audit note are written in the same transaction.
    */
   async decideCorrection(
     correctionId: number,
@@ -1461,15 +1495,45 @@ export class LoansService {
     user: RequestUser,
   ) {
     const actorId = (user as any).userId || (user as any).id;
+    const actorLabel = (user as any).email || (user as any).username || `user ${actorId}`;
+    const parseJson = (v: any) => (typeof v === 'string' ? JSON.parse(v) : v);
+    const cleanReason = String(reason ?? '').trim().slice(0, 300);
+
     return this.loansRepo.manager.transaction(async (em) => {
-      const [corr] = await em.query(
-        `SELECT * FROM loan_corrections WHERE id = $1 FOR UPDATE`,
-        [correctionId],
-      );
-      if (!corr) throw new NotFoundException('Correction not found');
-      if (corr.tenant_id && user.tenantId && corr.tenant_id !== user.tenantId) {
+      // 1. Find the loan this correction belongs to (unlocked read — only to learn loan_id).
+      const [peek] = await em.query(`SELECT id, loan_id, tenant_id FROM loan_corrections WHERE id = $1`, [correctionId]);
+      if (!peek) throw new NotFoundException('Correction not found');
+      if (peek.tenant_id && user.tenantId && Number(peek.tenant_id) !== Number(user.tenantId)) {
         throw new ForbiddenException('Tenant isolation violation');
       }
+
+      // 2. Lock loan, then correction (consistent lock order => no deadlock with correctBalance).
+      const [loanRow] = await em.query(
+        `SELECT id, balance, total_amount, status, tenant_id, branch_id, deleted_at
+           FROM loans WHERE id = $1 FOR UPDATE`,
+        [peek.loan_id],
+      );
+      if (!loanRow) throw new NotFoundException(`Loan ${peek.loan_id} not found`);
+      const [corr] = await em.query(`SELECT * FROM loan_corrections WHERE id = $1 FOR UPDATE`, [correctionId]);
+      if (!corr) throw new NotFoundException('Correction not found');
+
+      // 3. Scope
+      if (
+        (corr.tenant_id && user.tenantId && Number(corr.tenant_id) !== Number(user.tenantId)) ||
+        (loanRow.tenant_id && user.tenantId && Number(loanRow.tenant_id) !== Number(user.tenantId)) ||
+        (corr.tenant_id && loanRow.tenant_id && Number(corr.tenant_id) !== Number(loanRow.tenant_id))
+      ) {
+        throw new ForbiddenException('Tenant isolation violation');
+      }
+      if (isBranchScopedRole(user)) {
+        const myBranch = Number((user as any).branchId);
+        const outOfScope = (b: any) => b != null && Number(b) !== myBranch;
+        if (!myBranch || outOfScope(corr.branch_id) || outOfScope(loanRow.branch_id)) {
+          throw new ForbiddenException('This correction belongs to another branch.');
+        }
+      }
+
+      // 4. State + dual control
       if (corr.status !== 'PENDING') {
         throw new BadRequestException(`Correction is already ${corr.status}`);
       }
@@ -1479,95 +1543,106 @@ export class LoansService {
         );
       }
 
+      const auditRow = (action: string, oldValues: any, newValues: any, description: string) =>
+        em.query(
+          `INSERT INTO audit (action, table_name, record_id, old_values, new_values, "user", description, metadata, tenant_id)
+           VALUES ($1,'loan_corrections',$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            action, correctionId, JSON.stringify(oldValues), JSON.stringify(newValues), actorLabel,
+            description.slice(0, 250),
+            JSON.stringify({ loanId: Number(corr.loan_id), correctionType: corr.correction_type, requestedById: corr.requested_by_id, reason: cleanReason || null }),
+            corr.tenant_id ?? null,
+          ],
+        );
+      const loanNote = (action: string, details: string) =>
+        em.query(
+          `UPDATE loans SET notes = COALESCE(notes || E'\n\n', '') || $1, updated_at = NOW() WHERE id = $2`,
+          [`[${new Date().toISOString()}] - ${action}\nPerformed By: User ${actorId}\nDetails: ${details}\nPolicy Reference: [2026-01-10]`, corr.loan_id],
+        );
+
+      // 5a. REJECT — valid for every type; changes only the correction row.
       if (decision === 'REJECT') {
-        await em.query(
+        const upd = await em.query(
           `UPDATE loan_corrections
               SET status = 'REJECTED', approved_by_id = $1, updated_at = NOW()
-            WHERE id = $2`,
+            WHERE id = $2 AND status = 'PENDING' RETURNING id`,
           [actorId, correctionId],
         );
-        await em.query(
-          `UPDATE loans SET notes = COALESCE(notes,'') || $1, updated_at = NOW() WHERE id = $2`,
-          [`\n[CORRECTION_REJECTED] #${correctionId} by user ${actorId}. ${reason || ''}`.slice(0, 500), corr.loan_id],
-        );
-        return { success: true, status: 'REJECTED', correctionId };
+        if (!upd.length) throw new ConflictException('This correction was already decided by someone else');
+        await auditRow('LOAN_CORRECTION_REJECTED', { status: 'PENDING' }, { status: 'REJECTED' },
+          `Loan correction #${correctionId} (${corr.correction_type}) rejected${cleanReason ? `: ${cleanReason}` : ''}`);
+        await loanNote('CORRECTION_REJECTED', `Correction #${correctionId} (${corr.correction_type}) rejected.${cleanReason ? ` ${cleanReason}` : ''}`);
+        return { success: true, status: 'REJECTED', correctionId, loanId: corr.loan_id };
       }
 
-      // APPROVE — only mark APPLIED after the requested change has been applied successfully.
-      const snapshot = typeof corr.new_snapshot === 'string'
-        ? JSON.parse(corr.new_snapshot)
-        : corr.new_snapshot;
-      const prev = typeof corr.previous_snapshot === 'string'
-        ? JSON.parse(corr.previous_snapshot) : corr.previous_snapshot;
-
-      if (corr.correction_type === 'BALANCE' && snapshot?.balance != null) {
-        const [loanRow] = await em.query(
-          `SELECT id, balance, status, tenant_id, branch_id FROM loans WHERE id = $1 FOR UPDATE`,
-          [corr.loan_id],
-        );
-        if (!loanRow) throw new NotFoundException(`Loan ${corr.loan_id} not found`);
-        if (loanRow.tenant_id && user.tenantId && loanRow.tenant_id !== user.tenantId) {
-          throw new ForbiddenException('Tenant isolation violation');
-        }
-        // Optional branch scope check when the correction recorded a branch
-        if (corr.branch_id != null && loanRow.branch_id != null
-            && Number(corr.branch_id) !== Number(loanRow.branch_id)) {
-          throw new ForbiddenException('Branch scope mismatch for this correction');
-        }
-        // The request stored an ABSOLUTE balance. If payments/reversals changed the balance
-        // while it waited, applying it would silently wipe them out.
-        if (prev?.balance != null && Number(loanRow.balance) !== Number(prev.balance)) {
-          throw new ConflictException(
-            `The loan balance changed since this correction was requested (was ${Number(prev.balance)}, now ${Number(loanRow.balance)}). ` +
-            'Reject it and submit a new correction.',
-          );
-        }
-        const nextStatus = statusAfterBalanceCorrection(String(loanRow.status), Number(snapshot.balance));
-        if (nextStatus !== String(loanRow.status)) {
-          await em.query(
-            `UPDATE loans SET balance = $1, status = $2, updated_at = NOW() WHERE id = $3`,
-            [snapshot.balance, nextStatus, corr.loan_id],
-          );
-        } else {
-          await em.query(
-            `UPDATE loans SET balance = $1, updated_at = NOW() WHERE id = $2`,
-            [snapshot.balance, corr.loan_id],
-          );
-        }
-      } else if (
-        corr.correction_type === 'TERMS' ||
-        corr.correction_type === 'RESCHEDULE' ||
-        corr.correction_type === 'SCHEDULE'
-      ) {
-        // These types require a full safeRestructure path (new schedule version,
-        // payment re-allocation). They must not be marked APPLIED from the queue
-        // decision endpoint until that path is wired for dual-control approval.
-        throw new BadRequestException(
-          `Correction type '${corr.correction_type}' cannot be approved from the work-queue decision endpoint. ` +
-          `Only BALANCE corrections are applied here. Reject this request and re-submit via the reschedule / terms endpoint, ` +
-          `or implement dual-control application for this type.`,
-        );
-      } else {
-        throw new BadRequestException(
-          `Unsupported or unknown correction type '${corr.correction_type}'. ` +
-          `Only BALANCE corrections can be approved through this path. Reject the request.`,
+      // 5b. APPROVE — only types with a real apply implementation.
+      if (corr.correction_type !== 'BALANCE') {
+        throw new UnprocessableEntityException(
+          `Correction type ${corr.correction_type} cannot be approved from the queue: only BALANCE corrections ` +
+          'can be applied on approval. It was NOT applied and remains PENDING; reject it and re-submit it through ' +
+          'the direct correction endpoint.',
         );
       }
 
-      // Only reached when the change above succeeded (or was a no-op status-wise).
-      await em.query(
+      const snapshot = parseJson(corr.new_snapshot);
+      const newBalance = snapshot?.balance == null ? NaN : Number(snapshot.balance);
+      if (!Number.isFinite(newBalance) || newBalance < 0) {
+        throw new UnprocessableEntityException(
+          'This BALANCE correction has no valid requested balance in its snapshot, so it cannot be applied. It remains PENDING; reject it.',
+        );
+      }
+      if (loanRow.deleted_at) throw new BadRequestException('Cannot apply a correction to a deleted loan');
+      if (!['ACTIVE', 'COMPLETED', 'DEFAULTED'].includes(String(loanRow.status))) {
+        throw new BadRequestException(`Balance cannot be corrected on a ${loanRow.status} loan`);
+      }
+
+      // Revalidate the original financial state: the request stored an ABSOLUTE balance, so any
+      // payment/reversal/correction since then would be silently wiped out.
+      const prev = parseJson(corr.previous_snapshot) ?? {};
+      const drift: string[] = [];
+      if (prev.balance != null && Number(loanRow.balance) !== Number(prev.balance)) {
+        drift.push(`balance was ${Number(prev.balance)}, now ${Number(loanRow.balance)}`);
+      }
+      if (prev.totalAmount != null && Number(loanRow.total_amount) !== Number(prev.totalAmount)) {
+        drift.push(`total amount was ${Number(prev.totalAmount)}, now ${Number(loanRow.total_amount)}`);
+      }
+      if (prev.status != null && String(loanRow.status) !== String(prev.status)) {
+        drift.push(`status was ${prev.status}, now ${loanRow.status}`);
+      }
+      if (drift.length) {
+        throw new ConflictException(
+          `The loan changed since this correction was requested (${drift.join('; ')}). Reject it and submit a new correction.`,
+        );
+      }
+      if (newBalance === Number(loanRow.balance)) {
+        throw new BadRequestException('The requested balance equals the current balance; nothing to apply. Reject this correction.');
+      }
+
+      const nextStatus = statusAfterBalanceCorrection(String(loanRow.status), newBalance);
+      const applied = await em.query(
+        `UPDATE loans SET balance = $1, status = $2, updated_at = NOW() WHERE id = $3 RETURNING id`,
+        [newBalance, nextStatus, corr.loan_id],
+      );
+      if (!applied.length) throw new ConflictException('The loan could not be updated; nothing was applied.');
+
+      const mark = await em.query(
         `UPDATE loan_corrections
             SET status = 'APPLIED', approved_by_id = $1, applied_at = NOW(), updated_at = NOW()
-          WHERE id = $2`,
+          WHERE id = $2 AND status = 'PENDING' RETURNING id`,
         [actorId, correctionId],
       );
+      if (!mark.length) throw new ConflictException('This correction was already decided by someone else');
 
-      await em.query(
-        `UPDATE loans SET notes = COALESCE(notes,'') || $1, updated_at = NOW() WHERE id = $2`,
-        [
-          `\n[CORRECTION_APPROVED] #${correctionId} by user ${actorId}. ${reason || ''}`.slice(0, 500),
-          corr.loan_id,
-        ],
+      await auditRow(
+        'LOAN_CORRECTION_APPROVED',
+        { balance: Number(loanRow.balance), status: String(loanRow.status) },
+        { balance: newBalance, status: nextStatus },
+        `Loan correction #${correctionId} (BALANCE) approved: ${Number(loanRow.balance)} -> ${newBalance}${cleanReason ? `. ${cleanReason}` : ''}`,
+      );
+      await loanNote(
+        'CORRECTION_APPROVED',
+        `Correction #${correctionId} (BALANCE) approved. Balance ${Number(loanRow.balance)} -> ${newBalance}` +
+        `${nextStatus !== String(loanRow.status) ? `, status ${loanRow.status} -> ${nextStatus}` : ''}.${cleanReason ? ` ${cleanReason}` : ''}`,
       );
 
       return {
@@ -1575,6 +1650,9 @@ export class LoansService {
         status: 'APPLIED',
         correctionId,
         loanId: corr.loan_id,
+        previousBalance: Number(loanRow.balance),
+        newBalance,
+        loanStatus: nextStatus,
       };
     });
   }

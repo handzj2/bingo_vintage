@@ -679,9 +679,10 @@ export class LoansController {
               status, requested_by_id, approved_by_id, applied_at, schedule_version, created_at
          FROM loan_corrections
         WHERE loan_id = $1
+          AND ($2::int IS NULL OR tenant_id = $2)
         ORDER BY created_at DESC
         LIMIT 50`,
-      [id],
+      [id, req.user?.tenantId ?? null],
     );
     return { loanId: id, corrections: rows };
   }

@@ -2,7 +2,7 @@
  * Unit tests for balance correction + dual-control approval (no database needed).
  * Run: npx jest test/loan-balance-correction.spec.ts
  */
-import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, UnprocessableEntityException } from '@nestjs/common';
 import { LoansService, statusAfterBalanceCorrection } from '../src/modules/loans/loans.service';
 
 const admin = { id: 1, userId: 1, tenantId: 7, roleName: 'admin', permissions: new Set<string>() };
@@ -24,6 +24,7 @@ function build(loan: any, corrRow?: any, loanRow?: any) {
       if (/FROM loan_corrections WHERE id/.test(sql)) return [corrRow];
       if (/FROM loans WHERE id/.test(sql)) return [loanRow];
       if (/INSERT INTO loan_corrections/.test(sql)) return [{ id: 99 }];
+      if (/^\s*UPDATE/.test(sql) && /RETURNING id/.test(sql)) return [{ id: 1 }];   // conditional UPDATEs confirm the row changed
       return [];
     }),
   };
@@ -112,5 +113,25 @@ describe('decideCorrection', () => {
     expect(res.status).toBe('REJECTED');
     expect(queries.some((q) => /UPDATE loans SET balance/.test(q.sql))).toBe(false);
     expect(queries.some((q) => /CORRECTION_REJECTED/.test(JSON.stringify(q.params)))).toBe(true);
+  });
+
+  it('an UNSUPPORTED correction type is refused (422) and nothing is written — never marked APPLIED', async () => {
+    const { svc, queries } = build(makeLoan(), pending({ correction_type: 'TERMS' }), { id: 5, balance: 100000, status: 'ACTIVE', tenant_id: 7 });
+    await expect(svc.decideCorrection(99, 'APPROVE', undefined, approver as any)).rejects.toThrow(UnprocessableEntityException);
+    expect(queries.some((q) => /^\s*UPDATE/.test(q.sql))).toBe(false);
+  });
+
+  it('a BALANCE correction with no valid requested balance is refused (422), not marked APPLIED', async () => {
+    for (const snap of [{}, { balance: -1 }, { balance: 'x' }]) {
+      const { svc, queries } = build(makeLoan(), pending({ new_snapshot: snap }), { id: 5, balance: 100000, status: 'ACTIVE', tenant_id: 7 });
+      await expect(svc.decideCorrection(99, 'APPROVE', undefined, approver as any)).rejects.toThrow(UnprocessableEntityException);
+      expect(queries.some((q) => /^\s*UPDATE/.test(q.sql))).toBe(false);
+    }
+  });
+
+  it('a branch-scoped approver cannot decide another branch\'s correction', async () => {
+    const brUser = { ...approver, roleName: 'branch_manager', branchId: 2 };
+    const { svc } = build(makeLoan(), pending({ branch_id: 1 }), { id: 5, balance: 100000, status: 'ACTIVE', tenant_id: 7, branch_id: 1 });
+    await expect(svc.decideCorrection(99, 'APPROVE', undefined, brUser as any)).rejects.toThrow(ForbiddenException);
   });
 });

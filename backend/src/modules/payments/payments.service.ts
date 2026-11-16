@@ -494,7 +494,8 @@ export class PaymentsService {
         await queryRunner.manager.query(
           `SELECT schedule_id, amount_applied, previous_status
              FROM payment_allocations
-            WHERE payment_id = $1 AND reversed_at IS NULL`,
+            WHERE payment_id = $1 AND reversed_at IS NULL
+              AND schedule_id IN (SELECT id FROM loan_schedules WHERE is_active)`,
           [paymentId],
         );
 
@@ -531,7 +532,8 @@ export class PaymentsService {
 
         await queryRunner.manager.query(
           `UPDATE payment_allocations SET reversed_at = NOW()
-            WHERE payment_id = $1 AND reversed_at IS NULL`,
+            WHERE payment_id = $1 AND reversed_at IS NULL
+              AND schedule_id IN (SELECT id FROM loan_schedules WHERE is_active)`,
           [paymentId],
         );
       } else if (payment.scheduleId) {        // Fixed: CASE expression result is inferred as `text` by Postgres,

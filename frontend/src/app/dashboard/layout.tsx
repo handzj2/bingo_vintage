@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { visibleNavigation, type NavItem, type BadgeKey } from '@/lib/navigation';
-import { usePendingWork } from '@/hooks/usePendingWork';
+import { usePendingWork, failedQueueKeys } from '@/hooks/usePendingWork';
 
 /**
  * getUserInitials — derives avatar initials from full_name.
@@ -115,8 +115,19 @@ export default function DashboardLayout({
   );
   const badgeFor = (item: NavItem): number =>
     item.badge ? (item.badge === 'total' ? pending.total : (pending as any)[item.badge === 'overdueDrawers' ? 'overdueDrawers' : item.badge]?.count ?? 0) : 0;
+  const failedKeys = failedQueueKeys(pending);
+  /** True when the queue(s) behind this nav badge failed to load, so its count is unknown (not zero). */
+  const badgeUnknown = (item: NavItem): boolean =>
+    !!item.badge && (item.badge === 'total'
+      ? failedKeys.length > 0
+      : failedKeys.includes((item.badge === 'overdueDrawers' ? 'overdueDrawers' : item.badge) as any));
   const Badge = ({ item }: { item: NavItem }) => {
     const n = badgeFor(item);
+    if (badgeUnknown(item)) {
+      return (
+        <span className="ml-auto min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-500 text-white text-[11px] font-bold flex items-center justify-center" title="This queue could not be loaded — open the Work queue for details" aria-label="queue unavailable">!</span>
+      );
+    }
     return n > 0 ? (
       <span className="ml-auto min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center" aria-label={`${n} pending`}>
         {n > 99 ? '99+' : n}

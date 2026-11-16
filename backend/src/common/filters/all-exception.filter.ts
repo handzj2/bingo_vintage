@@ -52,7 +52,21 @@ export class AllExceptionFilter implements ExceptionFilter {
     };
 
     if (status >= 500) {
-      this.logger.error(JSON.stringify(logPayload));
+      // The client only ever sees the generic message. The SERVER log must carry the real database
+      // diagnostic (pg code, message, table, column, constraint) — otherwise a "Database error"
+      // in production cannot be traced to a missing column, enum mismatch or bad parameter type.
+      const dbDiag = exception instanceof QueryFailedError
+        ? {
+            pgCode: (exception as any).code,
+            pgMessage: (exception as any).driverError?.message ?? exception.message,
+            pgDetail: (exception as any).detail,
+            pgHint: (exception as any).hint,
+            pgTable: (exception as any).table,
+            pgColumn: (exception as any).column,
+            pgConstraint: (exception as any).constraint,
+          }
+        : exception instanceof Error ? { errorMessage: exception.message } : {};
+      this.logger.error(JSON.stringify({ ...logPayload, ...dbDiag }), exception instanceof Error ? exception.stack : undefined);
     } else if (status >= 400) {
       this.logger.warn(JSON.stringify(logPayload));
     }

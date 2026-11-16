@@ -59,6 +59,12 @@ export function isAdmin(user: RequestUser | null | undefined): boolean {
   return isRole(user, 'admin', 'superadmin');
 }
 
+/** Roles that only see/act on their own branch (kept in sync with users.service BRANCH_REQUIRED_ROLES and jwt.strategy). */
+export const BRANCH_SCOPED_ROLES = ['cashier', 'credit_officer', 'teller', 'branch_manager'];
+export function isBranchScopedRole(user: RequestUser | null | undefined): boolean {
+  return BRANCH_SCOPED_ROLES.includes(getEffectiveRole(user));
+}
+
 export function isAdminOrManager(user: RequestUser | null | undefined): boolean {
   return isRole(user, 'admin', 'manager');
 }

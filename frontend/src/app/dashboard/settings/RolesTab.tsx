@@ -59,8 +59,8 @@ export default function RolesTab() {
     return Object.entries(m).sort(([a], [b]) => a.localeCompare(b));
   }, [perms]);
 
-  const added = [...draft].filter(c => !saved.has(c));
-  const removed = [...saved].filter(c => !draft.has(c));
+  const added = Array.from(draft).filter(c => !saved.has(c));
+  const removed = Array.from(saved).filter(c => !draft.has(c));
   const dirty = added.length + removed.length > 0;
 
   const toggle = (code: string) => {
@@ -81,7 +81,7 @@ export default function RolesTab() {
     setSaving(true);
     setMsg(null);
     try {
-      await settingsApi.post(`/roles/${role.id}/permissions/set`, { codes: [...draft] });
+      await settingsApi.post(`/roles/${role.id}/permissions/set`, { codes: Array.from(draft) });
       setSaved(new Set(draft));
       setMsg({ ok: true, text: `Permissions for "${role.name}" saved.` });
     } catch (e: any) {
