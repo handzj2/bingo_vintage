@@ -698,6 +698,10 @@ function PaymentsPageInner() {
   const [showRecord, setShowRecord] = useState(false);
   const [detailPayment, setDetailPayment] = useState<any>(null);
   const [reversePayment, setReversePayment] = useState<any>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showBulkReverse, setShowBulkReverse] = useState(false);
+  const [bulkReason, setBulkReason] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [search, setSearch] = useState('');
   const [methodFilter, setMethodFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -965,10 +969,55 @@ function PaymentsPageInner() {
               </div>
             </div>
           ) : (
+            <>
+            {/* Bulk action bar — only shown when admin has selected reversible payments */}
+            {canReverse && selectedIds.size > 0 && (
+              <div className="flex items-center justify-between gap-3 px-4 py-3 bg-orange-50 border-b border-orange-200">
+                <p className="text-sm font-semibold text-orange-800">
+                  {selectedIds.size} payment{selectedIds.size === 1 ? '' : 's'} selected
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds(new Set())}
+                    className="text-sm px-3 py-1.5 border border-orange-300 rounded hover:bg-orange-100 text-orange-800"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setBulkReason(''); setShowBulkReverse(true); }}
+                    className="text-sm font-medium px-3 py-1.5 bg-orange-600 text-white rounded hover:bg-orange-700 flex items-center gap-1.5"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Reverse selected
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-bv-border bg-bv-hover">
+                    {canReverse && (
+                      <th className="px-3 py-3.5 w-10">
+                        <input
+                          type="checkbox"
+                          className="rounded border-gray-300"
+                          checked={paginated.filter(p => p.status === 'COMPLETED' || p.status === 'REVERSAL_REQUESTED').length > 0 &&
+                            paginated.filter(p => p.status === 'COMPLETED' || p.status === 'REVERSAL_REQUESTED').every(p => selectedIds.has(p.id))}
+                          onChange={(e) => {
+                            const next = new Set(selectedIds);
+                            const reversible = paginated.filter(p => p.status === 'COMPLETED' || p.status === 'REVERSAL_REQUESTED');
+                            if (e.target.checked) reversible.forEach(p => next.add(p.id));
+                            else reversible.forEach(p => next.delete(p.id));
+                            setSelectedIds(next);
+                          }}
+                          title="Select all reversible on this page"
+                        />
+                      </th>
+                    )}
                     {['Receipt #', 'Client / Loan', 'Amount', 'Method', 'Date & Time', 'Collected By', 'Status', ''].map(h => (
                       <th key={h} className="text-left px-4 py-3.5 text-xs font-black text-bv-meta uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
@@ -980,14 +1029,34 @@ function PaymentsPageInner() {
                     const method  = METHODS[pm];
                     const status  = STATUS_CFG[p.status] || STATUS_CFG['COMPLETED'];
                     const isReversed = p.status === 'REVERSED';
+                    const canSelect = !isReversed && (p.status === 'COMPLETED' || p.status === 'REVERSAL_REQUESTED');
                     const payDate = p.paymentDate || p.payment_date || p.createdAt;
                     const cn      = clientName(p.loan?.client);
                     const receipt = p.receiptNumber || p.receipt_number;
 
                     return (
                       <tr key={p.id}
-                        className={`hover:bg-bv-info-bg/30 transition-colors cursor-pointer ${isReversed ? 'opacity-50' : ''}`}
+                        className={`hover:bg-bv-info-bg/30 transition-colors cursor-pointer ${isReversed ? 'opacity-50' : ''} ${selectedIds.has(p.id) ? 'bg-orange-50/60' : ''}`}
                         onClick={() => setDetailPayment(p)}>
+                        {canReverse && (
+                          <td className="px-3 py-3.5" onClick={e => e.stopPropagation()}>
+                            {canSelect ? (
+                              <input
+                                type="checkbox"
+                                className="rounded border-gray-300"
+                                checked={selectedIds.has(p.id)}
+                                onChange={(e) => {
+                                  const next = new Set(selectedIds);
+                                  if (e.target.checked) next.add(p.id);
+                                  else next.delete(p.id);
+                                  setSelectedIds(next);
+                                }}
+                              />
+                            ) : (
+                              <span className="inline-block w-4" />
+                            )}
+                          </td>
+                        )}
                         <td className="px-4 py-3.5">
                           <span className="font-mono text-xs font-black bg-bv-hover text-bv-muted px-2.5 py-1 rounded-lg">{receipt}</span>
                         </td>
@@ -1037,6 +1106,7 @@ function PaymentsPageInner() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
 
           {/* Pagination */}
@@ -1065,6 +1135,72 @@ function PaymentsPageInner() {
       {detailPayment && <PaymentDetailModal payment={detailPayment} onClose={() => setDetailPayment(null)} onReverse={() => { setReversePayment(detailPayment); setDetailPayment(null); }} />}
       {/* FIX 6: pass isAdmin so ReverseModal calls the correct endpoint */}
       {reversePayment && <ReverseModal payment={reversePayment} onClose={() => setReversePayment(null)} onSaved={load} isAdmin={isAdmin} />}
+
+      {/* Bulk reverse confirmation modal */}
+      {showBulkReverse && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center gap-2 text-orange-600 mb-3">
+              <RotateCcw className="w-5 h-5" />
+              <h2 className="text-lg font-bold">Reverse {selectedIds.size} payment{selectedIds.size === 1 ? '' : 's'}</h2>
+            </div>
+            <p className="text-sm text-bv-muted mb-4">
+              Each payment will be reversed using the existing reversal engine. Schedule instalments are restored and the loan balance is increased. This cannot be undone from here.
+            </p>
+            <label className="block text-sm font-medium mb-1">Reason (required for audit)</label>
+            <textarea
+              value={bulkReason}
+              onChange={(e) => setBulkReason(e.target.value)}
+              rows={3}
+              className="w-full border border-bv-border rounded-lg p-2.5 text-sm mb-1"
+              placeholder="e.g. Duplicate entries from old system import, client overpaid, wrong amounts recorded..."
+            />
+            <p className="text-xs text-bv-meta mb-4">Minimum 10 characters. The same reason is recorded against every selected payment.</p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={bulkBusy}
+                onClick={() => setShowBulkReverse(false)}
+                className="px-4 py-2 text-sm border border-bv-border rounded-lg hover:bg-bv-hover"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={bulkBusy || bulkReason.trim().length < 10}
+                onClick={async () => {
+                  setBulkBusy(true);
+                  try {
+                    const res = await apiFetch('/payments/bulk-reverse', {
+                      method: 'POST',
+                      body: JSON.stringify({
+                        paymentIds: Array.from(selectedIds),
+                        reason: bulkReason.trim(),
+                      }),
+                    });
+                    const msg = res?.message || `Reversed ${res?.totalSucceeded ?? 0} payment(s)`;
+                    if (res?.totalFailed > 0) {
+                      alert(`${msg}\n\nFailed:\n${(res.failed || []).map((f: any) => `#${f.paymentId}: ${f.error}`).join('\n')}`);
+                    } else {
+                      alert(msg);
+                    }
+                    setSelectedIds(new Set());
+                    setShowBulkReverse(false);
+                    load();
+                  } catch (err: any) {
+                    alert(err?.message || 'Bulk reverse failed');
+                  } finally {
+                    setBulkBusy(false);
+                  }
+                }}
+                className="px-4 py-2 text-sm font-medium bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
+              >
+                {bulkBusy ? 'Reversing…' : `Reverse ${selectedIds.size} payment${selectedIds.size === 1 ? '' : 's'}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

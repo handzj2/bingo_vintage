@@ -24,6 +24,7 @@ import { PaymentsService } from './payments.service';
 import { AuditService } from '../audit/audit.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { ReversePaymentDto } from './dto/reverse-payment.dto';
+import { BulkReversePaymentDto } from './dto/bulk-reverse-payment.dto';
 
 @ApiTags('Payments')
 @ApiBearerAuth()
@@ -200,6 +201,22 @@ export class PaymentsController {
       throw new ForbiddenException('Admin, manager or payment.reverse permission required');
     }
     return this.paymentsService.getPendingReversalRequests(user?.tenantId);
+  }
+
+  @Post('bulk-reverse')
+  @ApiOperation({
+    summary: 'Reverse multiple payments in one action (Admin only)',
+    description:
+      'Reverses each payment using the existing single-reverse engine. ' +
+      'One shared reason is written to the audit trail for every payment. ' +
+      'Each payment runs in its own transaction — a failure on one does not undo the others. Max 50 IDs.',
+  })
+  async bulkReverse(
+    @Body() dto: BulkReversePaymentDto,
+    @Request() req: AuthRequest,
+  ) {
+    assertPermission(req.user, 'payment.reverse', 'Policy [2026-01-10]: You are not authorised to reverse payments');
+    return this.paymentsService.bulkReversePayments(dto.paymentIds, req.user, dto.reason);
   }
 
   @Post(':id/reverse')

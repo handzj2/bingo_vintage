@@ -43,6 +43,7 @@ export class SchedulesService {
             LIMIT 1
          ) p ON true
         WHERE ls.loan_id = $1
+          AND COALESCE(ls.is_active, true) = true
         ORDER BY ls.installment_number ASC`,
       [loanId],
     );
@@ -165,13 +166,14 @@ export class SchedulesService {
     cutoff.setDate(cutoff.getDate() - graceDays);
     const cutoffStr = cutoff.toISOString().slice(0, 10);
 
-    // 1. Flip PENDING → OVERDUE
+    // 1. Flip PENDING → OVERDUE (active schedules only)
     const updated = await this.scheduleRepo.manager.query(
       `UPDATE loan_schedules
           SET status     = 'OVERDUE',
               updated_at = now()
         WHERE status   = 'PENDING'
           AND due_date < $1
+          AND COALESCE(is_active, true) = true
         RETURNING id, loan_id, due_date, amount_due, amount_paid`,
       [cutoffStr],
     );
@@ -183,11 +185,12 @@ export class SchedulesService {
               updated_at = now()
         WHERE status   = 'PARTIAL'
           AND due_date < $1
-          AND amount_paid < amount_due`,
+          AND amount_paid < amount_due
+          AND COALESCE(is_active, true) = true`,
       [cutoffStr],
     );
 
-    // 3. Mark loans DELINQUENT if any overdue schedule exists
+    // 3. Mark loans DELINQUENT if any active overdue schedule exists
     await this.loanRepo.manager.query(
       `UPDATE loans l
           SET status     = 'DELINQUENT',
@@ -197,6 +200,7 @@ export class SchedulesService {
             SELECT 1 FROM loan_schedules ls
              WHERE ls.loan_id = l.id
                AND ls.status  = 'OVERDUE'
+               AND COALESCE(ls.is_active, true) = true
           )`,
     );
 
@@ -232,7 +236,8 @@ export class SchedulesService {
       `SELECT ls.id, ls.loan_id, ls.amount_due, ls.amount_paid
          FROM loan_schedules ls
         WHERE ls.due_date = $1
-          AND ls.status IN ('PENDING','PARTIAL')`,
+          AND ls.status IN ('PENDING','PARTIAL')
+          AND COALESCE(ls.is_active, true) = true`,
       [todayStr],
     );
     for (const row of dueToday) {

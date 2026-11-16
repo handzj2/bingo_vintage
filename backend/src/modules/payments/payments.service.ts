@@ -605,6 +605,59 @@ export class PaymentsService {
     };
   }
 
+  /**
+   * Bulk reverse — builds on the existing reversePayment() engine.
+   * Each payment is reversed in its own transaction so one failure
+   * does not roll back the others. Returns a clear succeeded/failed summary.
+   */
+  async bulkReversePayments(paymentIds: number[], adminUser: any, reason: string) {
+    reason = (reason || '').trim();
+    if (reason.length < 10) {
+      throw new BadRequestException('Reversal reason must be at least 10 characters');
+    }
+    if (!Array.isArray(paymentIds) || paymentIds.length === 0) {
+      throw new BadRequestException('At least one payment ID is required');
+    }
+    if (paymentIds.length > 50) {
+      throw new BadRequestException('Maximum 50 payments per bulk reverse');
+    }
+
+    // Deduplicate while preserving order
+    const uniqueIds = [...new Set(paymentIds.map(Number).filter((id) => Number.isInteger(id) && id > 0))];
+
+    const succeeded: { paymentId: number; reversedAmount: number; restoredBalance: number }[] = [];
+    const failed: { paymentId: number; error: string }[] = [];
+
+    for (const id of uniqueIds) {
+      try {
+        const result = await this.reversePayment(id, adminUser, reason);
+        succeeded.push({
+          paymentId: id,
+          reversedAmount: result.data?.reversedAmount ?? 0,
+          restoredBalance: result.data?.restoredBalance ?? 0,
+        });
+      } catch (err: any) {
+        failed.push({
+          paymentId: id,
+          error: err?.message || 'Unknown error',
+        });
+      }
+    }
+
+    return {
+      success: failed.length === 0,
+      message:
+        failed.length === 0
+          ? `Successfully reversed ${succeeded.length} payment(s)`
+          : `Reversed ${succeeded.length} payment(s), ${failed.length} failed`,
+      succeeded,
+      failed,
+      totalRequested: uniqueIds.length,
+      totalSucceeded: succeeded.length,
+      totalFailed: failed.length,
+    };
+  }
+
   async findOne(id: number, tenantId?: number) {
     const where: any = { id };
     if (tenantId) where.tenantId = tenantId;
