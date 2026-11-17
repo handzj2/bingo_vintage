@@ -93,7 +93,7 @@ export class DashboardService {
        FROM loans l
        LEFT JOIN loan_products lp ON lp.id = l.loan_product_id
       WHERE l.deleted_at IS NULL AND l.tenant_id = $1 AND l.status IN ('ACTIVE','DELINQUENT')
-        AND EXISTS (SELECT 1 FROM loan_schedules ls WHERE ls.loan_id = l.id AND ls.status = 'OVERDUE')
+        AND EXISTS (SELECT 1 FROM loan_schedules ls WHERE ls.loan_id = l.id AND ls.status = 'OVERDUE' AND COALESCE(ls.is_active, true) = true)
       GROUP BY COALESCE(lp.id, NULL)`,
       [tenantId],
     );

@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Calendar, RefreshCw, Loader2, Search, AlertTriangle,
   CheckCircle2, ChevronRight, Bike, Banknote, Phone,
@@ -182,7 +183,11 @@ function LoanCard({ loan, sched }: { loan: any; sched: any }) {
   );
 }
 
-export default function SchedulesIndexPage() {
+function SchedulesIndexInner() {
+  const router = useRouter();
+  // ?clientId=… (from the client profile) lists only that client's loans.
+  const clientIdParam = useSearchParams().get('clientId');
+  const clientFilterId = clientIdParam ? Number(clientIdParam) : null;
   const [loans, setLoans]         = useState<any[]>([]);
   const [schedData, setSchedData] = useState<Record<number, any>>({});
   const [loading, setLoad]        = useState(true);
@@ -193,7 +198,7 @@ export default function SchedulesIndexPage() {
     setLoad(true);
     setSchedData({});
     try {
-      const r    = await fetch(`${API_URL}/loans`, { headers: getH() });
+      const r    = await fetch(`${API_URL}/loans${clientFilterId ? `?clientId=${clientFilterId}` : ''}`, { headers: getH() });
       const json = await r.json();
       const all: any[] = Array.isArray(json) ? json : json?.data || [];
       const active = all.filter(l =>
@@ -213,7 +218,7 @@ export default function SchedulesIndexPage() {
       }
     } catch (e) { console.error(e); }
     finally { setLoad(false); }
-  }, []);
+  }, [clientFilterId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -258,6 +263,16 @@ export default function SchedulesIndexPage() {
           {loading ? 'Refreshing…' : 'Refresh'}
         </button>
       </div>
+
+      {clientFilterId && (
+        <div className="border border-bv-border bg-bv-info-bg text-sm px-3 py-2 rounded-md flex flex-wrap items-center justify-between gap-2">
+          <span>Showing loans for <b>{loans[0] ? clientName(loans[0]) : `client #${clientFilterId}`}</b> only.</span>
+          <span className="flex gap-3">
+            <Link href={`/dashboard/clients/${clientFilterId}`} className="font-semibold underline">Back to profile</Link>
+            <button type="button" onClick={() => router.replace('/dashboard/schedules')} className="font-semibold underline">Show all loans</button>
+          </span>
+        </div>
+      )}
 
       {/* Counts — not four coloured KPI tiles */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm border border-bv-border rounded-md p-4 bg-bv-surface">
@@ -335,5 +350,14 @@ export default function SchedulesIndexPage() {
         Showing {filtered.length} of {loans.length} loans
       </p>
     </div>
+  );
+}
+
+// useSearchParams() must sit under a Suspense boundary for the Next.js production build.
+export default function SchedulesIndexPage() {
+  return (
+    <Suspense fallback={null}>
+      <SchedulesIndexInner />
+    </Suspense>
   );
 }

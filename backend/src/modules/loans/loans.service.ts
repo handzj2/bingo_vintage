@@ -15,6 +15,7 @@ import { sanitiseDto }      from '../../common/utils/sanitise';
 import { LedgerService }    from '../ledger/ledger.service';
 import { BikesService }     from '../bikes/bikes.service';
 import { addMonths } from 'date-fns';
+import { calculateLoanEndDate, normalizeLoanType, termProblem } from './loan-dates.util';
 import { assertAdmin, assertRole, isBranchScopedRole, RequestUser } from '../../common/helpers/role-helper';
 import { ApplyLoanDto }          from './dto/apply-loan.dto';
 import { AdminApprovalDto }      from './dto/admin-approval.dto';
@@ -530,9 +531,8 @@ export class LoansService {
       await em.query(`DELETE FROM loan_schedules WHERE loan_id = $1`, [id]);
 
       // Step 2: Update loan start/end date – balance will be set later
-      const newEnd = loan.termWeeks && loan.termWeeks > 0
-        ? new Date(newStart.getTime() + loan.termWeeks * 7 * 24 * 60 * 60 * 1000)
-        : addMonths(newStart, loan.termMonths);
+      const newEnd = calculateLoanEndDate({ startDate: newStart, termWeeks: loan.termWeeks, termMonths: loan.termMonths });
+      if (!newEnd) throw new BadRequestException(`Loan ${loan.loanNumber} has no term set, so an end date cannot be calculated`);
 
       await em.query(
         `UPDATE loans
@@ -634,7 +634,8 @@ export class LoansService {
         );
       }
 
-      const newEnd = addMonths(newStart, loan.termMonths);
+      const newEnd = calculateLoanEndDate({ startDate: newStart, termWeeks: loan.termWeeks, termMonths: loan.termMonths });
+      if (!newEnd) throw new BadRequestException(`Loan ${loan.loanNumber} has no term set, so an end date cannot be calculated`);
       await em.query(
         `UPDATE loans SET start_date = $1, end_date = $2, updated_at = NOW() WHERE id = $3`,
         [newStart.toISOString().slice(0, 10), newEnd.toISOString().slice(0, 10), id],
@@ -839,6 +840,14 @@ export class LoansService {
       const principal    = Number(dto.principal_amount);
       const weeks        = Number(dto.term_weeks) || 0;
       const termMonths   = weeks > 0 ? Math.ceil(weeks / 4) : 12;
+
+      // A loan must not be saved with gaps that later show up as blank fields.
+      if (!dto.client_id) throw new BadRequestException('A client is required to create a loan');
+      if (!(principal > 0)) throw new BadRequestException('Principal amount must be greater than zero');
+      const createType = normalizeLoanType(dto.loan_type ?? 'bike');
+      const createTermError = termProblem(createType, weeks, weeks > 0 ? termMonths : 0);
+      if (createTermError) throw new BadRequestException(createTermError);
+      const createStart = new Date();
       const weeklyAmount = dto.weekly_installment ? Number(dto.weekly_installment) : null;
       const loanProductId: number | undefined = dto.loan_product_id ?? undefined;
       const tenantIdForGuard = dto.tenant_id ?? undefined;
@@ -861,7 +870,7 @@ export class LoansService {
 
       const loan = em.create(Loan, {
         loanNumber,
-        loanType:       dto.loan_type ?? 'bike',
+        loanType:       createType,
         clientId:       Number(dto.client_id),
         bikeId:         dto.bike_id ? Number(dto.bike_id) : undefined,
         principalAmount: principal,
@@ -872,7 +881,8 @@ export class LoansService {
         termWeeks:      weeks || null,
         weeklyAmount,
         deposit:        dto.deposit ? Number(dto.deposit) : 0,
-        startDate:      new Date(),
+        startDate:      createStart,
+        endDate:        calculateLoanEndDate({ startDate: createStart, termWeeks: weeks, termMonths }),
         notes:          dto.notes ?? null,
         status:         LoanStatus.PENDING_APPROVAL,
         loanProductId:  loadedProduct?.id ?? null,
@@ -918,6 +928,45 @@ export class LoansService {
           continue;
         }
 
+        // Required loan data. Previously a missing start date silently became "today", a missing
+        // principal became 0, and a record with no loan type became a bike loan with no weeks —
+        // all of which produced loans that show blank or wrong fields. Reject the row instead,
+        // with a message that says exactly what to add to the ledger.
+        const recWeeks    = Number(rec.termWeeks) || 0;
+        const recType     = rec.loanType ? normalizeLoanType(rec.loanType) : (recWeeks > 0 ? 'bike' : 'cash');
+        const recPrincipal = Number(rec.principalAmount) || Number(rec.totalAmount) || 0;
+        const recProblems: string[] = [];
+        if (!rec.startDate || isNaN(new Date(rec.startDate).getTime())) recProblems.push('start date');
+        if (!(recPrincipal > 0)) recProblems.push('principal (or total) amount');
+        const recTermError = termProblem(recType, recWeeks, Number(rec.termMonths) || 0);
+        if (recTermError) {
+          recProblems.push(
+            rec.loanType ? (recType === 'bike' ? 'term in weeks' : 'term in months')
+                         : 'term (weeks for a bike loan, or loan type and months for a cash loan)',
+          );
+        }
+        // Imported payments are money already received: same rule as every other entry route, so a
+        // future-dated or undated ledger row is rejected here instead of being saved (undated rows
+        // used to silently become "today").
+        for (const p of Array.isArray(rec.payments) ? rec.payments : []) {
+          if (!(Number(p.amountPaid) > 0)) continue;
+          if (!p.date || isNaN(new Date(p.date).getTime())) {
+            if (!recProblems.includes('a payment with no valid date')) recProblems.push('a payment with no valid date');
+            continue;
+          }
+          try {
+            assertPaymentDateNotFuture(p.date);
+          } catch {
+            const msg = `a payment dated in the future (${String(p.date).slice(0, 10)})`;
+            if (!recProblems.includes(msg)) recProblems.push(msg);
+          }
+        }
+        if (recProblems.length) {
+          skipped++;
+          errors.push({ client: rec.clientName, error: `Missing or invalid: ${recProblems.join(', ')}` });
+          continue;
+        }
+
         await this.loansRepo.manager.transaction(async (em) => {
           const nameParts = rec.clientName.trim().split(' ');
           const firstName = nameParts[0];
@@ -937,11 +986,12 @@ export class LoansService {
           }
 
           // Determine loan type and calculator
-          const loanType = (rec.loanType as string)?.toLowerCase() === 'cash' ? 'cash' : 'bike';
-          const weeks = Number(rec.termWeeks) || 0;
-          const termMonths = weeks > 0 ? Math.ceil(weeks / 4) : (Number(rec.termMonths) || 12);
-          const principal = Number(rec.principalAmount) || Number(rec.totalAmount) || 0;
-          const startDate = rec.startDate ? new Date(rec.startDate) : new Date();
+          // Type, term, principal and start date were validated above (no silent defaults).
+          const loanType = recType;
+          const weeks = loanType === 'bike' ? recWeeks : 0;
+          const termMonths = weeks > 0 ? Math.ceil(weeks / 4) : Number(rec.termMonths);
+          const principal = recPrincipal;
+          const startDate = new Date(rec.startDate);
 
           const calculationMethod = loanType === 'bike' ? 'weekly_flat' : 'monthly_flat';
           const termCount = loanType === 'bike' ? (weeks || 0) : termMonths;
@@ -977,6 +1027,7 @@ export class LoansService {
             weeklyAmount:    Number(rec.weeklyAmount) || null,
             deposit:         Number(rec.deposit) || 0,
             startDate,
+            endDate:         calculateLoanEndDate({ startDate, termWeeks: weeks, termMonths }),
             status:          loanStatus,
             notes:           `Imported from historical ledger. Guarantors: ${(rec.guarantors || []).join(', ') || 'none'}`,
           } as any);
@@ -1065,6 +1116,8 @@ export class LoansService {
       weeklyAmount?: number;
       interestRate?: number;
       startDate?: string;
+      /** Correct a loan recorded as the wrong kind (e.g. a bike loan captured as cash). */
+      loanType?: string;
       reason: string;
       correctionType?: 'TERMS' | 'RESCHEDULE' | 'SCHEDULE';
     },
@@ -1089,6 +1142,7 @@ export class LoansService {
 
       // Snapshot previous state for audit
       const previousSnapshot = {
+        loanType: normalizeLoanType(loan.loanType),
         principalAmount: Number(loan.principalAmount),
         interestRate: Number(loan.interestRate),
         termWeeks: loan.termWeeks,
@@ -1099,6 +1153,33 @@ export class LoansService {
         totalAmount: Number(loan.totalAmount),
         balance: Number(loan.balance),
       };
+
+      // Loan type correction. The two kinds are scheduled differently (bike = weekly instalments over
+      // a number of weeks, cash = monthly over a number of months), so switching needs the new term
+      // spelled out — deriving one from the other would silently produce a wrong schedule.
+      if (dto.loanType !== undefined) {
+        // Checked here, not only on the DTO: this endpoint's body type is an intersection, so Nest's
+        // ValidationPipe does not run on it and an unknown value would otherwise be read as 'cash'.
+        if (!['bike', 'cash'].includes(String(dto.loanType).trim().toLowerCase())) {
+          throw new BadRequestException("Loan type must be 'bike' or 'cash'");
+        }
+        const newType = normalizeLoanType(dto.loanType);
+        if (newType !== normalizeLoanType(loan.loanType)) {
+          if (newType === 'bike') {
+            if (!(Number(dto.termWeeks) > 0)) {
+              throw new BadRequestException('To change this loan to a bike loan, enter its term in weeks.');
+            }
+            loan.termMonths = dto.termMonths ?? Math.ceil(Number(dto.termWeeks) / 4);
+          } else {
+            if (!(Number(dto.termMonths) > 0)) {
+              throw new BadRequestException('To change this loan to a cash loan, enter its term in months.');
+            }
+            loan.termWeeks = null as any;
+            loan.weeklyAmount = null as any;
+          }
+          loan.loanType = newType;
+        }
+      }
 
       // Apply proposed term changes
       if (dto.principalAmount !== undefined) loan.principalAmount = dto.principalAmount;
@@ -1116,6 +1197,12 @@ export class LoansService {
       const termCount = weeks > 0 ? weeks : (loan.termMonths || 12);
       const principal = Number(loan.principalAmount);
       const startDate = new Date(loan.startDate);
+
+      // Refuse a correction that would leave the loan without what its schedule is built from.
+      // (A bike loan with no weeks used to be scheduled by reading its months as weeks.)
+      if (!(principal > 0)) throw new BadRequestException('Principal amount must be greater than zero');
+      const termError = termProblem(weeks > 0 ? 'bike' : loan.loanType, loan.termWeeks, loan.termMonths);
+      if (termError) throw new BadRequestException(termError);
 
       const calculationMethod = (loan as any).loanType === 'bike' || weeks > 0
         ? 'weekly_flat' : 'monthly_flat';
@@ -1211,13 +1298,9 @@ export class LoansService {
       const newTotal = calculation.totalPayable;
       const finalBalance = Math.max(0, newTotal - totalApplied);
 
-      // Update loan header
-      if (dto.startDate) {
-        const newEnd = calculationMethod === 'weekly_flat'
-          ? new Date(startDate.getTime() + (termCount * 7 * 24 * 60 * 60 * 1000))
-          : addMonths(startDate, termCount);
-        loan.endDate = newEnd;
-      }
+      // Update loan header. The end date is always recalculated: a term change moves it just as a
+      // start-date change does (before, it was only refreshed when the start date was also edited).
+      loan.endDate = calculateLoanEndDate({ startDate, termWeeks: weeks, termMonths: loan.termMonths }) as any;
       loan.totalAmount = newTotal as any;
       loan.balance = finalBalance as any;
 
@@ -1235,6 +1318,7 @@ export class LoansService {
           dto.correctionType || 'TERMS',
           JSON.stringify(previousSnapshot),
           JSON.stringify({
+            loanType: normalizeLoanType(loan.loanType),
             principalAmount: principal,
             interestRate: Number(loan.interestRate),
             termWeeks: loan.termWeeks,

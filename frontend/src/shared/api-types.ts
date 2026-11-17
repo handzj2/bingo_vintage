@@ -356,6 +356,18 @@ export interface CreateReconciliationRequest {
   actualCash: number;
 }
 
+/** Loan as returned inside GET /clients/:id (camelCase entity), normalised by the client mapper. */
+export interface ClientLoanSummary {
+  id:              number;
+  loanNumber:      string;
+  loanType:        string;   // 'BIKE' | 'CASH' (upper-cased)
+  status:          string;   // upper-cased LoanStatus
+  principalAmount: number;
+  totalAmount:     number;
+  balance:         number;
+  startDate:       string | null;
+}
+
 // ─────────────────────────────────────────────────────────────
 // CLIENT  (canonical — supersedes features/clients/client.types.ts)
 // ─────────────────────────────────────────────────────────────
@@ -416,6 +428,8 @@ export interface Client {
   justification?: string;
   verification_method?: string;
   notes?: string;
+  /** The client's loans (all statuses). Present on the profile endpoint. */
+  loans?: ClientLoanSummary[];
 }
 
 // ─────────────────────────────────────────────────────────────

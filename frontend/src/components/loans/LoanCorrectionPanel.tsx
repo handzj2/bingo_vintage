@@ -1,12 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import type { LoanDetail, LoanKind } from '@/features/loans/loan.mapper';
 import toast from 'react-hot-toast';
 import { Loader2, History, CalendarClock, Scale, Edit3 } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 type Mode = null | 'reschedule' | 'terms' | 'balance';
+type TermKey = 'principalAmount' | 'interestRate' | 'termWeeks' | 'termMonths' | 'weeklyAmount';
 
 /**
  * Loan correction workflows on the loan detail page. Every action needs a written reason
@@ -19,7 +21,7 @@ type Mode = null | 'reschedule' | 'terms' | 'balance';
  */
 export type CorrectionRequest = { mode: 'reschedule' | 'terms' | 'balance'; n: number };
 
-export default function LoanCorrectionPanel({ loan, onChanged, request }: { loan: any; onChanged: () => void; request?: CorrectionRequest | null }) {
+export default function LoanCorrectionPanel({ loan, onChanged, request }: { loan: LoanDetail; onChanged: () => void; request?: CorrectionRequest | null }) {
   const { user, can } = useAuth();
   const loanId = loan.id;
   const mayResched = can('loan.reschedule'), mayTerms = can('loan.correct_terms'),
@@ -33,7 +35,10 @@ export default function LoanCorrectionPanel({ loan, onChanged, request }: { loan
   const [reason, setReason] = useState('');
   const [startDate, setStartDate] = useState('');
   const [balance, setBalance] = useState('');
-  const [terms, setTerms] = useState({ principalAmount: '', interestRate: '', termWeeks: '', termMonths: '', weeklyAmount: '' });
+  const [booksPaid, setBooksPaid] = useState('');
+  const [terms, setTerms] = useState<Record<TermKey, string>>({ principalAmount: '', interestRate: '', termWeeks: '', termMonths: '', weeklyAmount: '' });
+  // '' = keep the loan's current type.
+  const [newType, setNewType] = useState<'' | LoanKind>('');
   const [history, setHistory] = useState<any[] | null>(null);
   const [histErr, setHistErr] = useState('');
 
@@ -63,7 +68,7 @@ export default function LoanCorrectionPanel({ loan, onChanged, request }: { loan
 
   if (!(mayResched || mayTerms || mayBal || mayHist)) return null;
 
-  const close = () => { setMode(null); setErr(''); setReason(''); setBalance(''); setConfirmed(false); };
+  const close = () => { setMode(null); setErr(''); setReason(''); setBalance(''); setBooksPaid(''); setNewType(''); setConfirmed(false); };
   const done = (msg: string) => { toast.success(msg); close(); onChanged(); loadHistory(); };
 
   const submit = async () => {
@@ -81,8 +86,20 @@ export default function LoanCorrectionPanel({ loan, onChanged, request }: { loan
       if (!confirmed) { setBusy(false); return setErr('Tick the box to confirm the difference is correct.'); }
       res = await api.patch(`/loans/${loanId}/correct-balance`, { newBalance: n, reason: reason.trim() });
     } else {
-      const body: any = { reason: reason.trim() };
-      (Object.keys(terms) as (keyof typeof terms)[]).forEach((k) => { if (terms[k] !== '') body[k] = Number(terms[k]); });
+      const body: Record<string, unknown> = { reason: reason.trim() };
+      const switching = newType !== '' && newType !== loan.loanType;
+      const finalType: LoanKind = newType || loan.loanType;
+      if (switching) {
+        body.loanType = newType;
+        // The two kinds are scheduled differently, so the new term must be stated, not guessed.
+        if (finalType === 'bike' && !(Number(terms.termWeeks) > 0)) { setBusy(false); return setErr('Changing to a bike loan needs the term in weeks.'); }
+        if (finalType === 'cash' && !(Number(terms.termMonths) > 0)) { setBusy(false); return setErr('Changing to a cash loan needs the term in months.'); }
+      }
+      (Object.keys(terms) as TermKey[]).forEach((k) => {
+        if (terms[k] === '') return;
+        // Interest is typed as a percentage (15) and stored as a fraction (0.15), as on the Edit form.
+        body[k] = k === 'interestRate' ? Number(terms[k]) / 100 : Number(terms[k]);
+      });
       if (startDate) body.startDate = startDate;
       if (Object.keys(body).length < 2) { setBusy(false); return setErr('Change at least one term.'); }
       res = await api.patch(`/loans/${loanId}/edit-details`, body);
@@ -106,6 +123,10 @@ export default function LoanCorrectionPanel({ loan, onChanged, request }: { loan
   const balanceCorrectable = ['ACTIVE', 'COMPLETED', 'DEFAULTED'].includes(String(loan.status));
   const appliesNow = mayDecide || ['admin', 'superadmin'].includes(String(user?.role ?? '').toLowerCase());
   const curBal = Number(loan.balance ?? 0);
+  // Align-to-books helper: contract total minus what the books say was collected.
+  const contractTotal = loan.totalAmount > 0 ? loan.totalAmount : NaN;
+  const systemPaid = Number.isFinite(contractTotal) ? contractTotal - curBal : NaN;
+  const booksPaidNum = booksPaid.trim() === '' ? NaN : Number(booksPaid);
   const newBalNum = balance.trim() === '' ? NaN : Number(balance);
   const delta = Number.isFinite(newBalNum) ? newBalNum - curBal : null;
   const fmt = (n: number) => Math.abs(n).toLocaleString();
@@ -127,6 +148,23 @@ export default function LoanCorrectionPanel({ loan, onChanged, request }: { loan
         <div className="border border-bv-border rounded-bv p-3 space-y-3 bg-bv-hover/40">
           <h3 className="text-sm font-semibold">{mode === 'reschedule' ? 'Reschedule loan' : mode === 'balance' ? 'Correct balance' : 'Correct loan terms'}</h3>
           {mode === 'reschedule' && <label className="block text-sm">New start date<input type="date" className={field} value={startDate} onChange={(e) => setStartDate(e.target.value)} /></label>}
+          {mode === 'balance' && Number.isFinite(contractTotal) && (
+            <div className="text-sm border border-bv-border rounded-bv p-3 space-y-2 bg-bv-surface">
+              <p className="font-medium">Align to the books</p>
+              <p className="text-xs text-bv-meta">Contract total {contractTotal.toLocaleString()} · system shows {systemPaid.toLocaleString()} paid · balance {curBal.toLocaleString()}</p>
+              <label className="block text-sm">Total paid per books (UGX)
+                <input type="number" min={0} className={field} value={booksPaid} placeholder="e.g. 7880000"
+                  onChange={(e) => {
+                    setBooksPaid(e.target.value); setConfirmed(false);
+                    const n = Number(e.target.value);
+                    setBalance(e.target.value.trim() !== '' && Number.isFinite(n) && n >= 0 ? String(Math.max(0, contractTotal - n)) : '');
+                  }} /></label>
+              {Number.isFinite(booksPaidNum) && (
+                <p className="text-xs">{contractTotal.toLocaleString()} − {booksPaidNum.toLocaleString()} = <b>{Math.max(0, contractTotal - booksPaidNum).toLocaleString()}</b>{booksPaidNum > contractTotal ? ' (books show more paid than the contract total; balance set to 0)' : ''}</p>
+              )}
+              <p className="text-xs text-bv-meta">If the system and books differ because some payments were wrong, reverse those payments first (client → Payments tab) instead of overriding the balance.</p>
+            </div>
+          )}
           {mode === 'balance' && <label className="block text-sm">New outstanding balance (UGX) <span className="text-bv-meta">— currently {Number(loan.balance ?? 0).toLocaleString()}</span>
             <input type="number" min={0} className={field} value={balance} onChange={(e) => { setBalance(e.target.value); setConfirmed(false); }} /></label>}
           {mode === 'balance' && delta !== null && delta !== 0 && (
@@ -138,14 +176,32 @@ export default function LoanCorrectionPanel({ loan, onChanged, request }: { loan
               <label className="flex items-start gap-2 pt-1"><input type="checkbox" className="mt-1" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} /> I have checked this difference against the payment records.</label>
             </div>
           )}
-          {mode === 'terms' && (
-            <div className="grid grid-cols-2 gap-3">
-              {([['principalAmount', 'Principal'], ['interestRate', 'Interest rate'], ['termWeeks', 'Term (weeks)'], ['termMonths', 'Term (months)'], ['weeklyAmount', 'Weekly amount']] as const).map(([k, label]) => (
-                <label key={k} className="block text-sm">{label}<input type="number" min={0} placeholder="unchanged" className={field} value={terms[k]} onChange={(e) => setTerms({ ...terms, [k]: e.target.value })} /></label>
-              ))}
-              <label className="block text-sm">Start date<input type="date" className={field} value={startDate} onChange={(e) => setStartDate(e.target.value)} /></label>
-            </div>
-          )}
+          {mode === 'terms' && (() => {
+            const kind: LoanKind = newType || loan.loanType;
+            const switching = kind !== loan.loanType;
+            const fields: [TermKey, string][] = [
+              ['principalAmount', 'Principal'],
+              ['interestRate', `Interest rate (%) — ${kind === 'bike' ? 'weekly' : 'monthly'}`],
+              ...(kind === 'bike'
+                ? ([['termWeeks', 'Term (weeks)'], ['weeklyAmount', 'Weekly amount']] as [TermKey, string][])
+                : ([['termMonths', 'Term (months)']] as [TermKey, string][])),
+            ];
+            return (
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block text-sm col-span-2">Loan type
+                  <select className={field} value={newType || loan.loanType} onChange={(e) => setNewType(e.target.value === loan.loanType ? '' : (e.target.value as LoanKind))}>
+                    <option value="bike">Bike loan — weekly instalments</option>
+                    <option value="cash">Cash loan — monthly instalments</option>
+                  </select>
+                  {switching && <span className="block text-xs text-bv-warning mt-1">Changing the type rebuilds the schedule as {kind === 'bike' ? 'weekly' : 'monthly'}. Enter the {kind === 'bike' ? 'term in weeks' : 'term in months'} below. Payments, receipts and history are kept.</span>}
+                </label>
+                {fields.map(([k, label]) => (
+                  <label key={k} className="block text-sm">{label}<input type="number" min={0} step="any" placeholder={switching && (k === 'termWeeks' || k === 'termMonths') ? 'required' : 'unchanged'} className={field} value={terms[k]} onChange={(e) => setTerms({ ...terms, [k]: e.target.value })} /></label>
+                ))}
+                <label className="block text-sm">Start date<input type="date" className={field} value={startDate} onChange={(e) => setStartDate(e.target.value)} /></label>
+              </div>
+            );
+          })()}
           <label className="block text-sm">Reason (required)<textarea rows={2} className={field} value={reason} onChange={(e) => setReason(e.target.value)} /></label>
           {err && <p className="text-sm text-bv-danger">{err}</p>}
           <div className="flex gap-2">

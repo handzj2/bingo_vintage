@@ -39,7 +39,7 @@ import toast from 'react-hot-toast';
  */
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Banknote, Plus, X, Search, RefreshCw, CheckCircle, AlertCircle,
   Receipt, TrendingUp, Calendar, Clock, RotateCcw, Loader2,
@@ -47,6 +47,7 @@ import {
   ArrowUpRight, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import ReversePaymentsDialog from '@/components/payments/ReversePaymentsDialog';
 
 // FIX 1: import receipt components (previously missing, caused build error)
 import { ReceiptButton } from '../../../features/payments/components/ReceiptModal';
@@ -66,6 +67,14 @@ const apiFetch = async (path: string, opts: RequestInit = {}) => {
   if (!res.ok) throw new Error(Array.isArray(json.message) ? json.message.join(', ') : (json.message || `Request failed: ${res.status}`));
   return json;
 };
+
+// "Today" and "now" for payments are Kampala's, whatever time zone the browser is in. The form used the
+// browser's UTC date, so between midnight and 03:00 in Kampala it defaulted to YESTERDAY and the payment
+// was treated as backdated, which cashiers are not allowed to enter.
+const kampalaToday   = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Kampala' }).format(new Date());
+const kampalaNowTime = () => new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Kampala', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date());
+// Uganda has no daylight saving, so +03:00 is always right.
+const kampalaInstant = (date: string, time: string) => new Date(`${date}T${time || '00:00'}:00+03:00`);
 
 const fmt = (n: any) => `UGX ${Number(n || 0).toLocaleString()}`;
 const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString('en-UG', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
@@ -111,7 +120,7 @@ function Modal({ title, subtitle, onClose, children, wide }: any) {
 }
 
 // ── Record Payment Modal ──────────────────────────────────────
-function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () => void; onSaved: () => void; initialLoanId?: number | null }) {
+function RecordPaymentModal({ onClose, onSaved, initialLoanId, clientId }: { onClose: () => void; onSaved: () => void; initialLoanId?: number | null; clientId?: number | null }) {
   const [step, setStep] = useState<1 | 2>(1);
   const [allLoans, setAllLoans] = useState<any[]>([]);
   const [clientSearch, setClientSearch] = useState('');
@@ -127,8 +136,8 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
   const [form, setForm] = useState({
     amount: '',
     payment_method: 'CASH',
-    payment_date: new Date().toISOString().split('T')[0],
-    payment_time: new Date().toTimeString().slice(0, 5),
+    payment_date: kampalaToday(),
+    payment_time: kampalaNowTime(),
     receipt_number: '',   // ← blank by default; optional
     collected_by: '',
     notes: '',
@@ -149,12 +158,14 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
 
   useEffect(() => {
     setLoading(true);
-    apiFetch('/loans?status=ACTIVE')
+    apiFetch(`/loans?status=ACTIVE${clientId ? `&clientId=${clientId}` : ''}`)
       .then(r => {
         const list = Array.isArray(r) ? r : r.data || r.loans || [];
         setAllLoans(list);
-        if (initialLoanId) {
-          const found = list.find((l: any) => Number(l.id) === Number(initialLoanId));
+        // Opened from a client profile with a single active loan: go straight to the payment form.
+        const targetLoanId = initialLoanId ?? (clientId && list.length === 1 ? Number(list[0].id) : null);
+        if (targetLoanId) {
+          const found = list.find((l: any) => Number(l.id) === Number(targetLoanId));
           if (found) {
             const c = found.client;
             if (c) setSelectedClient(c);
@@ -165,7 +176,7 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
       })
       .catch(() => setAllLoans([]))
       .finally(() => setLoading(false));
-  }, [initialLoanId]);
+  }, [initialLoanId, clientId]);
 
   useEffect(() => {
     if (!selectedLoan) { setLoanSchedule(null); return; }
@@ -213,7 +224,13 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
     // FIX 2: receipt_number is optional — no longer validated as required
     setError(''); setSubmitting(true);
     try {
-      const dt = new Date(`${form.payment_date}T${form.payment_time}`);
+      const dt = kampalaInstant(form.payment_date, form.payment_time);
+      if (isNaN(dt.getTime())) { setSubmitting(false); return setError('Enter a valid payment date and time'); }
+      // Same rule the server enforces: a payment is money already received, so never in the future.
+      if (dt.getTime() > Date.now() + 60_000) {
+        setSubmitting(false);
+        return setError('The payment date and time cannot be in the future. Use the day and time the money was received.');
+      }
       const result = await apiFetch('/payments', {
         method: 'POST',
         body: JSON.stringify({
@@ -476,12 +493,14 @@ function RecordPaymentModal({ onClose, onSaved, initialLoanId }: { onClose: () =
               <label className="block text-xs font-black text-bv-meta uppercase tracking-wider mb-2">Payment Date *</label>
               <input type="date"
                 className="w-full border-2 border-bv-border rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:border-bv-action"
+                max={kampalaToday()}
                 value={form.payment_date} onChange={e => setForm({ ...form, payment_date: e.target.value })} />
             </div>
             <div>
               <label className="block text-xs font-black text-bv-meta uppercase tracking-wider mb-2">Time</label>
               <input type="time"
                 className="w-full border-2 border-bv-border rounded-xl px-3 py-2.5 text-sm font-semibold focus:outline-none focus:border-bv-action"
+                max={form.payment_date === kampalaToday() ? kampalaNowTime() : undefined}
                 value={form.payment_time} onChange={e => setForm({ ...form, payment_time: e.target.value })} />
             </div>
           </div>
@@ -693,11 +712,20 @@ function PaymentsPageInner() {
   const [todaySummary, setTodaySummary] = useState<{ todayAmount: number; todayCount: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const router = useRouter();
   const searchParams = useSearchParams();
+  // ?clientId=… (from the client profile) scopes this page to one client's payments across all
+  // of their loans. The scoped list is complete (not capped at the latest 100).
+  const clientFilterId = searchParams.get('clientId') ? Number(searchParams.get('clientId')) : null;
   const initialLoanId = searchParams.get('loanId') ? Number(searchParams.get('loanId')) : null;
-  const [showRecord, setShowRecord] = useState(false);
+  // Links that say "record a payment for this loan/client" (?loanId=… or ?record=1) open the
+  // form straight away; before this they only pre-selected the loan after a second click.
+  const autoOpenRecord = initialLoanId != null || searchParams.get('record') === '1';
+  const [showRecord, setShowRecord] = useState(autoOpenRecord && canRecord);
   const [detailPayment, setDetailPayment] = useState<any>(null);
   const [reversePayment, setReversePayment] = useState<any>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showBulkReverse, setShowBulkReverse] = useState(false);
   const [search, setSearch] = useState('');
   const [methodFilter, setMethodFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -722,7 +750,7 @@ function PaymentsPageInner() {
       // page reflects real volume instead of silently truncating.
       // (Previously this read data.data / data.payments, which don't
       // exist on this response shape — list was always [], page showed 0.)
-      const data = await apiFetch('/payments?limit=100');
+      const data = await apiFetch(clientFilterId ? `/payments/client/${clientFilterId}` : '/payments?limit=100');
       const list: any[] = Array.isArray(data) ? data : (Array.isArray(data.items) ? data.items : []);
       list.sort((a, b) =>
         new Date(b.paymentDate || b.payment_date || b.createdAt || 0).getTime() -
@@ -754,7 +782,7 @@ function PaymentsPageInner() {
       setPayments([]);
     }
     finally { setLoading(false); }
-  }, [canReverse]);
+  }, [canReverse, clientFilterId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -875,6 +903,19 @@ function PaymentsPageInner() {
           </div>
         )}
 
+        {clientFilterId && (
+          <div className="border border-bv-border bg-bv-info-bg text-bv-text text-sm px-3 py-2 rounded-md flex flex-wrap items-center justify-between gap-2">
+            <span>
+              Showing every payment for{' '}
+              <b>{clientName(payments[0]?.loan?.client) || `client #${clientFilterId}`}</b> across all their loans.
+            </span>
+            <span className="flex gap-3">
+              <a href={`/dashboard/clients/${clientFilterId}`} className="font-semibold underline">Back to profile</a>
+              <button type="button" onClick={() => router.replace('/dashboard/payments')} className="font-semibold underline">Show all payments</button>
+            </span>
+          </div>
+        )}
+
         {/* Filters */}
         <div className="bg-bv-surface border border-bv-border rounded-2xl p-4 shadow-sm">
           <div className="flex flex-wrap gap-3 items-center">
@@ -909,7 +950,8 @@ function PaymentsPageInner() {
             <span className="text-xs text-bv-meta ml-auto">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
           </div>
 
-          {/* Server-side lookups — reach payments beyond the 100 loaded above */}
+          {/* Server-side lookups — reach payments beyond the 100 loaded above (not needed when scoped to a client) */}
+          {!clientFilterId && (
           <div className="mt-3 pt-3 border-t border-bv-border flex flex-wrap gap-3 items-center">
             <button type="button" onClick={searchRange} disabled={rangeBusy || !dateFrom || !dateTo}
               className="text-sm border border-bv-border px-3 py-2 rounded-xl font-semibold text-bv-muted hover:bg-bv-hover disabled:opacity-40">
@@ -926,6 +968,7 @@ function PaymentsPageInner() {
               </button>
             </div>
           </div>
+          )}
           {lookupError && <p className="mt-2 text-sm text-bv-danger">{lookupError}</p>}
           {rangeLabel && (
             <p className="mt-2 text-xs text-bv-meta">
@@ -965,10 +1008,55 @@ function PaymentsPageInner() {
               </div>
             </div>
           ) : (
+            <>
+            {/* Bulk action bar — only shown when admin has selected reversible payments */}
+            {canReverse && selectedIds.size > 0 && (
+              <div className="flex items-center justify-between gap-3 px-4 py-3 bg-orange-50 border-b border-orange-200">
+                <p className="text-sm font-semibold text-orange-800">
+                  {selectedIds.size} payment{selectedIds.size === 1 ? '' : 's'} selected
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds(new Set())}
+                    className="text-sm px-3 py-1.5 border border-orange-300 rounded hover:bg-orange-100 text-orange-800"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowBulkReverse(true)}
+                    className="text-sm font-medium px-3 py-1.5 bg-orange-600 text-white rounded hover:bg-orange-700 flex items-center gap-1.5"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Reverse selected
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-bv-border bg-bv-hover">
+                    {canReverse && (
+                      <th className="px-3 py-3.5 w-10">
+                        <input
+                          type="checkbox"
+                          className="rounded border-gray-300"
+                          checked={paginated.filter(p => p.status === 'COMPLETED' || p.status === 'REVERSAL_REQUESTED').length > 0 &&
+                            paginated.filter(p => p.status === 'COMPLETED' || p.status === 'REVERSAL_REQUESTED').every(p => selectedIds.has(p.id))}
+                          onChange={(e) => {
+                            const next = new Set(selectedIds);
+                            const reversible = paginated.filter(p => p.status === 'COMPLETED' || p.status === 'REVERSAL_REQUESTED');
+                            if (e.target.checked) reversible.forEach(p => next.add(p.id));
+                            else reversible.forEach(p => next.delete(p.id));
+                            setSelectedIds(next);
+                          }}
+                          title="Select all reversible on this page"
+                        />
+                      </th>
+                    )}
                     {['Receipt #', 'Client / Loan', 'Amount', 'Method', 'Date & Time', 'Collected By', 'Status', ''].map(h => (
                       <th key={h} className="text-left px-4 py-3.5 text-xs font-black text-bv-meta uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
@@ -980,14 +1068,34 @@ function PaymentsPageInner() {
                     const method  = METHODS[pm];
                     const status  = STATUS_CFG[p.status] || STATUS_CFG['COMPLETED'];
                     const isReversed = p.status === 'REVERSED';
+                    const canSelect = !isReversed && (p.status === 'COMPLETED' || p.status === 'REVERSAL_REQUESTED');
                     const payDate = p.paymentDate || p.payment_date || p.createdAt;
                     const cn      = clientName(p.loan?.client);
                     const receipt = p.receiptNumber || p.receipt_number;
 
                     return (
                       <tr key={p.id}
-                        className={`hover:bg-bv-info-bg/30 transition-colors cursor-pointer ${isReversed ? 'opacity-50' : ''}`}
+                        className={`hover:bg-bv-info-bg/30 transition-colors cursor-pointer ${isReversed ? 'opacity-50' : ''} ${selectedIds.has(p.id) ? 'bg-orange-50/60' : ''}`}
                         onClick={() => setDetailPayment(p)}>
+                        {canReverse && (
+                          <td className="px-3 py-3.5" onClick={e => e.stopPropagation()}>
+                            {canSelect ? (
+                              <input
+                                type="checkbox"
+                                className="rounded border-gray-300"
+                                checked={selectedIds.has(p.id)}
+                                onChange={(e) => {
+                                  const next = new Set(selectedIds);
+                                  if (e.target.checked) next.add(p.id);
+                                  else next.delete(p.id);
+                                  setSelectedIds(next);
+                                }}
+                              />
+                            ) : (
+                              <span className="inline-block w-4" />
+                            )}
+                          </td>
+                        )}
                         <td className="px-4 py-3.5">
                           <span className="font-mono text-xs font-black bg-bv-hover text-bv-muted px-2.5 py-1 rounded-lg">{receipt}</span>
                         </td>
@@ -1037,6 +1145,7 @@ function PaymentsPageInner() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
 
           {/* Pagination */}
@@ -1061,10 +1170,22 @@ function PaymentsPageInner() {
         </div>
       </div>
 
-      {showRecord    && <RecordPaymentModal onClose={() => setShowRecord(false)} onSaved={load} initialLoanId={initialLoanId} />}
+      {showRecord    && <RecordPaymentModal onClose={() => setShowRecord(false)} onSaved={load} initialLoanId={initialLoanId} clientId={clientFilterId} />}
       {detailPayment && <PaymentDetailModal payment={detailPayment} onClose={() => setDetailPayment(null)} onReverse={() => { setReversePayment(detailPayment); setDetailPayment(null); }} />}
       {/* FIX 6: pass isAdmin so ReverseModal calls the correct endpoint */}
       {reversePayment && <ReverseModal payment={reversePayment} onClose={() => setReversePayment(null)} onSaved={load} isAdmin={isAdmin} />}
+
+      {/* Bulk reverse — shared dialog (same one the client profile uses) */}
+      {showBulkReverse && (
+        <ReversePaymentsDialog
+          payments={payments
+            .filter(p => selectedIds.has(p.id))
+            .map(p => ({ id: p.id, amount: p.amount, receiptNumber: p.receiptNumber || p.receipt_number, loanNumber: p.loan?.loanNumber || p.loan?.loan_number }))}
+          direct={canReverse}
+          onClose={() => setShowBulkReverse(false)}
+          onDone={() => { setSelectedIds(new Set()); load(); }}
+        />
+      )}
     </div>
   );
 }

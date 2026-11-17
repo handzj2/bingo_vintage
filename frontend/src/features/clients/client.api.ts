@@ -1,6 +1,6 @@
 // src/features/clients/client.api.ts
 import { api } from '@/lib/api/client';
-import type { Client } from '@/shared/api-types';
+import type { Client, ClientLoanSummary } from '@/shared/api-types';
 
 // The backend entity serializes with camelCase property names
 // (firstName, dateOfBirth, maritalStatus, etc.) regardless of the
@@ -9,6 +9,20 @@ import type { Client } from '@/shared/api-types';
 // is snake_case. Without this mapping, fields like first_name/last_name
 // silently stay blank on the edit form and the profile page, because
 // `{ ...EMPTY, ...rawResponse }` never overwrites keys that don't match.
+/** Normalise one loan from GET /clients/:id (the entity is camelCase; older paths were snake_case). */
+function mapLoanSummary(l: any): ClientLoanSummary {
+  return {
+    id:              Number(l.id),
+    loanNumber:      l.loanNumber ?? l.loan_number ?? `#${l.id}`,
+    loanType:        String(l.loanType ?? l.loan_type ?? '').toUpperCase(),
+    status:          String(l.status ?? '').toUpperCase(),
+    principalAmount: Number(l.principalAmount ?? l.principal_amount ?? 0),
+    totalAmount:     Number(l.totalAmount ?? l.total_amount ?? 0),
+    balance:         Number(l.balance ?? 0),
+    startDate:       l.startDate ?? l.start_date ?? null,
+  };
+}
+
 function mapDbClientToClient(raw: any): Client {
   return {
     id:                       String(raw.id),
@@ -56,6 +70,7 @@ function mapDbClientToClient(raw: any): Client {
     reference2_phone:         raw.reference2Phone ?? raw.reference2_phone,
     verification_method:      raw.verificationMethod ?? raw.verification_method,
     notes:                    raw.notes,
+    loans:                    Array.isArray(raw.loans) ? raw.loans.map(mapLoanSummary) : [],
   };
 }
 

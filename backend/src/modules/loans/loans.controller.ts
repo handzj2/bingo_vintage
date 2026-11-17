@@ -1,5 +1,5 @@
 // RBAC patch 2026-06-15: loan approval assertAdmin -> assertAdminOrManager
-import { IsNumber, IsPositive, IsOptional, IsString } from 'class-validator';
+import { IsNumber, IsPositive, IsOptional, IsString, IsIn } from 'class-validator';
 import { AdminApprovalDto } from './dto/admin-approval.dto';
 import {
   Controller,
@@ -193,6 +193,11 @@ export class EditLoanDetailsDto {
   @IsNumber()
   @IsPositive()
   principalAmount?: number;
+
+  @ApiProperty({ example: 'bike', description: "Correct a loan recorded as the wrong kind: 'bike' or 'cash'. Switching needs the new term (weeks for bike, months for cash).", required: false })
+  @IsOptional()
+  @IsIn(['bike', 'cash'])
+  loanType?: 'bike' | 'cash';
 
   @ApiProperty({ example: 104, description: 'Corrected term in weeks (bike loans)', required: false })
   @IsOptional()
@@ -638,6 +643,7 @@ export class LoansController {
           weeklyAmount: dto.weeklyAmount,
           interestRate: dto.interestRate,
           startDate: dto.startDate,
+          loanType: dto.loanType,
           reason: dto.reason || 'Loan terms correction',
           correctionType: 'TERMS',
         },

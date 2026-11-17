@@ -123,6 +123,26 @@ export class LoanSchedule {
   branchId: number;
   // ──────────────────────────────────────────────────────────
 
+  // ── Schedule versioning (migration 032) ─────────────────────
+  // When a loan is rescheduled / terms corrected, the previous
+  // schedule rows are kept for audit with is_active = false.
+  // All current-state readers MUST filter is_active = true.
+  @Column({ name: 'version', type: 'int', default: 1 })
+  version: number;
+
+  @Column({ name: 'is_active', type: 'boolean', default: true })
+  isActive: boolean;
+
+  get is_active(): boolean { return this.isActive; }
+  set is_active(v: boolean) { this.isActive = v; }
+
+  @Column({ name: 'superseded_at', type: 'timestamptz', nullable: true })
+  supersededAt: Date | null;
+
+  @Column({ name: 'superseded_by_version', type: 'int', nullable: true })
+  supersededByVersion: number | null;
+  // ──────────────────────────────────────────────────────────
+
   // ── Timestamps ──────────────────────────────────────────────
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

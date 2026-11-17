@@ -199,8 +199,21 @@ function parseSheet(ws: any): any {
   };
 }
 
+// Fields the server requires for every imported loan (see LoansService.historicalImport).
+// A record missing any of these is rejected rather than saved with blanks or guessed defaults.
+function missingFields(rec: any): string[] {
+  const out: string[] = [];
+  if (!rec.clientName) out.push('client name');
+  if (!rec.phone) out.push('phone');
+  if (!rec.startDate) out.push('start date');
+  if (!(Number(rec.principalAmount) > 0 || Number(rec.totalAmount) > 0)) out.push('principal / total amount');
+  if (!(Number(rec.termWeeks) > 0)) out.push('term in weeks');
+  return out;
+}
+
 // ── Record card ───────────────────────────────────────────────────────────────
 function RecordCard({ rec }: { rec: any }) {
+  const missing = missingFields(rec);
   const [open, setOpen] = useState(false);
   const pct = rec.totalAmount > 0 ? Math.round((rec.totalPaid / rec.totalAmount) * 100) : 0;
 
@@ -221,6 +234,11 @@ function RecordCard({ rec }: { rec: any }) {
             <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${
               rec.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' : 'bg-bv-info-bg text-bv-accent'
             }`}>{rec.status}</span>
+            {missing.length > 0 && (
+              <span className="px-2 py-0.5 rounded-lg text-xs font-bold bg-bv-danger-bg text-bv-danger">
+                Missing: {missing.join(', ')} — will be skipped
+              </span>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-3 text-xs text-bv-meta mt-0.5">
             {rec.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{rec.phone}</span>}
@@ -531,6 +549,12 @@ export default function HistoricalImportPage() {
 
             {/* Record cards */}
             <div className="space-y-3">
+              {records.some((r) => missingFields(r).length > 0) && (
+                <div className="border border-bv-danger/30 bg-bv-danger-bg text-bv-danger text-sm px-4 py-3 rounded-xl">
+                  <b>{records.filter((r) => missingFields(r).length > 0).length}</b> of {records.length} records are missing required data and will be skipped when you import.
+                  Fix them in the ledger and upload again, or import the rest now.
+                </div>
+              )}
               {records.map((rec, i) => <RecordCard key={i} rec={rec} />)}
             </div>
 

@@ -8,6 +8,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import LoanCorrectionPanel, { type CorrectionRequest } from '@/components/loans/LoanCorrectionPanel';
+import { normalizeLoan, loanDataProblems, type LoanDetail, type LoanKind } from '@/features/loans/loan.mapper';
 import {
   ChevronLeft, Loader2, AlertTriangle, CheckCircle2, Clock,
   User, Phone, Mail, Calendar, DollarSign, Bike, Banknote,
@@ -56,7 +57,7 @@ export default function LoanDetailPage() {
   const canReverse = isAdmin || can('payment.reverse');
 
   const [correctionRequest, setCorrectionRequest] = useState<CorrectionRequest | null>(null);
-  const [loan, setLoan]               = useState<any>(null);
+  const [loan, setLoan]               = useState<LoanDetail | null>(null);
   const [sched, setSched]             = useState<any>(null);
   const [loading, setLoading]         = useState(true);
   const [err, setErr]                 = useState('');
@@ -72,13 +73,14 @@ export default function LoanDetailPage() {
   const [editing, setEditing]           = useState(false);
   const [editErr, setEditErr]           = useState('');
   const [editForm, setEditForm] = useState({
+    loanType: 'cash' as LoanKind,
     principalAmount: 0,
     termWeeks: 0,
     termMonths: 0,
     weeklyAmount: 0,
     interestRate: 0,
     startDate: '',
-    newBalance: undefined as number | undefined,
+    reason: '',
   });
 
   const load = useCallback(async () => {
@@ -91,7 +93,7 @@ export default function LoanDetailPage() {
 
       if (!loanRes.ok) throw new Error('Loan not found');
       const loanData = await loanRes.json();
-      const currentLoan = loanData?.data || loanData;
+      const currentLoan = normalizeLoan(loanData?.data || loanData);
       setLoan(currentLoan);
 
       if (schedRes?.ok) {
@@ -99,7 +101,7 @@ export default function LoanDetailPage() {
       }
 
       // Fetch approver username
-      const approvedById = currentLoan?.approvedBy ?? currentLoan?.approved_by;
+      const approvedById = currentLoan.approvedBy;
       if (approvedById) {
         try {
           const uRes = await fetch(`${API_URL}/users/${approvedById}`, { headers: getH() });
@@ -122,17 +124,16 @@ export default function LoanDetailPage() {
   const openEditModal = () => {
     if (!loan) return;
     setEditForm({
-      principalAmount: Number(loan.principal_amount) || 0,
-      termWeeks: Number(loan.term_weeks) || 0,
-      termMonths: Number(loan.term_months) || 0,
-      weeklyAmount: Number(loan.weekly_amount || loan.weeklyAmount) || 0,
+      loanType: loan.loanType,
+      principalAmount: loan.principalAmount,
+      termWeeks: loan.termWeeks ?? 0,
+      termMonths: loan.termMonths ?? 0,
+      weeklyAmount: loan.weeklyAmount ?? 0,
       // Stored as a decimal fraction (e.g. 0.15) — shown here as a percentage (15),
       // matching how the Create Loan screen collects and displays the rate.
-      interestRate: (Number(loan.interest_rate || loan.interestRate) || 0) * 100,
-      startDate: loan.start_date
-        ? new Date(loan.start_date).toISOString().slice(0, 10)
-        : '',
-      newBalance: undefined,
+      interestRate: loan.interestRate * 100,
+      startDate: loan.startDate ? new Date(loan.startDate).toISOString().slice(0, 10) : '',
+      reason: '',
     });
     setEditErr('');
     setShowEditModal(true);
@@ -143,27 +144,25 @@ export default function LoanDetailPage() {
   //    same engine (loan.utils) and card style the Create Loan screen uses. ──
   const originalCalc = useMemo(() => {
     if (!loan) return null;
-    const weekly = loan.loan_type === 'bike';
-    return weekly
+    return loan.loanType === 'bike'
       ? calculateBikeLoan(
-          (Number(loan.principal_amount) || 0) + (Number(loan.deposit) || 0),
-          Number(loan.deposit) || 0,
-          (Number(loan.interest_rate || loan.interestRate) || 0) * 100,
-          Number(loan.term_weeks) || 0,
+          loan.principalAmount + loan.deposit,
+          loan.deposit,
+          loan.interestRate * 100,
+          loan.termWeeks ?? 0,
         )
       : calculateCashLoan(
-          Number(loan.principal_amount) || 0,
-          (Number(loan.interest_rate || loan.interestRate) || 0) * 100,
-          Number(loan.term_months) || 0,
+          loan.principalAmount,
+          loan.interestRate * 100,
+          loan.termMonths ?? 0,
         );
   }, [loan]);
 
   const previewCalc = useMemo(() => {
-    const weekly = loan?.loan_type === 'bike';
-    return weekly
+    return editForm.loanType === 'bike'
       ? calculateBikeLoan(
-          editForm.principalAmount + (Number(loan?.deposit) || 0),
-          Number(loan?.deposit) || 0,
+          editForm.principalAmount + (loan?.deposit ?? 0),
+          loan?.deposit ?? 0,
           editForm.interestRate,
           editForm.termWeeks,
         )
@@ -200,19 +199,31 @@ export default function LoanDetailPage() {
 
   // ── Handle loan edit submission ────────────────────────────────────
   const handleEditSubmit = async () => {
-    setEditErr(''); setEditing(true);
+    if (!loan) return;
+    setEditErr('');
+    if (editForm.reason.trim().length < 5) return setEditErr('Please give a reason of at least 5 characters.');
+    const switching = editForm.loanType !== loan.loanType;
+    const bike = editForm.loanType === 'bike';
+    if (bike && !(editForm.termWeeks > 0)) return setEditErr('A bike loan needs a term in weeks.');
+    if (!bike && !(editForm.termMonths > 0)) return setEditErr('A cash loan needs a term in months.');
+    if (!(editForm.principalAmount > 0)) return setEditErr('Principal must be greater than zero.');
+
+    setEditing(true);
     try {
-      const payload: any = {};
-      if (editForm.principalAmount) payload.principalAmount = Number(editForm.principalAmount);
-      if (isWeekly && editForm.termWeeks)   payload.termWeeks  = Number(editForm.termWeeks);
-      if (!isWeekly && editForm.termMonths) payload.termMonths = Number(editForm.termMonths);
-      if (editForm.weeklyAmount)    payload.weeklyAmount    = Number(editForm.weeklyAmount);
-      // Form shows a percentage (e.g. 15); backend stores a decimal fraction (e.g. 0.15).
-      if (editForm.interestRate)    payload.interestRate    = Number(editForm.interestRate) / 100;
-      if (editForm.startDate)       payload.startDate       = editForm.startDate;
-      if (editForm.newBalance !== undefined && editForm.newBalance !== null) {
-        payload.newBalance = Number(editForm.newBalance);
+      const payload: Record<string, unknown> = {
+        reason: editForm.reason.trim(),
+        principalAmount: Number(editForm.principalAmount),
+        // Form shows a percentage (e.g. 15); backend stores a decimal fraction (e.g. 0.15).
+        interestRate: Number(editForm.interestRate) / 100,
+      };
+      if (switching) payload.loanType = editForm.loanType;
+      if (bike) {
+        payload.termWeeks = Number(editForm.termWeeks);
+        if (editForm.weeklyAmount > 0) payload.weeklyAmount = Number(editForm.weeklyAmount);
+      } else {
+        payload.termMonths = Number(editForm.termMonths);
       }
+      if (editForm.startDate) payload.startDate = editForm.startDate;
 
       const res = await fetch(`${API_URL}/loans/${id}/edit-details`, {
         method: 'PATCH',
@@ -221,6 +232,7 @@ export default function LoanDetailPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Edit failed');
+      toast.success(switching ? `Loan changed to a ${bike ? 'bike' : 'cash'} loan` : 'Loan details corrected');
       setShowEditModal(false);
       load(); // reload everything
     } catch (e: any) { setEditErr(e.message); }
@@ -244,12 +256,14 @@ export default function LoanDetailPage() {
     </div>
   );
 
-  const isWeekly   = loan.loan_type === 'bike';
-  const client     = loan.client || {};
-  const bike       = loan.bike   || {};
-  const clientName = client.first_name
-    ? `${client.first_name} ${client.last_name || ''}`.trim()
-    : client.full_name || '—';
+  const isWeekly   = loan.loanType === 'bike';
+  const client     = loan.client;
+  const bike       = loan.bike;
+  const clientName = client?.fullName || '—';
+  const problems   = loanDataProblems(loan);
+  const termLabel  = (loan.termWeeks ?? 0) > 0
+    ? `${loan.termWeeks} weeks`
+    : (loan.termMonths ?? 0) > 0 ? `${loan.termMonths} months` : 'Not set';
 
   const schedSummary = sched?.summary;
   const schedules    = (sched?.schedules || []).slice(0, 6);
@@ -270,7 +284,7 @@ export default function LoanDetailPage() {
                   ? <Bike className="w-5 h-5 text-bv-accent" />
                   : <Banknote className="w-5 h-5 text-emerald-600" />}
                 <h1 className="text-lg font-semibold text-bv-text">
-                  {loan.loan_number || `Loan #${id}`}
+                  {loan.loanNumber}
                 </h1>
                 <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${STATUS_STYLES[loan.status] || 'bg-bv-hover text-bv-muted'}`}>
                   {loan.status}
@@ -319,13 +333,29 @@ export default function LoanDetailPage() {
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-5">
 
+        {problems.length > 0 && (
+          <div className="border border-bv-warning/40 bg-bv-warning-bg text-sm px-4 py-3 rounded-xl flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold text-bv-text flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> This loan record looks incomplete or inconsistent</p>
+              <ul className="list-disc pl-5 mt-1 text-bv-muted">
+                {problems.map((p) => <li key={p}>{p}</li>)}
+              </ul>
+            </div>
+            {canEdit && (
+              <button onClick={openEditModal} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold whitespace-nowrap">
+                Correct loan type &amp; terms
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Loan financials */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'Principal',    value: fmt(loan.principal_amount), icon: DollarSign,  color: 'bg-bv-info-bg0'    },
-            { label: 'Total Amount', value: fmt(loan.totalAmount     || loan.total_amount),     icon: TrendingUp,  color: 'bg-violet-500'  },
-            { label: 'Balance',      value: fmt(loan.balance),                                  icon: CreditCard,  color: loan.balance > 0 ? 'bg-bv-danger-bg0' : 'bg-emerald-500' },
-            { label: 'Interest Rate',value: `${loan.interest_rate || 0}%`, icon: Shield,      color: 'bg-amber-500'   },
+            { label: 'Principal',    value: fmt(loan.principalAmount), icon: DollarSign,  color: 'bg-bv-info-bg0'    },
+            { label: 'Total Amount', value: fmt(loan.totalAmount),     icon: TrendingUp,  color: 'bg-violet-500'  },
+            { label: 'Balance',      value: fmt(loan.balance),         icon: CreditCard,  color: loan.balance > 0 ? 'bg-bv-danger-bg0' : 'bg-emerald-500' },
+            { label: 'Interest Rate',value: `${Number((loan.interestRate * 100).toFixed(2))}%`, icon: Shield,      color: 'bg-amber-500'   },
           ].map(c => (
             <div key={c.label} className="bg-bv-surface rounded-2xl border border-bv-border p-4 shadow-sm">
               <div className={`w-9 h-9 ${c.color} rounded-xl flex items-center justify-center mb-3`}>
@@ -345,14 +375,14 @@ export default function LoanDetailPage() {
               <FileText className="w-4 h-4 text-bv-meta" /> Loan Details
             </h2>
             {[
-              ['Loan Number',   loan.loan_number || '—'],
+              ['Loan Number',   loan.loanNumber],
               ['Type',          isWeekly ? 'Bike (Weekly)' : 'Cash (Monthly)'],
-              ['Term',          isWeekly ? `${(loan.term_weeks || Math.round((loan.term_months||12)*4.33))} weeks` : `${loan.term_months || '—'} months`],
-              ['Start Date',    fmtD(loan.start_date)],
-              ['End Date',      fmtD(loan.endDate    || loan.end_date)],
-              ['Approved By',   loan.approvedBy || loan.approved_by ? (approverName || `User #${loan.approvedBy || loan.approved_by}`) : '—'],
-              ['Approved At',   fmtD(loan.approvedAt  || loan.approved_at)],
-              ['Processing Fee',fmt(loan.processingFee|| loan.processing_fee || 0)],
+              ['Term',          termLabel],
+              ['Start Date',    fmtD(loan.startDate)],
+              ['End Date',      loan.endDate ? `${fmtD(loan.endDate)}${loan.endDateIsCalculated ? ' (calculated)' : ''}` : 'Not set'],
+              ['Approved By',   loan.approvedBy ? (approverName || `User #${loan.approvedBy}`) : 'Not yet approved'],
+              ['Approved At',   loan.approvedAt ? fmtD(loan.approvedAt) : 'Not yet approved'],
+              ['Processing Fee',fmt(loan.processingFee)],
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between text-sm py-1 border-b border-gray-50 last:border-0">
                 <span className="text-bv-meta">{label}</span>
@@ -367,7 +397,7 @@ export default function LoanDetailPage() {
               <h2 className="font-bold text-bv-text flex items-center gap-2 mb-3">
                 <User className="w-4 h-4 text-bv-meta" /> Client
               </h2>
-              {clientName !== '—' ? (
+              {client?.fullName ? (
                 <div className="space-y-2">
                   <p className="font-bold text-bv-text">{clientName}</p>
                   {(client.phone) && (
@@ -387,21 +417,21 @@ export default function LoanDetailPage() {
                     View client profile <ArrowRight className="w-3 h-3" />
                   </Link>
                 </div>
-              ) : <p className="text-sm text-bv-meta">No client data</p>}
+              ) : <p className="text-sm text-bv-danger">No client is linked to this loan.</p>}
             </div>
 
-            {isWeekly && bike?.id && (
+            {isWeekly && bike?.id != null && (
               <div className="bg-bv-surface rounded-2xl border border-bv-border p-5 shadow-sm">
                 <h2 className="font-bold text-bv-text flex items-center gap-2 mb-3">
                   <Bike className="w-4 h-4 text-bv-meta" /> Bike
                 </h2>
                 <div className="space-y-2 text-sm">
                   {[
-                    ['Plate',  bike.plateNumber   || bike.plate_number   || '—'],
-                    ['Make',   bike.make           || '—'],
-                    ['Model',  bike.model          || '—'],
-                    ['Year',   bike.year           || '—'],
-                    ['Colour', bike.color || bike.colour || '—'],
+                    ['Registration', bike.registrationNumber || 'Not registered yet'],
+                    ['Model',        bike.model          || 'Not recorded'],
+                    ['Frame no.',    bike.frameNumber    || 'Not recorded'],
+                    ['Engine no.',   bike.engineNumber   || 'Not recorded'],
+                    ['Sale price',   bike.salePrice != null ? fmt(bike.salePrice) : 'Not recorded'],
                   ].map(([label, value]) => (
                     <div key={label} className="flex justify-between border-b border-gray-50 pb-1 last:border-0">
                       <span className="text-bv-meta">{label}</span>
@@ -526,8 +556,8 @@ export default function LoanDetailPage() {
             <div className="p-6 space-y-4">
               <div className="bg-bv-hover rounded-xl p-4 text-sm space-y-1">
                 <p><span className="text-bv-meta">Client:</span> <span className="font-semibold">{clientName}</span></p>
-                <p><span className="text-bv-meta">Amount:</span> <span className="font-semibold">{fmt(loan.principal_amount)}</span></p>
-                <p><span className="text-bv-meta">Loan #:</span> <span className="font-semibold">{loan.loan_number}</span></p>
+                <p><span className="text-bv-meta">Amount:</span> <span className="font-semibold">{fmt(loan.principalAmount)}</span></p>
+                <p><span className="text-bv-meta">Loan #:</span> <span className="font-semibold">{loan.loanNumber}</span></p>
               </div>
               <div className="flex gap-3">
                 <button onClick={() => setApproveAction('approved')}
@@ -570,9 +600,26 @@ export default function LoanDetailPage() {
             </div>
             <div className="p-6 space-y-4">
               <div className="bg-bv-hover rounded-xl p-4 text-sm space-y-1">
-                <p><span className="text-bv-meta">Loan #:</span> <span className="font-semibold">{loan.loan_number}</span></p>
+                <p><span className="text-bv-meta">Loan #:</span> <span className="font-semibold">{loan.loanNumber}</span></p>
                 <p><span className="text-bv-meta">Client:</span> <span className="font-semibold">{clientName}</span></p>
-                <p><span className="text-bv-meta">Type:</span> <span className="font-semibold">{isWeekly ? 'Bike (Weekly)' : 'Cash (Monthly)'}</span></p>
+                <p><span className="text-bv-meta">Recorded as:</span> <span className="font-semibold">{isWeekly ? 'Bike (Weekly)' : 'Cash (Monthly)'}</span></p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-bv-muted mb-1">Loan type</label>
+                <select
+                  className="w-full border border-bv-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={editForm.loanType}
+                  onChange={e => setEditForm({ ...editForm, loanType: e.target.value as LoanKind })}
+                >
+                  <option value="bike">Bike loan — weekly instalments</option>
+                  <option value="cash">Cash loan — monthly instalments</option>
+                </select>
+                {editForm.loanType !== loan.loanType && (
+                  <p className="text-[11px] text-bv-warning mt-1">
+                    Changing the type rebuilds the schedule ({editForm.loanType === 'bike' ? 'weekly' : 'monthly'}). Enter the {editForm.loanType === 'bike' ? 'term in weeks' : 'term in months'} below. Payments, receipts and history are kept.
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -587,20 +634,20 @@ export default function LoanDetailPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-bv-muted mb-1">
-                    Term ({isWeekly ? 'weeks' : 'months'})
+                    Term ({editForm.loanType === 'bike' ? 'weeks' : 'months'})
                   </label>
                   <input
                     type="number"
                     className="w-full border border-bv-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    value={isWeekly ? editForm.termWeeks : editForm.termMonths}
+                    value={editForm.loanType === 'bike' ? editForm.termWeeks : editForm.termMonths}
                     onChange={e => setEditForm(
-                      isWeekly
+                      editForm.loanType === 'bike'
                         ? {...editForm, termWeeks: Number(e.target.value)}
                         : {...editForm, termMonths: Number(e.target.value)}
                     )}
                   />
                 </div>
-                {isWeekly && (
+                {editForm.loanType === 'bike' && (
                   <div>
                     <label className="block text-xs font-medium text-bv-muted mb-1">Weekly Amount (override)</label>
                     <input
@@ -613,7 +660,7 @@ export default function LoanDetailPage() {
                 )}
                 <div>
                   <label className="block text-xs font-medium text-bv-muted mb-1">
-                    {isWeekly ? 'Weekly' : 'Monthly'} Interest Rate (%)
+                    {editForm.loanType === 'bike' ? 'Weekly' : 'Monthly'} Interest Rate (%)
                   </label>
                   <input
                     type="number"
@@ -632,16 +679,6 @@ export default function LoanDetailPage() {
                     onChange={e => setEditForm({...editForm, startDate: e.target.value})}
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-bv-muted mb-1">New Balance (optional)</label>
-                  <input
-                    type="number"
-                    className="w-full border border-bv-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    placeholder="Calculated if empty"
-                    value={editForm.newBalance !== undefined ? editForm.newBalance : ''}
-                    onChange={e => setEditForm({...editForm, newBalance: e.target.value ? Number(e.target.value) : undefined})}
-                  />
-                </div>
               </div>
 
               {/* ── Calculation preview: current terms vs. what these edits produce ── */}
@@ -657,11 +694,11 @@ export default function LoanDetailPage() {
                     <div className="flex justify-between font-bold"><span>Total Payable</span><span>{Math.round(originalCalc?.totalPayable || 0).toLocaleString()}</span></div>
                   </div>
                 </div>
-                <div className={`rounded-2xl p-4 text-white ${isWeekly ? 'bg-gradient-to-br from-orange-500 to-orange-700' : 'bg-gradient-to-br from-blue-600 to-blue-800'}`}>
+                <div className={`rounded-2xl p-4 text-white ${editForm.loanType === 'bike' ? 'bg-gradient-to-br from-orange-500 to-orange-700' : 'bg-gradient-to-br from-blue-600 to-blue-800'}`}>
                   <p className="text-[10px] font-bold uppercase tracking-wider opacity-70 mb-2">New (with these edits)</p>
                   <p className="text-xl font-black">
                     {Math.round(previewCalc?.installment || 0).toLocaleString()}
-                    <span className="text-xs font-medium opacity-60 ml-1">UGX / {isWeekly ? 'wk' : 'mo'}</span>
+                    <span className="text-xs font-medium opacity-60 ml-1">UGX / {editForm.loanType === 'bike' ? 'wk' : 'mo'}</span>
                   </p>
                   <div className="mt-3 pt-3 border-t border-white/20 space-y-1 text-xs">
                     <div className="flex justify-between"><span className="opacity-70">Total Interest</span><span className="font-semibold">{Math.round(previewCalc?.totalInterest || 0).toLocaleString()}</span></div>
@@ -672,6 +709,17 @@ export default function LoanDetailPage() {
               <p className="text-[11px] text-bv-meta -mt-1">
                 Preview only — the schedule is recalculated and existing payments replayed against it when you save.
               </p>
+
+              <div>
+                <label className="block text-xs font-medium text-bv-muted mb-1">Reason (required, recorded in the audit trail)</label>
+                <textarea
+                  rows={2}
+                  className="w-full border border-bv-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="e.g. Captured as a cash loan by mistake; this is a bike loan on a 104-week term"
+                  value={editForm.reason}
+                  onChange={e => setEditForm({ ...editForm, reason: e.target.value })}
+                />
+              </div>
 
               {editErr && <p className="text-bv-danger text-sm">{editErr}</p>}
               <div className="flex gap-3 pt-1">
