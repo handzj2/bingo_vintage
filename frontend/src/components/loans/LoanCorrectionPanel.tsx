@@ -124,7 +124,8 @@ export default function LoanCorrectionPanel({ loan, onChanged, request }: { loan
   const appliesNow = mayDecide || ['admin', 'superadmin'].includes(String(user?.role ?? '').toLowerCase());
   const curBal = Number(loan.balance ?? 0);
   // Align-to-books helper: contract total minus what the books say was collected.
-  const contractTotal = loan.totalAmount > 0 ? loan.totalAmount : NaN;
+  const contractTotalValue = Number(loan.totalAmount ?? loan.total_amount ?? NaN);
+  const contractTotal = contractTotalValue > 0 ? contractTotalValue : NaN;
   const systemPaid = Number.isFinite(contractTotal) ? contractTotal - curBal : NaN;
   const booksPaidNum = booksPaid.trim() === '' ? NaN : Number(booksPaid);
   const newBalNum = balance.trim() === '' ? NaN : Number(balance);
