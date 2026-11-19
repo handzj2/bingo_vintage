@@ -30,6 +30,12 @@ import { PermissionsModule }    from './modules/permissions/permissions.module';
 import { RolesModule }          from './modules/roles/roles.module';
 import { TenantsModule }        from './modules/tenants/tenants.module';
 import { SuperAdminModule }     from './modules/superadmin/superadmin.module';
+import { FinanceCoreModule }    from './modules/finance-core/finance-core.module';
+import { NotificationsModule }  from './modules/notifications/notifications.module';
+import { AttachmentsModule }    from './modules/attachments/attachments.module';
+import { FinancialOperationsModule } from './modules/financial-operations/financial-operations.module';
+import { ReservationsModule } from './modules/reservations/reservations.module';
+import { RecoveryModule } from './modules/recovery/recovery.module';
 
 @Module({
   imports: [
@@ -93,6 +99,7 @@ import { SuperAdminModule }     from './modules/superadmin/superadmin.module';
     HealthModule,
     BranchesModule, DashboardModule, LoanProductsModule,
     PermissionsModule, RolesModule, TenantsModule, SuperAdminModule,
+    FinanceCoreModule, NotificationsModule, AttachmentsModule, FinancialOperationsModule, ReservationsModule, RecoveryModule,
   ],
 })
 export class AppModule implements NestModule {

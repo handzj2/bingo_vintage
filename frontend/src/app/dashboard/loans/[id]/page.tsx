@@ -9,6 +9,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import LoanCorrectionPanel, { type CorrectionRequest } from '@/components/loans/LoanCorrectionPanel';
 import { normalizeLoan, loanDataProblems, type LoanDetail, type LoanKind } from '@/features/loans/loan.mapper';
+import { normalizeLoanSchedule } from '@/features/schedules/schedule.mapper';
 import {
   ChevronLeft, Loader2, AlertTriangle, CheckCircle2, Clock,
   User, Phone, Mail, Calendar, DollarSign, Bike, Banknote,
@@ -97,7 +98,8 @@ export default function LoanDetailPage() {
       setLoan(currentLoan);
 
       if (schedRes?.ok) {
-        setSched(await schedRes.json());
+        const rawSched = await schedRes.json();
+        setSched(normalizeLoanSchedule(rawSched));
       }
 
       // Fetch approver username

@@ -14,9 +14,15 @@ import { ColumnNumericTransformer } from '../../../common/utils/numeric.transfor
 
 export enum BikeStatus {
   AVAILABLE = 'AVAILABLE',
+  RESERVED = 'RESERVED',
   LOANED = 'LOANED',
   MAINTENANCE = 'MAINTENANCE',
-  SOLD = 'SOLD'
+  SOLD = 'SOLD',
+  RECOVERY_PENDING = 'RECOVERY_PENDING',
+  RECOVERED = 'RECOVERED',
+  UNDER_INSPECTION = 'UNDER_INSPECTION',
+  UNDER_REPAIR = 'UNDER_REPAIR',
+  RECOVERY_CLEARED = 'RECOVERY_CLEARED',
 }
 
 @Entity('bikes')

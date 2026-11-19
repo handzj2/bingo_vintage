@@ -24,6 +24,10 @@ import {
   Receipt,
   Wallet,
   Clock,
+  Bell,
+  ArrowLeftRight,
+  AlertTriangle,
+  Bookmark,
 } from 'lucide-react';
 
 const ALL_NAV = [
@@ -37,6 +41,10 @@ const ALL_NAV = [
   { name: 'Pending Approvals', href: '/dashboard/expenses/approval', icon: Clock, permKey: 'expense.approve', defaultRoles: ['admin','manager'] },
   { name: 'Finance',    href: '/dashboard/finance/reconciliation', icon: Wallet, permKey: 'view_finance', defaultRoles: ['admin','manager'] },
   { name: 'Schedules',  href: '/dashboard/schedules', icon: Calendar,  permKey: 'view_schedules', defaultRoles: ['admin','manager','cashier'] },
+  { name: 'Fin Ops',       href: '/dashboard/financial-ops',  icon: ArrowLeftRight, permKey: 'financial_operations.view', defaultRoles: ['admin','manager'] },
+  { name: 'Reservations',  href: '/dashboard/reservations',   icon: Bookmark,       permKey: 'reservations.view',         defaultRoles: ['admin','manager'] },
+  { name: 'Recovery',      href: '/dashboard/recovery',       icon: AlertTriangle,  permKey: 'motorcycle_recovery.view',  defaultRoles: ['admin'] },
+  { name: 'Notifications', href: '/dashboard/notifications',  icon: Bell,           permKey: 'notification.view',         defaultRoles: ['admin','manager','cashier','agent'] },
   { name: 'Reports',    href: '/dashboard/reports',   icon: BarChart3, permKey: 'view_reports',   defaultRoles: ['admin','manager'] },
   { name: 'Audit Logs', href: '/dashboard/audit',     icon: Shield,    permKey: 'view_audit',     defaultRoles: ['admin'] },
   { name: 'Reversals',  href: '/dashboard/reversals', icon: RotateCcw, permKey: 'view_reversals', defaultRoles: ['admin','manager','cashier'] },
@@ -61,6 +69,10 @@ const NAV_TO_BACKEND: Record<string, string> = {
   'view_reversals':  'payment.reverse',
   'view_settings':   'settings.manage',
   'drawer.manage':   'drawer.manage',
+  'financial_operations.view': 'financial_operations.view',
+  'reservations.view': 'reservations.view',
+  'motorcycle_recovery.view': 'motorcycle_recovery.view',
+  'notification.view': 'notification.view',
 };
 
 function canView(user: any, permKey: string, defaultRoles: string[]): boolean {

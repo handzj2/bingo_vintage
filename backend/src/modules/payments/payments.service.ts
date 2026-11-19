@@ -178,6 +178,13 @@ export class PaymentsService {
         .getOne();
 
       if (!locked) throw new NotFoundException(`Loan ${dto.loanId} not found`);
+
+      // Phase 3: pending-delivery loans must not accept repayments
+      if ((locked.status as string) === 'APPROVED_PENDING_DELIVERY') {
+        throw new BadRequestException(
+          'This loan is approved pending delivery and cannot accept repayments until handover activation.',
+        );
+      }
       lockedLoan = locked;
 
       if (!['ACTIVE', 'DELINQUENT'].includes(locked.status)) {

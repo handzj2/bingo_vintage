@@ -37,6 +37,15 @@ export class Audit { // ✅ Ensure this is 'Audit'
   @Column({ name: 'tenant_id', nullable: true, type: 'integer' })
   tenantId: number | null;
 
+  @Column({ name: 'branch_id', nullable: true, type: 'integer' })
+  branchId: number | null;
+
+  @Column({ name: 'correlation_id', nullable: true, length: 64 })
+  correlationId: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  reason: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

@@ -19,6 +19,7 @@ import { ColumnNumericTransformer } from '../../../common/utils/numeric.transfor
 export enum LoanStatus {
   PENDING = 'PENDING',
   PENDING_APPROVAL = 'PENDING_APPROVAL', // Loans awaiting admin approval
+  APPROVED_PENDING_DELIVERY = 'APPROVED_PENDING_DELIVERY', // Financed, not yet handed over
   ACTIVE = 'ACTIVE',                    // Approved and active loans
   DELINQUENT = 'DELINQUENT',           // Overdue loans with late fees
   COMPLETED = 'COMPLETED',             // Successfully paid off
