@@ -90,15 +90,15 @@ export class RecoveryAndSettlement1700000000043 implements MigrationInterface {
       ON CONFLICT DO NOTHING
     `);
     await q.query(`
-      INSERT INTO role_permissions (role_id, permission_id)
-      SELECT r.id, p.id
+      INSERT INTO role_permissions (role_id, permission_code, tenant_id)
+      SELECT r.id, p.code, r.tenant_id
         FROM roles r
         CROSS JOIN permissions p
        WHERE lower(r.name) IN ('admin', 'superadmin')
          AND p.code LIKE 'motorcycle_recovery.%'
          AND NOT EXISTS (
            SELECT 1 FROM role_permissions rp
-            WHERE rp.role_id = r.id AND rp.permission_id = p.id
+            WHERE rp.role_id = r.id AND rp.permission_code = p.code
          )
     `);
   }

@@ -76,6 +76,18 @@ export class AuditNotificationsApprovals1700000000038 implements MigrationInterf
        ON CONFLICT (tenant_id, operation_type) DO NOTHING
     `);
 
+    // Widen permissions.action CHECK (001 only allows create/read/update/delete/approve/reverse/export)
+    // so the new action verbs below are valid. Existing values stay valid.
+    await q.query(`ALTER TABLE permissions DROP CONSTRAINT IF EXISTS permissions_action_check`);
+    await q.query(`
+      ALTER TABLE permissions ADD CONSTRAINT permissions_action_check
+      CHECK (action IN (
+        'create','read','update','delete','approve','reverse','export',
+        'view','post','manage','upload','allocate','activate','cancel',
+        'authorise','inspect','settle'
+      ))
+    `);
+
     // New permission keys (admin only per D5)
     await q.query(`
       INSERT INTO permissions (code, name, resource, action, description, tenant_id)
@@ -91,8 +103,8 @@ export class AuditNotificationsApprovals1700000000038 implements MigrationInterf
 
     // Grant new permissions to existing admin roles only
     await q.query(`
-      INSERT INTO role_permissions (role_id, permission_id)
-      SELECT r.id, p.id
+      INSERT INTO role_permissions (role_id, permission_code, tenant_id)
+      SELECT r.id, p.code, r.tenant_id
         FROM roles r
         CROSS JOIN permissions p
        WHERE lower(r.name) IN ('admin', 'superadmin')
@@ -102,7 +114,7 @@ export class AuditNotificationsApprovals1700000000038 implements MigrationInterf
          )
          AND NOT EXISTS (
            SELECT 1 FROM role_permissions rp
-            WHERE rp.role_id = r.id AND rp.permission_id = p.id
+            WHERE rp.role_id = r.id AND rp.permission_code = p.code
          )
     `);
   }
