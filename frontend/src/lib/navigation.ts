@@ -10,7 +10,7 @@
 import {
   Home, FileText, Banknote, Bike, Plus, Calendar, Upload, Wallet, Users, CreditCard, Bell,
   Package, Receipt, Clock, ClipboardList, RotateCcw, BarChart3, Settings, Scale, History,
-  SlidersHorizontal, Inbox, Building2, Tags,
+  SlidersHorizontal, Inbox, Building2, Tags, ArrowLeftRight, Bookmark, AlertTriangle, BellRing,
 } from 'lucide-react';
 
 export type BadgeKey = 'total' | 'loans' | 'expenses' | 'reversals' | 'corrections' | 'overdueDrawers';
@@ -71,6 +71,10 @@ export const navigationGroups: NavGroup[] = [
       { name: 'Inventory', href: '/dashboard/inventory', icon: Package,    backendRoles: ['manager', 'cashier'] },
       { name: 'Expenses',  href: '/dashboard/expenses',  icon: Receipt,    anyOf: ['expense.create', 'expense.approve'] },
       { name: 'Expense Approvals', href: '/dashboard/expenses/approval', icon: Clock, anyOf: ['expense.approve'], badge: 'expenses' },
+      { name: 'Fin Ops',       href: '/dashboard/financial-ops', icon: ArrowLeftRight, anyOf: ['financial_operations.view'] },
+      { name: 'Reservations',  href: '/dashboard/reservations',  icon: Bookmark,       anyOf: ['reservations.view'] },
+      { name: 'Recovery',      href: '/dashboard/recovery',      icon: AlertTriangle,  anyOf: ['motorcycle_recovery.view'] },
+      { name: 'Notifications', href: '/dashboard/notifications', icon: BellRing,       anyOf: ['notification.view'] },
     ],
   },
   {

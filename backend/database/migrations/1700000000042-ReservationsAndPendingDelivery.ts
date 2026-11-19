@@ -9,7 +9,16 @@ export class ReservationsAndPendingDelivery1700000000042 implements MigrationInt
 
   public async up(q: QueryRunner): Promise<void> {
     // Loan status enum value
-    await q.query(`ALTER TYPE loans_status_enum ADD VALUE IF NOT EXISTS 'APPROVED_PENDING_DELIVERY'`);
+    // Enum type name differs by environment (production: loans_status_enum; migration-built: loan_status_enum).
+    const [col] = await q.query(
+      `SELECT t.typname AS typname
+         FROM pg_attribute a
+         JOIN pg_class c ON c.oid = a.attrelid AND c.relname = 'loans' AND c.relnamespace = 'public'::regnamespace
+         JOIN pg_type t ON t.oid = a.atttypid
+        WHERE a.attname = 'status' AND NOT a.attisdropped AND t.typtype = 'e'`,
+    );
+    if (!col) throw new Error('loans.status is not an enum column; cannot add APPROVED_PENDING_DELIVERY');
+    await q.query(`ALTER TYPE "${col.typname}" ADD VALUE IF NOT EXISTS 'APPROVED_PENDING_DELIVERY'`);
 
     // reservations
     await q.query(`
