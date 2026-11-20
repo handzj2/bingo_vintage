@@ -1,6 +1,6 @@
 import {
   Controller, Post, Get, Body, Param,
-  HttpCode, HttpStatus, UseGuards, Request,
+  HttpCode, HttpStatus, UseGuards, Request, ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PasswordResetService } from './password-reset.service';
@@ -9,6 +9,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
   assertAdmin as helperAssertAdmin,
   assertRole  as helperAssertRole,
+  isRole,
   AuthRequest,
 } from '../../common/helpers/role-helper';
 
@@ -85,7 +86,7 @@ export class PasswordResetAdminController {
   @ApiOperation({ summary: 'List all password reset requests (admin/manager)' })
   async listRequests(@Request() req: AuthRequest) {
     this.assertAdminOrManager(req);
-    return this.service.listRequests();
+    return this.service.listRequests(this.scopeTenant(req));
   }
 
   @Post(':id/approve')
@@ -93,7 +94,15 @@ export class PasswordResetAdminController {
   @ApiOperation({ summary: 'Approve a reset request and generate OTP (admin)' })
   async approveRequest(@Param('id') id: string, @Request() req: AuthRequest) {
     this.assertAdmin(req);
-    return this.service.approveRequest(id, req.user.userId, req.user.username);
+    return this.service.approveRequest(id, req.user.userId, req.user.username, this.scopeTenant(req));
+  }
+
+  /** undefined (all tenants) only for the platform superadmin; everyone else is limited to their own tenant. */
+  private scopeTenant(req: AuthRequest): number | undefined {
+    if (isRole(req.user, 'superadmin')) return undefined;
+    const t = req.user?.tenantId;
+    if (t === undefined || t === null) throw new ForbiddenException('No tenant on this account');
+    return Number(t);
   }
 
   // Phase 2: delegate to shared helpers — no raw user.role reads

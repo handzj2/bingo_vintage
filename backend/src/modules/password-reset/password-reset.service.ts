@@ -122,9 +122,12 @@ export class PasswordResetService {
 
   // ── Admin: list all requests ──────────────────────────────────────────────
 
-  async listRequests(): Promise<any[]> {
+  async listRequests(tenantId?: number): Promise<any[]> {
+    // Tenant admins only see requests from users of their own tenant.
+    // tenantId is undefined only for the platform superadmin.
     const requests = await this.resetRepo.find({
       relations: ['user'],
+      where: tenantId === undefined ? {} : { user: { tenantId } },
       order: { createdAt: 'DESC' },
     });
 
@@ -151,12 +154,17 @@ export class PasswordResetService {
     requestId: string,
     adminId: number,
     adminEmail: string,
+    tenantId?: number,
   ): Promise<{ otp: string; expiresAt: Date; message: string }> {
     const request = await this.resetRepo.findOne({
       where: { id: requestId },
       relations: ['user'],
     });
-    if (!request) throw new NotFoundException('Reset request not found');
+    // A request from another tenant is reported as not found, never as forbidden,
+    // so its existence is not disclosed.
+    if (!request || (tenantId !== undefined && request.user?.tenantId !== tenantId)) {
+      throw new NotFoundException('Reset request not found');
+    }
 
     if (request.status !== ResetStatus.PENDING) {
       throw new BadRequestException(

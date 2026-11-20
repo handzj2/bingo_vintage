@@ -297,8 +297,17 @@ export class LoansService {
       });
 
       if (bikeId) {
-        const bike = await em.findOne(Bike, { where: { id: bikeId } });
+        const bike = await em.findOne(Bike, { where: { id: bikeId }, lock: { mode: 'pessimistic_write' } });
         if (!bike) throw new NotFoundException('Bike not found');
+        // The status column can be stale (e.g. data loaded before it was maintained), so also
+        // refuse a bike that already belongs to a live loan.
+        const liveLoans = await em.createQueryBuilder(Loan, 'l')
+          .where('l.bike_id = :bikeId', { bikeId: bike.id })
+          .andWhere("l.status NOT IN ('CANCELLED','COMPLETED')")
+          .getCount();
+        if (liveLoans > 0) {
+          throw new BadRequestException('Bike is already attached to an active loan.');
+        }
         if (bike.status !== BikeStatus.AVAILABLE) {
           throw new BadRequestException(`Bike is not available. Status: ${bike.status}`);
         }
@@ -412,15 +421,44 @@ export class LoansService {
 
   // ── approveOrRejectLoan ───────────────────────────────────────────────────
   async approveOrRejectLoan(loanId: number, dto: AdminApprovalDto, user: any): Promise<Loan> {
-    const loan = await this.findOne(loanId);
-    if (dto.action === 'approve') {
-      loan.approve(user.userId);
-    } else if (dto.action === 'reject') {
-      loan.reject(user.userId, dto.reason);
-    } else {
+    if (dto.action !== 'approve' && dto.action !== 'reject') {
       throw new BadRequestException('Action must be "approve" or "reject"');
     }
-    return this.loansRepo.save(loan);
+    // Tenant isolation: an admin can only decide loans of their own tenant.
+    // Only the platform superadmin (no tenant scope) may decide across tenants.
+    const role = String(user?.roleRelation?.name ?? user?.roleName ?? '').toLowerCase().replace(/[ _]/g, '');
+    const scope = role === 'superadmin' ? undefined : Number(user?.tenantId);
+    if (scope !== undefined && !Number.isInteger(scope)) {
+      throw new ForbiddenException('No tenant on this account');
+    }
+
+    return this.loansRepo.manager.transaction(async (em) => {
+      const loan = await em.findOne(Loan, {
+        where: scope === undefined ? { id: loanId } : { id: loanId, tenantId: scope },
+        relations: ['bike'],
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!loan) throw new NotFoundException(`Loan #${loanId} not found`);
+
+      if (dto.action === 'approve') {
+        loan.approve(user.userId);
+      } else {
+        loan.reject(user.userId, dto.reason);
+        // A rejected loan must give its bike back to stock, otherwise the bike is stuck as LOANED.
+        const bikeId = loan.bike?.id;
+        if (bikeId) {
+          const live = await em.createQueryBuilder(Loan, 'l')
+            .where('l.bike_id = :bikeId AND l.id <> :id', { bikeId, id: loan.id })
+            .andWhere("l.status NOT IN ('CANCELLED','COMPLETED')")
+            .getCount();
+          if (live === 0) {
+            await em.update(Bike, { id: bikeId, status: BikeStatus.LOANED },
+              { status: BikeStatus.AVAILABLE, assigned_client_id: null as unknown as number });
+          }
+        }
+      }
+      return em.save(loan);
+    });
   }
 
   // ── reverseOrAdjustLoan ───────────────────────────────────────────────────
@@ -515,7 +553,7 @@ export class LoansService {
       // Guard: no real payments already recorded (historical entry only)
       const [{ count }] = await em.query(
         `SELECT COUNT(*) AS count FROM payments
-         WHERE loan_id = $1 AND status = 'COMPLETED' AND notes != 'Historical import'`,
+         WHERE loan_id = $1 AND status = 'COMPLETED' AND notes IS DISTINCT FROM 'Historical import'`,
         [id],
       );
       if (Number(count) > 0) {
@@ -612,186 +650,7 @@ export class LoansService {
     });
   }
 
-  // ── rescheduleLoan ────────────────────────────────────────────────────────
-  async rescheduleLoan(id: number, startDateStr: string, user: RequestUser) {
-    const newStart = new Date(startDateStr);
-    if (isNaN(newStart.getTime())) {
-      throw new BadRequestException(`Invalid start date: ${startDateStr}`);
-    }
 
-    return this.loansRepo.manager.transaction(async (em) => {
-      const loan = await em.findOne(Loan, { where: { id }, relations: ['client'] });
-      if (!loan) throw new NotFoundException(`Loan ${id} not found`);
-
-      const [{ count }] = await em.query(
-        `SELECT COUNT(*) AS count FROM payments WHERE loan_id = $1 AND status = 'COMPLETED'`,
-        [id],
-      );
-      if (Number(count) > 0) {
-        throw new BadRequestException(
-          `Cannot reschedule loan ${loan.loanNumber} — ${count} payment(s) have already been recorded. ` +
-          `Reverse all payments first, then reschedule.`,
-        );
-      }
-
-      const newEnd = calculateLoanEndDate({ startDate: newStart, termWeeks: loan.termWeeks, termMonths: loan.termMonths });
-      if (!newEnd) throw new BadRequestException(`Loan ${loan.loanNumber} has no term set, so an end date cannot be calculated`);
-      await em.query(
-        `UPDATE loans SET start_date = $1, end_date = $2, updated_at = NOW() WHERE id = $3`,
-        [newStart.toISOString().slice(0, 10), newEnd.toISOString().slice(0, 10), id],
-      );
-      await em.query(`DELETE FROM loan_schedules WHERE loan_id = $1`, [id]);
-
-      const calculationMethod = loan.termWeeks && loan.termWeeks > 0
-        ? 'weekly_flat' : 'monthly_flat';
-      const calculator = this.loanCalculatorRegistry.resolve(calculationMethod);
-      const termCount  = loan.termWeeks && loan.termWeeks > 0
-        ? loan.termWeeks : loan.termMonths;
-      const principal  = Number(loan.principalAmount);
-      const annualRate = Number(loan.interestRate);
-      const procFee    = Number(loan.processingFee ?? 0);
-
-      const calculation = calculator.calculate({
-        principal, termCount, annualInterestRate: annualRate,
-        processingFee: procFee, startDate: newStart,
-      });
-      await this.persistSchedule(em, loan, calculation.installments);
-
-      loan.addAuditNote(
-        'RESCHEDULE',
-        `User ${user.userId}`,
-        `Start date corrected to ${startDateStr}. Schedule regenerated.`,
-      );
-      await em.save(Loan, loan);
-
-      return {
-        success: true,
-        loanNumber: loan.loanNumber,
-        newStartDate: newStart.toISOString().slice(0, 10),
-        newEndDate: newEnd.toISOString().slice(0, 10),
-        installmentsGenerated: calculation.installments.length,
-      };
-    });
-  }
-
-  // ── editLoanDetails (waterfall version) ───────────────────────────────────
-  async editLoanDetails(
-    id: number,
-    dto: {
-      principalAmount?: number;
-      termWeeks?: number;
-      termMonths?: number;
-      weeklyAmount?: number;
-      interestRate?: number;
-      startDate?: string;
-      newBalance?: number;
-    },
-    user: RequestUser,
-  ) {
-    return this.loansRepo.manager.transaction(async (em) => {
-      const loan = await em.findOne(Loan, { where: { id }, relations: ['client'] });
-      if (!loan) throw new NotFoundException(`Loan ${id} not found`);
-      if (loan.status === LoanStatus.CANCELLED || loan.deletedAt) {
-        throw new BadRequestException('Cannot edit a cancelled or deleted loan');
-      }
-
-      // Update loan fields if provided
-      if (dto.principalAmount !== undefined) loan.principalAmount = dto.principalAmount;
-      if (dto.termWeeks !== undefined) loan.termWeeks = dto.termWeeks;
-      if (dto.termMonths !== undefined) loan.termMonths = dto.termMonths;
-      if (dto.weeklyAmount !== undefined) loan.weeklyAmount = dto.weeklyAmount;
-      if (dto.interestRate !== undefined) loan.interestRate = dto.interestRate;
-      if (dto.startDate) {
-        const newStart = new Date(dto.startDate);
-        if (isNaN(newStart.getTime())) throw new BadRequestException('Invalid start date');
-        loan.startDate = newStart;
-      }
-
-      // Determine term for calculator
-      const weeks = loan.termWeeks || 0;
-      const termCount = weeks > 0 ? weeks : (loan.termMonths || 12);
-      const principal = Number(loan.principalAmount);
-      const startDate = new Date(loan.startDate);
-
-      const calculationMethod = loan.loanType === 'bike' ? 'weekly_flat' : 'monthly_flat';
-      const calculator = this.loanCalculatorRegistry.resolve(calculationMethod);
-      const calculation = calculator.calculate({
-        principal,
-        termCount,
-        annualInterestRate: Number(loan.interestRate),
-        processingFee: Number(loan.processingFee ?? 0),
-        startDate,
-        ...(loan.loanType === 'bike' && loan.weeklyAmount
-          ? { installmentOverride: Number(loan.weeklyAmount) }
-          : {}),
-      });
-
-      // Save existing payments before deleting them
-      const originalPayments = await em.query(
-        `SELECT * FROM payments
-         WHERE loan_id = $1 AND status = 'COMPLETED' AND reversed_at IS NULL
-         ORDER BY payment_date, id`,
-        [id],
-      );
-
-      // Delete old schedule, payment_allocations, and payments
-      await em.query('DELETE FROM payment_allocations WHERE payment_id IN (SELECT id FROM payments WHERE loan_id = $1)', [id]);
-      await em.query('DELETE FROM payments WHERE loan_id = $1', [id]);
-      await em.query('DELETE FROM loan_schedules WHERE loan_id = $1', [id]);
-
-      // Persist new schedule
-      await this.persistSchedule(em, loan, calculation.installments);
-
-      // Convert original payments to waterfall format
-      const paymentsForWaterfall = originalPayments.map((p: any) => ({
-        amount: Number(p.amount),
-        paymentDate: new Date(p.payment_date).toISOString().slice(0, 10),
-        paymentMethod: p.payment_method || 'CASH',
-        receiptNumber: p.receipt_number,
-        notes: p.notes || 'Replayed after edit',
-      }));
-
-      // Apply waterfall (FIX-L12: pass tenant & branch)
-      const totalApplied = await this.applyPaymentsWaterfall(
-        em, id, paymentsForWaterfall, loan.tenantId, loan.branchId,
-      );
-
-      // Mark overdue installments
-      const today = new Date().toISOString().slice(0, 10);
-      await em.query(
-        `UPDATE loan_schedules SET status = 'OVERDUE' WHERE loan_id = $1 AND status = 'PENDING' AND due_date < $2`,
-        [id, today],
-      );
-
-      // Update totalAmount and balance (FIX-L10: honour optional newBalance)
-      const newTotal = calculation.totalPayable;
-      const finalBalance = dto.newBalance !== undefined ? dto.newBalance : (newTotal - totalApplied);
-
-      await em.query(
-        `UPDATE loans
-         SET total_amount = $1, balance = $2, updated_at = NOW()
-         WHERE id = $3`,
-        [newTotal, finalBalance, id],
-      );
-
-      loan.addAuditNote(
-        'EDIT_DETAILS',
-        `Admin ${user.userId}`,
-        `Loan details edited. Principal: ${principal}, termWeeks: ${weeks}, ` +
-        `totalAmount: ${newTotal}, balance: ${finalBalance}`,
-      );
-      await em.save(Loan, loan);
-
-      return {
-        success: true,
-        loanNumber: loan.loanNumber,
-        totalAmount: newTotal,
-        balance: finalBalance,
-        scheduleRegenerated: calculation.installments.length,
-        paymentsReplayed: originalPayments.length,
-      };
-    });
-  }
 
   async hardDeleteLoan(id: number, user: RequestUser) {
     const loan = await this.findOne(id);
