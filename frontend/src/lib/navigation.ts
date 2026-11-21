@@ -23,6 +23,10 @@ export type NavItem = {
   backendRoles?: string[];
   badge?: BadgeKey;
   mobileBar?: boolean;
+  /** Commercial module key (module_registry). Hidden/disabled by Platform Admin Module Control. */
+  moduleKey?: string;
+  /** Set by visibleNavigation when the module is DISABLED but still VISIBLE. */
+  moduleDisabled?: boolean;
 };
 export type NavGroup = { label: string; items: NavItem[] };
 
@@ -58,7 +62,7 @@ export const navigationGroups: NavGroup[] = [
       { name: 'Branch Drawers',  href: '/dashboard/finance/drawers',         icon: Building2,
         anyOf: ['drawer.close', 'drawer.force_close', 'drawer.reconcile', 'finance.reconcile'], badge: 'overdueDrawers' },
       { name: 'Drawer History',  href: '/dashboard/finance/drawers/history', icon: History,  anyOf: ['drawer.view'] },
-      { name: 'Reconciliation',  href: '/dashboard/finance/reconciliation',  icon: Scale,    anyOf: ['finance.reconcile', 'drawer.reconcile'] },
+      { moduleKey: 'reconciliation', name: 'Reconciliation',  href: '/dashboard/finance/reconciliation',  icon: Scale,    anyOf: ['finance.reconcile', 'drawer.reconcile'] },
       { name: 'Drawer Settings', href: '/dashboard/finance/drawers/settings',icon: SlidersHorizontal, anyOf: ['settings.manage'] },
     ],
   },
@@ -68,13 +72,13 @@ export const navigationGroups: NavGroup[] = [
       { name: 'Clients',   href: '/dashboard/clients',   icon: Users,      anyOf: ['client.view'], mobileBar: true },
       { name: 'Payments',  href: '/dashboard/payments',  icon: CreditCard, anyOf: ['payment.view', 'payment.create'], mobileBar: true },
       { name: 'Alerts',    href: '/dashboard/alerts',    icon: Bell,       anyOf: ['loan.view', 'payment.view'] },
-      { name: 'Inventory', href: '/dashboard/inventory', icon: Package,    backendRoles: ['manager', 'cashier'] },
-      { name: 'Expenses',  href: '/dashboard/expenses',  icon: Receipt,    anyOf: ['expense.create', 'expense.approve'] },
-      { name: 'Expense Approvals', href: '/dashboard/expenses/approval', icon: Clock, anyOf: ['expense.approve'], badge: 'expenses' },
-      { name: 'Fin Ops',       href: '/dashboard/financial-ops', icon: ArrowLeftRight, anyOf: ['financial_operations.view'] },
-      { name: 'Reservations',  href: '/dashboard/reservations',  icon: Bookmark,       anyOf: ['reservations.view'] },
-      { name: 'Recovery',      href: '/dashboard/recovery',      icon: AlertTriangle,  anyOf: ['motorcycle_recovery.view'] },
-      { name: 'Notifications', href: '/dashboard/notifications', icon: BellRing,       anyOf: ['notification.view'] },
+      { moduleKey: 'inventory', name: 'Inventory', href: '/dashboard/inventory', icon: Package,    backendRoles: ['manager', 'cashier'] },
+      { moduleKey: 'expenses', name: 'Expenses',  href: '/dashboard/expenses',  icon: Receipt,    anyOf: ['expense.create', 'expense.approve'] },
+      { moduleKey: 'expenses', name: 'Expense Approvals', href: '/dashboard/expenses/approval', icon: Clock, anyOf: ['expense.approve'], badge: 'expenses' },
+      { moduleKey: 'financial_operations', name: 'Fin Ops',       href: '/dashboard/financial-ops', icon: ArrowLeftRight, anyOf: ['financial_operations.view'] },
+      { moduleKey: 'reservations', name: 'Reservations',  href: '/dashboard/reservations',  icon: Bookmark,       anyOf: ['reservations.view'] },
+      { moduleKey: 'recovery', name: 'Recovery',      href: '/dashboard/recovery',      icon: AlertTriangle,  anyOf: ['motorcycle_recovery.view'] },
+      { moduleKey: 'notifications', name: 'Notifications', href: '/dashboard/notifications', icon: BellRing,       anyOf: ['notification.view'] },
     ],
   },
   {
@@ -82,7 +86,7 @@ export const navigationGroups: NavGroup[] = [
     items: [
       { name: 'Reversals', href: '/dashboard/reversals', icon: RotateCcw, anyOf: ['payment.reverse', 'payment.reversal.approve', 'payment.view'], badge: 'reversals' },
       { name: 'Audit Logs', href: '/dashboard/audit',    icon: ClipboardList },            // admin only (backend)
-      { name: 'Reports',    href: '/dashboard/reports',  icon: BarChart3, anyOf: ['report.view'] },
+      { moduleKey: 'reports', name: 'Reports',    href: '/dashboard/reports',  icon: BarChart3, anyOf: ['report.view'] },
     ],
   },
   {
@@ -101,8 +105,30 @@ export function canSeeNavItem({ role, can }: Ctx, item: NavItem): boolean {
   return false; // item with no rule is admin-only
 }
 
-export function visibleNavigation(ctx: Ctx): NavGroup[] {
+import type { ModuleMap } from '@/hooks/useModuleEntitlements';
+
+/**
+ * Applies RBAC (canSeeNavItem) and then commercial module state:
+ *  - module HIDDEN   -> item removed
+ *  - module DISABLED -> item kept (if VISIBLE) but flagged moduleDisabled and routed to the notice page
+ * Superadmin is never gated (provider operates every module). No module data -> nothing gated.
+ */
+export function visibleNavigation(ctx: Ctx, modules?: ModuleMap): NavGroup[] {
+  const isSuper = (ctx.role || '').toLowerCase() === 'superadmin';
   return navigationGroups
-    .map((g) => ({ ...g, items: g.items.filter((i) => canSeeNavItem(ctx, i)) }))
+    .map((g) => ({
+      ...g,
+      items: g.items
+        .filter((i) => canSeeNavItem(ctx, i))
+        .flatMap((i): NavItem[] => {
+          const m = !isSuper && i.moduleKey && modules ? modules[i.moduleKey] : undefined;
+          if (!m || !m.isIndependentlyControllable) return [i];
+          if (m.visibilityState === 'HIDDEN') return [];
+          if (m.accessState === 'DISABLED') {
+            return [{ ...i, moduleDisabled: true, href: `/dashboard/module-unavailable?key=${encodeURIComponent(m.moduleKey)}` }];
+          }
+          return [i];
+        }),
+    }))
     .filter((g) => g.items.length > 0);
 }

@@ -12,10 +12,13 @@ import { RequirePermission } from '../auth/decorators/require-permission.decorat
 import { Permissions } from '../auth/decorators/permissions.decorator';
 import { AuditService } from '../audit/audit.service';
 
+import { ModuleEntitlementGuard } from '../module-control/guards/module-entitlement.guard';
+import { RequireModule } from '../module-control/decorators/require-module.decorator';
 @ApiTags('expenses')
 @ApiBearerAuth()
 @Controller('expenses')
-@UseGuards(JwtAuthGuard, PermissionGuard)
+@UseGuards(JwtAuthGuard, PermissionGuard, ModuleEntitlementGuard)
+@RequireModule('expenses')
 export class ExpensesController {
   constructor(
     private readonly expensesService: ExpensesService,

@@ -6,9 +6,12 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthRequest, assertAdmin } from '../../common/helpers/role-helper';
 import { ReservationsService } from './reservations.service';
 
+import { ModuleEntitlementGuard } from '../module-control/guards/module-entitlement.guard';
+import { RequireModule } from '../module-control/decorators/require-module.decorator';
 @ApiTags('Reservations')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ModuleEntitlementGuard)
+@RequireModule('reservations')
 @Controller('reservations')
 export class ReservationsController {
   constructor(private readonly service: ReservationsService) {}

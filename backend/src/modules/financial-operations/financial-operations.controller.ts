@@ -7,9 +7,12 @@ import { AuthRequest, assertAdmin, hasPermission } from '../../common/helpers/ro
 import { FinancialOperationsService } from './financial-operations.service';
 import { FinTxnType } from './entities/fin-transaction.entity';
 
+import { ModuleEntitlementGuard } from '../module-control/guards/module-entitlement.guard';
+import { RequireModule } from '../module-control/decorators/require-module.decorator';
 @ApiTags('Financial Operations')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ModuleEntitlementGuard)
+@RequireModule('financial_operations')
 @Controller('financial-operations')
 export class FinancialOperationsController {
   constructor(private readonly service: FinancialOperationsService) {}

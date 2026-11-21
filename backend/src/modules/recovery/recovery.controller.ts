@@ -6,9 +6,12 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthRequest, assertAdmin } from '../../common/helpers/role-helper';
 import { RecoveryService } from './recovery.service';
 
+import { ModuleEntitlementGuard } from '../module-control/guards/module-entitlement.guard';
+import { RequireModule } from '../module-control/decorators/require-module.decorator';
 @ApiTags('Motorcycle Recovery')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ModuleEntitlementGuard)
+@RequireModule('recovery')
 @Controller('recovery')
 export class RecoveryController {
   constructor(private readonly service: RecoveryService) {}

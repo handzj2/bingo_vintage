@@ -7,10 +7,13 @@ import { Roles }         from '../auth/decorators/roles.decorator';
 import { ReportsService } from './reports.service';
 import { AuthRequest }   from '../../common/helpers/role-helper';
 
+import { ModuleEntitlementGuard } from '../module-control/guards/module-entitlement.guard';
+import { RequireModule } from '../module-control/decorators/require-module.decorator';
 @ApiTags('Reports')
 @ApiBearerAuth()
 @Controller('reports')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleEntitlementGuard)
+@RequireModule('reports')
 @Roles('admin', 'manager', 'superadmin')
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}

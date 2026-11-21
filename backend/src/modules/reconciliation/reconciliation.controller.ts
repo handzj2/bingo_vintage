@@ -6,10 +6,13 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { RequirePermission } from '../auth/decorators/require-permission.decorator';
 
+import { ModuleEntitlementGuard } from '../module-control/guards/module-entitlement.guard';
+import { RequireModule } from '../module-control/decorators/require-module.decorator';
 @ApiTags('reconciliation')
 @ApiBearerAuth()
 @Controller('reconciliation')
-@UseGuards(JwtAuthGuard, PermissionGuard)
+@UseGuards(JwtAuthGuard, PermissionGuard, ModuleEntitlementGuard)
+@RequireModule('reconciliation')
 export class ReconciliationController {
   constructor(private readonly reconService: ReconciliationService) {}
 

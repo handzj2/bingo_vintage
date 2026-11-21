@@ -32,6 +32,7 @@ import {
 import Link from 'next/link';
 import { visibleNavigation, type NavItem, type BadgeKey } from '@/lib/navigation';
 import { usePendingWork, failedQueueKeys } from '@/hooks/usePendingWork';
+import { useModuleEntitlements, moduleForPath } from '@/hooks/useModuleEntitlements';
 
 /**
  * getUserInitials — derives avatar initials from full_name.
@@ -63,6 +64,7 @@ export default function DashboardLayout({
 }) {
   const { user, isLoading, can } = useAuth();
   const { data: pending } = usePendingWork();
+  const { modules } = useModuleEntitlements();
   const router = useRouter();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -105,9 +107,20 @@ export default function DashboardLayout({
     }
   }, [user, isLoading, router]);
 
+
+  // Direct-URL guard: a DISABLED/HIDDEN module's pages redirect to the notice page (superadmin exempt).
+  // The API enforces the same rule server-side; this only avoids showing a broken page.
+  useEffect(() => {
+    if (!user || (user.role || '').toLowerCase() === 'superadmin') return;
+    const m = moduleForPath(modules, pathname);
+    if (m && (m.accessState === 'DISABLED' || m.visibilityState === 'HIDDEN')) {
+      router.replace(`/dashboard/module-unavailable?key=${encodeURIComponent(m.moduleKey)}`);
+    }
+  }, [user, modules, pathname, router]);
+
   const memoizedNavigationGroups = useMemo(
-    () => visibleNavigation({ role: user?.role || '', can }),
-    [user?.role, user?.permissions, can],
+    () => visibleNavigation({ role: user?.role || '', can }, modules),
+    [user?.role, user?.permissions, can, modules],
   );
   const memoizedMobileNavItems = useMemo(
     () => memoizedNavigationGroups.flatMap((g) => g.items).filter((i) => i.mobileBar).slice(0, 5),
