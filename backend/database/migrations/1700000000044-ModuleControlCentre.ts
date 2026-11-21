@@ -153,10 +153,10 @@ export class ModuleControlCentre1700000000044 implements MigrationInterface {
         ('reports', 'Reports', 'Operational and financial reporting exports', 'reporting', 'add_on',
           true, 'ENABLED', 'VISIBLE',
           ARRAY['/reports'], ARRAY['/dashboard/reports'], ARRAY['report.view'], 80),
-        // Continuity: these modules are already deployed in bingo_vintage6 nav/API.
-        // Seed ENABLED+VISIBLE so existing tenants keep current behaviour.
-        // Provider may later set DISABLED/HIDDEN per tenant or product-wide.
-        // NEW paid modules added after go-live must insert as DISABLED+HIDDEN.
+        -- Continuity: these modules are already deployed in bingo_vintage6 nav/API.
+        -- Seed ENABLED+VISIBLE so existing tenants keep current behaviour.
+        -- Provider may later set DISABLED/HIDDEN per tenant or product-wide.
+        -- NEW paid modules added after go-live must insert as DISABLED+HIDDEN.
         ('financial_operations', 'Financial Operations', 'Receive money, deposits, fin-ops approval queue', 'finance', 'add_on',
           true, 'ENABLED', 'VISIBLE',
           ARRAY['/financial-operations'], ARRAY['/dashboard/financial-ops'], ARRAY['financial_operations.view','financial_operations.approve'], 90),
