@@ -1,0 +1,68 @@
+/**
+ * HandzJ Tech — Foundational Brand DNA
+ * Source of truth for identity colours. Application appearance maps onto these.
+ * Do not replace with generic SaaS blue/purple/neon.
+ *
+ * Deep Ink      #101820
+ * Graphite      #263238
+ * Warm Ivory    #F7F5EF
+ * Signal Green  #16836A
+ * Deep Green    #0D5C4A
+ * Amber         #D99A2B
+ */
+
+:root {
+  /* ── Protected identity ───────────────────────────────────────── */
+  --hj-deep-ink: #101820;
+  --hj-graphite: #263238;
+  --hj-warm-ivory: #F7F5EF;
+  --hj-signal-green: #16836A;
+  --hj-deep-green: #0D5C4A;
+  --hj-amber: #D99A2B;
+
+  /* ── Application appearance (published theme; defaults = DNA) ─── */
+  --bv-text: var(--hj-deep-ink);
+  --bv-muted: var(--hj-graphite);
+  --bv-meta: #5c6b73;
+  --bv-canvas: var(--hj-warm-ivory);
+  --bv-surface: #ffffff;
+  --bv-sidebar: var(--hj-deep-ink);
+  --bv-header: #ffffff;
+  --bv-border: #d9d2c5;
+  --bv-border-strong: #b8afa0;
+  --bv-action: var(--hj-deep-green);
+  --bv-action-hover: var(--hj-signal-green);
+  --bv-action-muted: var(--hj-graphite);
+  --bv-accent: var(--hj-signal-green);
+  --bv-accent-light: #e6f5f0;
+  --bv-success: var(--hj-deep-green);
+  --bv-success-bg: #e6f5f0;
+  --bv-warning: var(--hj-amber);
+  --bv-warning-bg: #fbf3e0;
+  --bv-danger: #8b2942;
+  --bv-danger-bg: #fcecf0;
+  --bv-info: var(--hj-signal-green);
+  --bv-info-bg: #e6f5f0;
+
+  --bv-font-sans: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --bv-radius: 0.375rem;
+  --bv-section-gap: 1.5rem;
+  --bv-page-padding: 1.5rem;
+}
+
+/* Optional dark appearance — identity colours retained */
+[data-appearance='dark'] {
+  --bv-text: var(--hj-warm-ivory);
+  --bv-muted: #c5c0b5;
+  --bv-meta: #9aa3a8;
+  --bv-canvas: var(--hj-deep-ink);
+  --bv-surface: var(--hj-graphite);
+  --bv-sidebar: #0a1014;
+  --bv-header: var(--hj-graphite);
+  --bv-border: #3a464d;
+  --bv-border-strong: #4a565e;
+  --bv-action: var(--hj-signal-green);
+  --bv-action-hover: #1a9a7c;
+  --bv-accent: var(--hj-signal-green);
+  --bv-accent-light: #143d34;
+}
