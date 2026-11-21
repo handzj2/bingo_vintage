@@ -36,6 +36,7 @@ import { AttachmentsModule }    from './modules/attachments/attachments.module';
 import { FinancialOperationsModule } from './modules/financial-operations/financial-operations.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
 import { RecoveryModule } from './modules/recovery/recovery.module';
+import { ModuleControlModule } from './modules/module-control/module-control.module';
 
 @Module({
   imports: [
@@ -100,6 +101,7 @@ import { RecoveryModule } from './modules/recovery/recovery.module';
     BranchesModule, DashboardModule, LoanProductsModule,
     PermissionsModule, RolesModule, TenantsModule, SuperAdminModule,
     FinanceCoreModule, NotificationsModule, AttachmentsModule, FinancialOperationsModule, ReservationsModule, RecoveryModule,
+    ModuleControlModule,
   ],
 })
 export class AppModule implements NestModule {
